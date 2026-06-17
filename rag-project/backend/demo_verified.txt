@@ -1,0 +1,12 @@
+[OK] Health: ok
+[OK] Upload: 200
+[OK] Chat: 1 sources, score=0.335
+  Answer: 根据参考资料，报销上限如下：
+
+- **差旅费**：国内出差每日不超过500元，一线城市不超过800元 ^[1]^
+- **餐饮补贴**：每天100元 ^[1]^
+- **交通费**：凭票实报实销，无明确金额上限 ^[1]^
+
+Server running at http://127.0.0.1:8000
+Frontend: D:\rag-project\frontend\index.html
+Swagger:  http://127.0.0.1:8000/docs

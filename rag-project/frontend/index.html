@@ -1,0 +1,492 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>企业知识库 - RAG 智能问答系统</title>
+<style>
+:root {
+  --bg: #f5f6f8;
+  --bg-card: #ffffff;
+  --bg-sidebar: #1e2235;
+  --bg-sidebar-hover: #2a2f45;
+  --bg-input: #f0f1f4;
+  --text-primary: #1a1d2e;
+  --text-secondary: #6b7280;
+  --text-sidebar: #c8cce0;
+  --text-sidebar-active: #ffffff;
+  --accent: #4f6ef7;
+  --accent-hover: #3b57d9;
+  --border: #e5e7eb;
+  --success: #10b981;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --radius: 6px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-lg: 0 4px 16px rgba(0,0,0,0.1);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:14px}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Helvetica Neue",Arial,sans-serif;
+  color:var(--text-primary);background:var(--bg);line-height:1.6;-webkit-font-smoothing:antialiased;
+  height:100vh;display:flex;overflow:hidden;
+}
+button{cursor:pointer;border:none;font-family:inherit;font-size:inherit}
+input,textarea{font-family:inherit;font-size:inherit}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#d1d5db;border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:#9ca3af}
+
+/* Layout */
+.layout{display:flex;height:100vh;width:100vw}
+.sidebar{width:280px;min-width:280px;background:var(--bg-sidebar);display:flex;flex-direction:column;color:var(--text-sidebar)}
+.sidebar-header{padding:20px 18px 16px;border-bottom:1px solid rgba(255,255,255,0.08)}
+.sidebar-header h1{font-size:1.15rem;font-weight:600;color:var(--text-sidebar-active);display:flex;align-items:center;gap:8px}
+.sidebar-header p{font-size:0.78rem;color:var(--text-sidebar);margin-top:4px;opacity:0.7}
+.sidebar-section{padding:14px 18px;border-bottom:1px solid rgba(255,255,255,0.06)}
+.sidebar-section h3{font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;opacity:0.6;margin-bottom:10px}
+.doc-list{flex:1;overflow-y:auto;padding:6px 12px}
+.doc-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--radius);cursor:default;transition:background 0.15s;font-size:0.85rem}
+.doc-item:hover{background:var(--bg-sidebar-hover)}
+.doc-item .doc-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.doc-item .doc-size{font-size:0.72rem;opacity:0.5;white-space:nowrap}
+.doc-item .doc-delete{opacity:0;transition:opacity 0.15s;color:var(--danger);background:none;padding:2px}
+.doc-item:hover .doc-delete{opacity:0.6}
+.doc-item:hover .doc-delete:hover{opacity:1}
+.upload-zone{border:2px dashed rgba(255,255,255,0.15);border-radius:var(--radius);padding:16px;text-align:center;cursor:pointer;transition:border-color 0.2s,background 0.2s;font-size:0.78rem;color:var(--text-sidebar)}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--accent);background:rgba(79,110,247,0.08)}
+.upload-zone svg{margin-bottom:6px;opacity:0.6}
+.empty-kb{text-align:center;padding:20px 16px;opacity:0.5;font-size:0.78rem}
+
+/* Main */
+.main-area{flex:1;display:flex;flex-direction:column;min-width:0}
+.main-header{padding:16px 24px;border-bottom:1px solid var(--border);background:var(--bg-card);display:flex;align-items:center;justify-content:space-between}
+.main-header h2{font-size:1rem;font-weight:600}
+.main-header .stats{font-size:0.78rem;color:var(--text-secondary)}
+.chat-container{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.chat-messages{flex:1;overflow-y:auto;padding:20px 24px}
+.message{margin-bottom:20px;max-width:800px}
+.message.user{margin-left:auto}
+.message.user .message-bubble{background:var(--accent);color:#fff;border-radius:12px 12px 4px 12px}
+.message.assistant .message-bubble{background:var(--bg-card);border:1px solid var(--border);border-radius:12px 12px 12px 4px;box-shadow:var(--shadow)}
+.message-label{font-size:0.72rem;color:var(--text-secondary);margin-bottom:6px;padding:0 4px}
+.message-bubble{padding:12px 16px;line-height:1.65;font-size:0.9rem}
+.message-bubble p{margin-bottom:8px}
+.message-bubble p:last-child{margin-bottom:0}
+.message-bubble ul,.message-bubble ol{padding-left:20px;margin-bottom:8px}
+.message-bubble li{margin-bottom:4px}
+.message-bubble sup{font-size:0.72rem;color:var(--accent);font-weight:600}
+.citations{margin-top:12px;border-top:1px solid var(--border);padding-top:10px}
+.citations summary{font-size:0.78rem;color:var(--text-secondary);cursor:pointer;user-select:none}
+.citations summary:hover{color:var(--accent)}
+.citation-card{display:flex;gap:10px;padding:8px 10px;margin-top:6px;background:var(--bg);border-radius:var(--radius);font-size:0.78rem}
+.citation-card .score-badge{flex-shrink:0;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.68rem;font-weight:600}
+.score-high{background:#d1fae5;color:#065f46}
+.score-medium{background:#fef3c7;color:#92400e}
+.score-low{background:#fee2e2;color:#991b1b}
+.citation-card .citation-body{flex:1;min-width:0}
+.citation-card .citation-source{font-weight:600;color:var(--text-secondary);margin-bottom:2px}
+.citation-card .citation-text{color:var(--text-primary);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;line-height:1.5}
+.chat-input-area{padding:16px 24px 20px;border-top:1px solid var(--border);background:var(--bg-card)}
+.chat-input-row{display:flex;gap:10px;align-items:flex-end}
+.chat-input-row textarea{flex:1;resize:none;padding:10px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-input);font-size:0.9rem;line-height:1.5;outline:none;transition:border-color 0.2s;min-height:42px;max-height:120px}
+.chat-input-row textarea:focus{border-color:var(--accent)}
+.send-btn{width:42px;height:42px;border-radius:var(--radius);background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;transition:background 0.15s;flex-shrink:0}
+.send-btn:hover{background:var(--accent-hover)}
+.send-btn:disabled{opacity:0.4;cursor:not-allowed}
+.empty-state{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--text-secondary);gap:12px}
+.empty-state svg{opacity:0.3}
+.empty-state p{font-size:0.9rem}
+.typing-indicator{display:flex;gap:4px;padding:4px 0}
+.typing-indicator span{width:6px;height:6px;border-radius:50%;background:var(--text-secondary);animation:typing 1.4s infinite}
+.typing-indicator span:nth-child(2){animation-delay:0.2s}
+.typing-indicator span:nth-child(3){animation-delay:0.4s}
+@keyframes typing{0%,60%,100%{opacity:0.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-4px)}}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);padding:10px 20px;border-radius:var(--radius);color:#fff;font-size:0.85rem;box-shadow:var(--shadow-lg);z-index:1000;animation:toast-in 0.3s ease-out}
+.toast.error{background:var(--danger)}
+.toast.success{background:var(--success)}
+@keyframes toast-in{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+</style>
+</head>
+<body>
+<div class="layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h1>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a2.5 2.5 0 0 1 0-5H20"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22"/></svg>
+        企业知识库
+      </h1>
+      <p>RAG 智能问答系统</p>
+    </div>
+    <div class="sidebar-section">
+      <div class="upload-zone" id="uploadZone">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <div id="uploadText">拖拽或点击上传文档</div>
+        <div style="opacity:0.5;margin-top:4px">PDF / DOCX / TXT / MD</div>
+      </div>
+      <input type="file" id="fileInput" accept=".pdf,.docx,.txt,.md" style="display:none">
+    </div>
+    <div class="sidebar-section" style="border-bottom:none">
+      <h3>文档列表 (<span id="docCount">0</span>)</h3>
+    </div>
+    <div class="doc-list" id="docList">
+      <div class="empty-kb">暂无文档，请上传知识文件</div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main-area">
+    <div class="main-header">
+      <h2>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;vertical-align:-2px"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+        知识库问答
+      </h2>
+      <div class="stats" id="statsBar">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;vertical-align:-1px"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><path d="M6 6h.01M6 18h.01"/></svg>
+        <span id="statsText">0 个文档 · 0 个文本块</span>
+      </div>
+    </div>
+
+    <div class="chat-container">
+      <div class="chat-messages" id="chatMessages">
+        <div class="empty-state">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3a9 9 0 0 0-9 9c0 1.75.5 3.38 1.36 4.76L3 21l4.24-1.36A9 9 0 1 0 12 3z"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <p>向知识库提问，获取带引用的回答</p>
+          <p style="font-size:0.78rem">共 0 个文档可供检索</p>
+        </div>
+      </div>
+
+      <div class="chat-input-area">
+        <div class="chat-input-row">
+          <textarea id="chatInput" placeholder="输入你的问题..." rows="1"></textarea>
+          <button class="send-btn" id="sendBtn" disabled>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" style="display:none"></div>
+
+<script>
+(() => {
+  const API = "http://127.0.0.1:8000";
+  let documents = [];
+  let loading = false;
+
+  // ── DOM refs ──────────────────────────────────────────
+  const chatMessages = document.getElementById('chatMessages');
+  const chatInput = document.getElementById('chatInput');
+  const sendBtn = document.getElementById('sendBtn');
+  const docList = document.getElementById('docList');
+  const docCount = document.getElementById('docCount');
+  const statsText = document.getElementById('statsText');
+  const uploadZone = document.getElementById('uploadZone');
+  const uploadText = document.getElementById('uploadText');
+  const fileInput = document.getElementById('fileInput');
+  const toastEl = document.getElementById('toast');
+
+  // ── Toast ─────────────────────────────────────────────
+  function showToast(msg, type = 'success') {
+    toastEl.textContent = msg;
+    toastEl.className = 'toast ' + type;
+    toastEl.style.display = 'block';
+    clearTimeout(toastEl._timer);
+    toastEl._timer = setTimeout(() => { toastEl.style.display = 'none'; }, 3000);
+  }
+
+  // ── Fetch helpers ─────────────────────────────────────
+  async function api(url, options = {}) {
+    const res = await fetch(API + url, {
+      headers: options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' },
+      ...options,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || 'HTTP ' + res.status);
+    }
+    return res.json();
+  }
+
+  // ── Load documents ────────────────────────────────────
+  async function loadDocuments() {
+    try {
+      const data = await api('/api/documents/');
+      documents = data.documents || [];
+    } catch (e) {
+      documents = [];
+    }
+    renderDocuments();
+  }
+
+  function renderDocuments() {
+    docList.innerHTML = '';
+    docCount.textContent = documents.length;
+    const totalChunks = documents.reduce((s, d) => s + d.chunk_count, 0);
+    statsText.textContent = `${documents.length} 个文档 · ${totalChunks} 个文本块`;
+
+    if (documents.length === 0) {
+      docList.innerHTML = '<div class="empty-kb">暂无文档，请上传知识文件</div>';
+      // Update empty state
+      const empty = chatMessages.querySelector('.empty-state');
+      if (empty) {
+        empty.querySelector('p:last-child').textContent = '共 0 个文档可供检索';
+      }
+      return;
+    }
+
+    // Update empty state's document count
+    const empty = chatMessages.querySelector('.empty-state');
+    if (empty) {
+      empty.querySelector('p:last-child').textContent = `共 ${documents.length} 个文档可供检索`;
+    }
+
+    for (const doc of documents) {
+      const item = document.createElement('div');
+      item.className = 'doc-item';
+      const ext = doc.file_type;
+      item.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <span class="doc-name" title="${escapeHtml(doc.filename)}">${escapeHtml(doc.filename)}</span>
+        <span class="doc-size">${doc.chunk_count}块</span>
+        <button class="doc-delete" data-id="${doc.id}" title="删除">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
+      `;
+      item.querySelector('.doc-delete').addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteDoc(doc.id, doc.filename);
+      });
+      docList.appendChild(item);
+    }
+  }
+
+  function escapeHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  // ── Delete document ───────────────────────────────────
+  async function deleteDoc(id, name) {
+    try {
+      await api('/api/documents/' + id, { method: 'DELETE' });
+      showToast('已删除: ' + name, 'success');
+      await loadDocuments();
+    } catch (e) {
+      showToast(e.message || '删除失败', 'error');
+    }
+  }
+
+  // ── Upload document ───────────────────────────────────
+  async function uploadFile(file) {
+    const ext = '.' + file.name.split('.').pop().toLowerCase();
+    if (!['.pdf','.docx','.txt','.md'].includes(ext)) {
+      showToast('不支持的文件格式: ' + ext, 'error');
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      showToast('文件超过 50MB 限制', 'error');
+      return;
+    }
+
+    uploadText.textContent = '上传中...';
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const resp = await fetch(API + '/api/documents/upload', { method: 'POST', body: form });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+        throw new Error(err.detail);
+      }
+      const data = await resp.json();
+      showToast(data.message, 'success');
+      await loadDocuments();
+    } catch (e) {
+      showToast(e.message || '上传失败', 'error');
+    } finally {
+      uploadText.textContent = '拖拽或点击上传文档';
+    }
+  }
+
+  // ── Upload zone handlers ──────────────────────────────
+  uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+  uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+  uploadZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadZone.classList.remove('dragover');
+    const f = e.dataTransfer.files[0];
+    if (f) uploadFile(f);
+  });
+  uploadZone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', (e) => {
+    const f = e.target.files[0];
+    if (f) uploadFile(f);
+    e.target.value = '';
+  });
+
+  // ── Chat ──────────────────────────────────────────────
+  let messages = [];
+
+  function addMessage(role, content, sources) {
+    messages.push({ role, content, sources });
+
+    // Remove empty state
+    const empty = chatMessages.querySelector('.empty-state');
+    if (empty) empty.remove();
+
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'message ' + role;
+
+    const label = document.createElement('div');
+    label.className = 'message-label';
+    label.textContent = role === 'user' ? '我' : 'AI 助手';
+    msgDiv.appendChild(label);
+
+    const bubble = document.createElement('div');
+    bubble.className = 'message-bubble';
+
+    const contentDiv = document.createElement('div');
+    contentDiv.innerHTML = renderMarkdown(content);
+    bubble.appendChild(contentDiv);
+
+    if (sources && sources.length > 0) {
+      const details = document.createElement('details');
+      details.className = 'citations';
+      const summary = document.createElement('summary');
+      summary.textContent = '\uD83D\uDCCE ' + sources.length + ' 条引用来源';
+      details.appendChild(summary);
+      sources.forEach((src, i) => {
+        const card = createCitationCard(src, i + 1);
+        details.appendChild(card);
+      });
+      bubble.appendChild(details);
+    }
+
+    msgDiv.appendChild(bubble);
+    chatMessages.appendChild(msgDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  function addTypingIndicator() {
+    const div = document.createElement('div');
+    div.className = 'message assistant';
+    div.id = 'typingIndicator';
+    div.innerHTML = '<div class="message-label">AI 助手</div><div class="message-bubble"><div class="typing-indicator"><span></span><span></span><span></span></div></div>';
+    chatMessages.appendChild(div);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  function removeTypingIndicator() {
+    const el = document.getElementById('typingIndicator');
+    if (el) el.remove();
+  }
+
+  async function sendMessage() {
+    const text = chatInput.value.trim();
+    if (!text || loading) return;
+
+    chatInput.value = '';
+    chatInput.style.height = 'auto';
+    sendBtn.disabled = true;
+    loading = true;
+
+    addMessage('user', text, null);
+    addTypingIndicator();
+
+    try {
+      const data = await api('/api/chat/', {
+        method: 'POST',
+        body: JSON.stringify({ query: text, top_k: 5, enable_rerank: true }),
+      });
+      removeTypingIndicator();
+      addMessage('assistant', data.answer, data.sources);
+    } catch (e) {
+      removeTypingIndicator();
+      addMessage('assistant', '**错误**: ' + (e.message || '请求失败，请稍后重试。'), null);
+    } finally {
+      loading = false;
+      checkSendBtn();
+    }
+  }
+
+  function checkSendBtn() {
+    sendBtn.disabled = !chatInput.value.trim() || loading;
+  }
+
+  // ── Markdown renderer ─────────────────────────────────
+  function renderMarkdown(text) {
+    let html = text
+      .replace(/\^\[(\d+)\]\^/g, '<sup>[$1]</sup>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/`(.+?)`/g, '<code>$1</code>');
+
+    const lines = html.split('\n');
+    let result = '', inUl = false, inOl = false;
+
+    for (const line of lines) {
+      const ulMatch = line.match(/^[-*]\s+(.+)/);
+      const olMatch = line.match(/^\d+[.)]\s+(.+)/);
+      if (ulMatch) {
+        if (inOl) { result += '</ol>\n'; inOl = false; }
+        if (!inUl) { result += '<ul>\n'; inUl = true; }
+        result += '<li>' + ulMatch[1] + '</li>\n';
+      } else if (olMatch) {
+        if (inUl) { result += '</ul>\n'; inUl = false; }
+        if (!inOl) { result += '<ol>\n'; inOl = true; }
+        result += '<li>' + olMatch[1] + '</li>\n';
+      } else {
+        if (inUl) { result += '</ul>\n'; inUl = false; }
+        if (inOl) { result += '</ol>\n'; inOl = false; }
+        if (line.trim()) result += '<p>' + line + '</p>\n';
+      }
+    }
+    if (inUl) result += '</ul>\n';
+    if (inOl) result += '</ol>\n';
+    return result;
+  }
+
+  // ── Citation card ─────────────────────────────────────
+  function createCitationCard(src, index) {
+    const card = document.createElement('div');
+    card.className = 'citation-card';
+
+    const scoreClass = src.score >= 0.7 ? 'score-high' : src.score >= 0.5 ? 'score-medium' : 'score-low';
+    const label = src.page_number ? src.filename + ' · 第' + src.page_number + '页' : src.filename;
+
+    card.innerHTML = `
+      <div class="score-badge ${scoreClass}">${Math.round(src.score * 100)}</div>
+      <div class="citation-body">
+        <div class="citation-source">[${index}] ${escapeHtml(label)}</div>
+        <div class="citation-text">${escapeHtml(src.content)}</div>
+      </div>
+    `;
+    return card;
+  }
+
+  // ── Input events ──────────────────────────────────────
+  chatInput.addEventListener('input', checkSendBtn);
+  chatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+  // auto-resize
+  chatInput.addEventListener('input', () => {
+    chatInput.style.height = 'auto';
+    chatInput.style.height = Math.min(chatInput.scrollHeight, 120) + 'px';
+  });
+  sendBtn.addEventListener('click', sendMessage);
+
+  // ── Init ──────────────────────────────────────────────
+  loadDocuments();
+})();
+</script>
+</body>
+</html>

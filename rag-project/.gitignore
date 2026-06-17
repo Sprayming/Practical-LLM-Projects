@@ -6,20 +6,6 @@ dist/
 build/
 .venv/
 venv/
-env/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Notebook checkpoints
-.ipynb_checkpoints/
 
 # ChromaDB
 chroma_db/
@@ -29,3 +15,12 @@ uploads/
 
 # Environment
 .env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,32 @@
+﻿version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - chroma_data:/app/chroma_db
+      - upload_data:/app/uploads
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
+    restart: unless-stopped
+
+  # 可选：本地嵌入模型替代 OpenAI
+  # embedding:
+  #   image: ghcr.io/huggingface/text-embeddings-inference:cpu-0.6
+  #   ports:
+  #     - "8080:80"
+  #   volumes:
+  #     - embedding_cache:/data
+  #   environment:
+  #     - MODEL_ID=BAAI/bge-small-zh-v1.5
+
+volumes:
+  chroma_data:
+  upload_data:
+  # embedding_cache:

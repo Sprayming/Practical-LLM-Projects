@@ -1,0 +1,22 @@
+﻿═══════════════════════════════════════════════════════════
+  架构说明
+═══════════════════════════════════════════════════════════
+
+  LLM → DeepSeek deepseek-chat（需要 API Key）
+  嵌入 → 本地 jieba 分词 + n-gram 哈希（零依赖，离线）
+  向量库 → ChromaDB（本地持久化）
+
+═══════════════════════════════════════════════════════════
+  如果你想换嵌入模型（未来升级）
+═══════════════════════════════════════════════════════════
+
+  方法1：用 OpenAI 嵌入（需要 API Key）
+    pip install openai
+    修改 embedder.py → 改用 OpenAIEmbeddingFunction
+
+  方法2：用 sentence-transformers（本地模型）
+    pip install sentence-transformers
+    embedder.py → 改用 BAAI/bge-small-zh-v1.5
+
+  方法3：用 ChromaDB 自带的 ONNX 模型
+    只需首次联网下载 ~80MB 模型，之后离线
