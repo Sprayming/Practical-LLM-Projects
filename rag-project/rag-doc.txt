@@ -1,0 +1,290 @@
+﻿╔══════════════════════════════════════════════════════════════╗
+║      RAG 企业知识库 — 代码框架文档                          ║
+║      项目: rag-project / Practical-LLM-Projects             ║
+║      生成日期: 2026-06-22                                   ║
+╚══════════════════════════════════════════════════════════════╝
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+一、项目整体架构
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+rag-project/
+├── backend/                          ← FastAPI 后端
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── main.py                   ← 应用入口
+│   │   ├── config.py                 ← 配置中心
+│   │   ├── models.py                 ← 数据模型
+│   │   ├── api/
+│   │   │   ├── __init__.py
+│   │   │   ├── chat.py              ← 问答 API
+│   │   │   └── documents.py         ← 文档管理 API
+│   │   ├── generation/
+│   │   │   ├── __init__.py
+│   │   │   ├── llm.py               ← LLM 服务 (DeepSeek)
+│   │   │   └── prompt_templates.py  ← 提示词模板
+│   │   ├── ingestion/
+│   │   │   ├── __init__.py
+│   │   │   ├── loader.py            ← 文档加载器
+│   │   │   ├── chunker.py           ← 文本分块器
+│   │   │   └── pipeline.py          ← 摄取管线编排
+│   │   └── retrieval/
+│   │       ├── __init__.py
+│   │       ├── embedder.py          ← 本地嵌入器
+│   │       ├── retriever.py         ← 检索器
+│   │       └── vector_store.py      ← ChromaDB 封装
+│   ├── tests/__init__.py
+│   ├── Dockerfile / requirements.txt / pyproject.toml
+│   ├── .dockerignore / .env.example
+├── frontend/index.html               ← 前端页面
+├── my_version/app/                   ← 自定义版本 (同backend结构)
+├── scripts/                          ← setup/dev/lint/test
+├── docker-compose.yml / Makefile
+└── README.md
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+二、RAG 核心数据流
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+摄取流程 (上传文档 → 入库):
+  文件 → loader.py → LoadedDocument → chunker.py → TextChunk[]
+  → embedder.py → 向量[] → vector_store.py → ChromaDB
+
+  编排: pipeline.py 的 ingest_document() 串联以上4步
+
+问答流程 (用户提问 → 回答):
+  query → embedder.embed_query(query) → 向量
+  → retriever.retrieve(query_vec) → 搜 ChromaDB
+  → llm.generate(query, sources) → DeepSeek → 回答
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+三、各文件代码框架
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+3.1  config.py — 配置中心
+────────────────────────
+
+  class Settings(BaseSettings):
+      # LLM: llm_api_key / llm_base_url / llm_model
+      #      llm_temperature / llm_max_tokens
+      # 分块: chunk_size / chunk_overlap
+      # 检索: retrieval_top_k / retrieval_min_score
+      # 嵌入: embedding_dimensions
+      # 路径: chroma_persist_dir / upload_dir
+      model_config = SettingsConfigDict(env_file=".env")
+
+  settings = Settings()                    ← 全局单例
+  CHROMA_COLLECTION_NAME = "enterprise_knowledge"
+  SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
+
+
+3.2  models.py — 数据模型
+────────────────────────
+
+  DocumentMeta      — 文档元信息 (id, filename, file_size, ...)
+  CitationSource    — 引用来源 (document_id, filename, content, score)
+  ChatRequest       — 问答请求 (query, top_k, document_ids)
+  ChatResponse      — 问答响应 (answer, sources[], latency_ms, tokens_used)
+  UploadResponse    — 上传响应 (success, document_id, filename, message)
+  DocumentListResponse — 文档列表 (documents[], total)
+  DeleteResponse    — 删除响应 (success, message)
+  HealthResponse    — 健康检查 (status, version, api_key_configured, ...)
+
+
+3.3  main.py — 应用入口
+────────────────────────
+
+  lifespan(app):  启动时初始化 ChromaDB / 关闭时收尾
+  app = FastAPI(title=..., lifespan=lifespan)
+  app.add_middleware(CORSMiddleware, allow_origins=["*"], ...)
+  app.include_router(documents.router)   ← /api/documents/*
+  app.include_router(chat.router)        ← /api/chat/*
+
+  @app.exception_handler(Exception)       ← 全局异常 → 500
+  @app.get("/api/health")                 ← 健康检查
+  if __name__ == "__main__": uvicorn.run()
+
+
+3.4  api/chat.py — 问答 API
+────────────────────────
+
+  @router.post("/")
+  async def ask(req: ChatRequest):
+      1. sources = retriever.retrieve(query, top_k, document_ids)
+      2. if not sources → "未找到相关参考资料"
+      3. answer, tokens = llm.generate(query, sources)
+      4. return ChatResponse(answer, sources, latency, tokens)
+
+
+3.5  api/documents.py — 文档管理 API
+────────────────────────
+
+  @router.get("/")             → list_all() → 文档列表
+  @router.post("/upload")      → upload(file) → UploadResponse
+      校验格式 → 保存文件 → ingest_document() → 返回结果
+  @router.get("/{id}")         → detail(id) → 文档详情
+  @router.delete("/{id}")      → delete(id) → 删除文档+向量
+
+
+3.6  ingestion/loader.py — 文档加载器
+────────────────────────
+
+  class DocumentPage:
+      text, page_number
+
+  class LoadedDocument:
+      file_path, filename, pages, metadata
+      @property full_text / char_count / page_count
+
+  def load_document(file_path):            ← 工厂函数
+      ext → _load_pdf / _load_docx / _load_text
+            _load_csv / _load_xlsx / _load_image
+            _load_pptx / _load_html
+
+  内部函数: 每种格式一个，各自 try import 对应库
+  设计: 懒加载依赖，空页过滤，errors="replace" 容错
+
+
+3.7  ingestion/chunker.py — 文本分块器
+────────────────────────
+
+  class TextChunk: content, chunk_index, page_number, document_id
+
+  def get_tokenizer(model):  ← tiktoken 编码器
+  def count_tokens(text, enc):  ← token 计数
+
+  def chunk_document(doc, chunk_size=800, chunk_overlap=200):
+      for page in doc.pages:                 ← 逐页
+          paragraphs = re.split(r"\n\s*\n", page.text)
+          for para in paragraphs:            ← 逐段
+              超长(>chunk_size) → 按句子切 + overlap
+              正常 → 累积 buffer + 超限 flush + overlap
+          flush 每页剩余 buffer
+      return chunks
+
+
+3.8  ingestion/pipeline.py — 管线编排
+────────────────────────
+
+  def ingest_document(file_path, document_id=None):
+      1. load_document(file_path)
+      2. chunk_document(loaded, chunk_size, overlap)
+      3. embedder.embed_documents(texts)
+      4. store.add_embeddings(ids, embeddings, documents, metadatas)
+      return DocumentMeta(...)
+
+  def delete_document(id) → store.delete_by_document_id(id)
+  def list_documents() → store.list_documents()
+  def _generate_doc_id(path) → sha256[:12] 稳定哈希ID
+
+
+3.9  generation/prompt_templates.py — 提示词模板
+────────────────────────
+
+  SYSTEM_PROMPT = """企业知识库助手行为规则:
+      依据优先、引用标注^[N]^、精炼准确、中文回答、拒绝幻觉"""
+
+  def build_qa_prompt(query, context):
+      → [{"role": "system", "content": ...},
+         {"role": "user", "content": "参考资料\n...\n问题\n..."}]
+
+
+3.10  generation/llm.py — LLM 服务
+────────────────────────
+
+  class LLMService:
+      def __init__(self, api_key, base_url, model, temperature, max_tokens):
+          self._client = OpenAI(api_key=..., base_url=...)
+
+      def generate(self, query, sources):
+          context = _format_context(sources)
+          messages = build_qa_prompt(query, context)
+          resp = client.chat.completions.create(...)
+          return answer, tokens
+
+      def _format_context(sources):
+          → "=== 参考资料 1 ===\n来源: 文件名 (第X页)\n内容..."
+
+  def get_llm()  ← 单例工厂
+
+
+3.11  retrieval/embedder.py — 本地嵌入器
+────────────────────────
+
+  class Embedder:
+      def __init__(self, dim=768):
+          import jieba
+
+      def _vec(self, text):                ← 文本→向量
+          1. jieba.cut 分词 → md5哈希 → 位置+1.0
+          2. 字符2-gram → md5哈希 → 位置+0.3
+          3. L2归一化
+          return (vec / norm).tolist()
+
+      def embed_documents(self, texts):    ← 批量
+      def embed_query(self, text):         ← 单个查询
+
+  def get_embedder()  ← 单例工厂
+
+
+3.12  retrieval/retriever.py — 检索器
+────────────────────────
+
+  class Retriever:
+      def __init__(self, top_k=5, min_score=0.20):
+          self._embedder, self._store
+
+      def retrieve(self, query, top_k, document_ids):
+          qvec = embedder.embed_query(query)
+          where = {"document_id": {"": document_ids}}
+          results = store.search(qvec, top_k, where)
+          → 过滤低分 → 组装 CitationSource[]
+
+  def get_retriever()  ← 单例工厂
+
+
+3.13  retrieval/vector_store.py — ChromaDB
+────────────────────────
+
+  class VectorStore:
+      def __init__(self, persist_dir):
+          client = chromadb.PersistentClient(path)
+          collection = client.get_or_create_collection(
+              name="enterprise_knowledge", hnsw:space="cosine")
+
+      def add_embeddings(self, ids, embeddings, documents, metadatas)
+      def search(self, query_embedding, top_k, where)
+          → [(id, score, content, meta), ...]
+      def delete_by_document_id(self, document_id)
+      def list_documents(self) → 按document_id分组统计
+      @property count / def health()
+
+  def get_vector_store()  ← 单例工厂
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+四、部署文件
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  docker-compose.yml  →  backend:8000 + volumes
+  Dockerfile          →  python:3.12-slim + pip install + uvicorn
+  Makefile            →  setup/dev/lint/test/clean
+  requirements.txt    →  fastapi, chromadb, openai, pypdf, ...共14个
+
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+五、API 接口一览
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  GET    /api/health                健康检查
+  GET    /api/documents/            文档列表
+  POST   /api/documents/upload     上传文档
+  GET    /api/documents/{id}       文档详情
+  DELETE /api/documents/{id}       删除文档
+  POST   /api/chat/                提问
+
+  所有接口由 frontend/index.html 调用
