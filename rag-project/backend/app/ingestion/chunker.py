@@ -87,7 +87,7 @@ def chunk_document(
             # 这种超长段落需要按句子切成更小的片段
             if para_tokens > chunk_size:
                 # 先把 buffer 里攒的内容 flush 出去
-                if buffer.strip():
+                if buffer.strip(): # buffer 不为空
                     chunks.append(TextChunk(
                         content=buffer.strip(),
                         chunk_index=idx,

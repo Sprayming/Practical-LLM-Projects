@@ -59,3 +59,159 @@ def chunk_document(
     chunks: list[TextChunk] = [] #用于存储切分后的文本块
     chunk_index = 0 #块索引，从0开始
     
+    for page in doc.pages: #遍历文档中的每一页
+        if not page.text.strip(): #如果页面的文本内容为空，就跳过这个页面
+            continue
+        page_number = page.page_number #获取页码
+        text = page.text #获取页面的文本内容
+        buffer = "" #用于缓存当前块的文本内容
+        buffer_token_count = 0 #用于缓存当前块的 token 数量
+
+        # 按段落切分
+        
+        # paragraphs = text.split("\n") #按换行符切分文本，得到段落列表,这里属于硬切割，如果段落之间没有换行符，就会把整个文本当作一个段落
+        paragraphs = re.split(r"\n", text)#按换行符切分文本，得到段落列表，这里使用正则表达式，可以更灵活地处理换行符，比如可以处理多个连续的换行符
+        for para in paragraphs:
+            para = para.strip()# 去掉段落前后的空白字符
+            if not para: #如果段落为空，就跳过这个段落
+                continue
+
+            para_token_count = count_tokens(para, tokenizer) #计算段落的 token 数量,需要看情况分类
+
+            # 情况1：如果当前这个段落，token 数量超过 chunk_size，就保存当前buffer块，并开始新的buffer块
+
+            if  para_token_count > chunk_size: #如果当前块的 token 数量加上段落的 token 数量超过了 chunk_size，就保存当前块，并开始新的块
+                # 第一步先把 buffer 里攒的内容 flush 出去
+                if buffer.strip(): #如果 buffer 不为空，就保存当前块
+                    chunks.append(TextChunk(
+                        content=buffer.strip(),
+                        chunk_index=chunk_index,
+                        page_number=page_number,
+                        document_id=document_id,
+                    ))
+                    chunk_index += 1 #块索引加1
+                buffer = "" #清空 buffer
+                buffer_token_count = 0 #清空 buffer 的 token 数量
+               
+                # 第二步段落按句子切分，并 flush 出去
+                #情况1.1：如果当前段落切分出的句子，token 数量不超过 chunk_size，就保存当前buffer块，并开始新的buffer块
+                # sentences = para.split("。") #按句号切分段落，得到句子列表
+                sentences = re.split(r"(?<=[。！？])", para) #按句号、问号、感叹号切分段落，得到句子列表，这里使用正则表达式，可以更灵活地处理标点符号，比如可以处理中文和英文的标点符号
+                for sent in sentences:
+                    sent = sent.strip() #去掉句子前后的空白字符
+                    if not sent: #如果句子为空，就跳过这个句子
+                        continue
+                    sent_token_count = count_tokens(sent, tokenizer) #计算句子的 token 数量
+
+                    if buffer_token_count + sent_token_count > chunk_size: #如果当前块的 token 数量加上句子的 token 数量超过了 chunk_size，就保存当前块，并开始新的块
+                        if buffer.strip(): #如果 buffer 不为空，就保存当前块
+                            chunks.append(TextChunk(
+                                content=buffer.strip(),
+                                chunk_index=chunk_index,
+                                page_number=page_number,
+                                document_id=document_id,
+                            ))
+                            chunk_index += 1 #块索引加1
+                        buffer = sent #将当前句子作为新块的开始
+                        buffer_token_count = sent_token_count #将当前句子的 token 数量作为新块的 token 数量
+                    else: #如果当前块的 token 数量加上句子的 token 数量没有超过 chunk_size，就将句子添加到当前块中
+                        if buffer: #如果当前块已经有内容了，就在块末尾添加一个换行符，然后再添加句子
+                            buffer += "\n" + sent
+                        else: #如果当前块还没有内容，就直接添加句子
+                            buffer = sent
+                        buffer_token_count += sent_token_count #更新当前块的 token 数量
+
+                # 如果当前块还有内容，就保存它
+                if buffer:#如果当前块还有内容，就保存它
+                    chunks.append(TextChunk(buffer, chunk_index, page_number, document_id)) #将当前块添加到 chunks 列表中
+                    chunk_index += 1
+                    buffer = "" #清空 buffer
+                    buffer_token_count = 0 #清空 buffer 的 token 数量
+                continue #继续处理下一个页面下一段段落
+
+                # 情况1.2：如果当前段落切分出的句子的token 数量超过 chunk_size
+                # 第一步先把 buffer 里攒的内容 flush 出去
+                if buffer.strip(): #如果 buffer 不为空，就保存当前块
+                    chunks.append(TextChunk(
+                        content=buffer.strip(),
+                        chunk_index=chunk_index,
+                        page_number=page_number,
+                        document_id=document_id,
+                    ))
+                    chunk_index += 1
+                buffer = "" #清空 buffer
+                buffer_token_count = 0 #清空 buffer 的 token 数量
+
+                # 第二步需要将句子继续按标点符号切分，并 flush 出去
+                kids = re.split(r"(?<=[。！？.!?])\s*", para) #按句号、问号、感叹号切分段落，得到句子列表，这里使用正则表达式，可以更灵活地处理标点符号，比如可以处理中文和英文的标点符号
+                for kid in kids: #按句号、问号、感叹号切分段落，得到句子列表，这里使用正则表达式，可以更灵活地处理标点符号，比如可以处理中文和英文的标点符号
+                    kid = kid.strip()
+                    if not kid:
+                        continue
+                    kid_token_count = count_tokens(kid, tokenizer)
+                    if buffer_token_count + kid_token_count > chunk_size:
+                        if buffer.strip():
+                            chunks.append(TextChunk(
+                                content=buffer.strip(),
+                                chunk_index=chunk_index,
+                                page_number=page_number,
+                                document_id=document_id,
+                            ))
+                            chunk_index += 1
+                        buffer = kid
+                        buffer_token_count = kid_token_count
+                    else:
+                        if buffer:
+                            buffer += "\n" + kid
+                        else:
+                            buffer = kid
+                        buffer_token_count += kid_token_count
+                if buffer:
+                    chunks.append(TextChunk(buffer, chunk_index, page_number, document_id))
+                    chunk_index += 1
+                    buffer = ""
+                    buffer_token_count = 0
+                continue
+
+            
+
+            # 情况2： 正常段落:如果当前段落的 token 数量没有超过 chunk_size，就将段落添加到当前块中
+            #第一步：如果当前块加上当前这个段落，token 数量超过 chunk_size，就保存当前buffer块，并开始新的buffer块
+            if buffer_token_count + para_token_count > chunk_size: #如果当前块的 token 数量加上段落的 token 数量超过了 chunk_size，就保存当前块，并开始新的块
+                if buffer.strip(): #如果 buffer 不为空，就保存当前块
+                    chunks.append(TextChunk(
+                        content=buffer.strip(),
+                        chunk_index=chunk_index,
+                        page_number=page_number,
+                        document_id=document_id,
+                    ))
+                    chunk_index += 1 #块索引加1
+
+                    # overlap：保留 buffer 末尾的 chunk_overlap 个 token
+                    tail_tokens = tokenizer.encode(buffer) #1.将 buffer 编码为 token 列表 
+                    if len(tail_tokens) > chunk_overlap: #2.如果 token 列表的长度大于 chunk_overlap，就保留最后 chunk_overlap 个 token
+                        tail_tokens = tail_tokens[-chunk_overlap:] #保留最后 chunk_overlap 个 token
+                    buffer = tokenizer.decode(tail_tokens) #3.将保留的 token 列表解码为字符串，作为新的 buffer
+                    buffer_token_count = len(tail_tokens) #4.更新 buffer 的 token 数量
+
+                else: #如果 buffer 为空，就清空 buffer 和 buffer 的 token 数量
+                    buffer = ""
+                    buffer_token_count = 0
+
+            # 第二步：把当前段落加到 buffer 里
+            buffer = (buffer + "\n\n" + para).strip()
+            buffer_token_count = count_tokens(buffer, tokenizer) # 重新计算当前 buffer 的总 token 数
+
+        # 一页处理完 → flush 剩余 buffer
+        if buffer.strip(): #如果 buffer 不为空，就保存当前块
+            chunks.append(TextChunk(
+                content=buffer.strip(),
+                chunk_index=chunk_index,
+                page_number=page_number,
+                document_id=document_id,
+            ))
+            chunk_index += 1 #块索引加1
+            buffer = "" #清空 buffer
+            buffer_token_count = 0 #清空 buffer 的 token 数量
+
+    return chunks
