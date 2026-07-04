@@ -33,7 +33,7 @@ rag-project/
 │   │       ├── __init__.py
 │   │       ├── embedder.py          ← 本地嵌入器
 │   │       ├── retriever.py         ← 检索器
-│   │       └── vector_store.py      ← ChromaDB 封装
+│   │       └── vector_+store.py      ← ChromaDB 封装
 │   ├── tests/__init__.py
 │   ├── Dockerfile / requirements.txt / pyproject.toml
 │   ├── .dockerignore / .env.example
