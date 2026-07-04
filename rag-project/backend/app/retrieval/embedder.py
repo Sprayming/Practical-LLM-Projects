@@ -14,13 +14,13 @@
 
 from __future__ import annotations
 
-import hashlib
+import hashlib # 哈希算法
 from typing import Optional
 
 import numpy as np                     # 科学计算库，用于向量运算
 from loguru import logger
 
-from app.config import settings
+from app.config import settings      # 配置文件
 
 
 class Embedder:
@@ -32,14 +32,14 @@ class Embedder:
 
     def __init__(self, dim: int | None = None) -> None:
         # 向量维度，默认 768（越大信息量越大，但计算越慢）
-        self.dim = dim or settings.embedding_dimensions
+        self.dim = dim or settings.embedding_dimensions # 从配置文件读取
         
         # jieba 是中文分词库，import 时会加载词典
         # 首次运行会花 1 秒左右建缓存，之后就快了
-        import jieba
-        self._jieba = jieba
+        import jieba # type: ignore
+        self._jieba = jieba # 保存 jieba 实例，供 _vec 方法使用
         
-        logger.info("Embedder ready: jieba + ngram, dim={}", self.dim)
+        logger.info("Embedder ready: jieba + ngram, dim={}", self.dim) # 日志
 
     def _vec(self, text: str) -> list[float]:
         """把一段文本转成 768 维的向量。"""
@@ -47,13 +47,13 @@ class Embedder:
 
         # ── 第1层：词级别特征（高权重 1.0） ──
         # jieba.cut 把句子切成词，如"报销流程" → ["报销","流程"]
-        for w in self._jieba.cut(text):
-            w = w.strip()
+        for w in self._jieba.cut(text): # 分词
+            w = w.strip() # 去掉空格和换行符
             if not w:
                 continue
             # MD5 把词 → 哈希值 → 取前4字节 → 模 dimension → 得到向量位置
             # 同一个词永远映射到同一个位置
-            h = int.from_bytes(hashlib.md5(w.encode()).digest()[:4], "little") % self.dim
+            h = int.from_bytes(hashlib.md5(w.encode()).digest()[:4], "little") % self.dim # type: ignore
             vec[h] += 1.0  # 在这个位置上"加 1"
 
         # ── 第2层：字符 bigram 特征（低权重 0.3） ──
@@ -77,7 +77,7 @@ class Embedder:
 
     def embed_query(self, text: str) -> list[float]:
         """嵌入单条查询。"""
-        return self._vec(text)
+        return self._vec(text) # 单条查询不需要批量处理，所以直接调用 _vec
 
 
 # ── 单例模式 ──
@@ -85,7 +85,7 @@ class Embedder:
 _embedder: Optional[Embedder] = None
 
 
-def get_embedder() -> Embedder:
+def get_embedder() -> Embedder: 
     """获取全局唯一的 Embedder 实例。"""
     global _embedder
     if _embedder is None:
