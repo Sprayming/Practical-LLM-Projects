@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     chroma_persist_dir: str = str(Path(__file__).resolve().parent.parent / "chroma_db")
     # 上传的文件暂存目录
     upload_dir: str = str(Path(__file__).resolve().parent.parent / "uploads")
+    model_cache: str = str(Path(__file__).resolve().parent.parent / "model_cache")
 
     # 读取配置文件env
     model_config = SettingsConfigDict(
