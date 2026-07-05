@@ -27,7 +27,7 @@ from app.retrieval.vector_store import get_vector_store
 router = APIRouter(prefix="/api/documents", tags=["Documents"])
 
 ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md", ".csv", ".xlsx", ".pptx", ".html"}
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024  # 2GB
 
 
 @router.post("/upload", response_model=UploadResponseModel)
@@ -40,7 +40,7 @@ async def upload_document(file: UploadFile = File(...)):
 
     content = await file.read()
     if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail="文件超过 50MB 限制")
+        raise HTTPException(status_code=400, detail="文件超过 2GB 限制")
 
     # 2. 保存临时文件
     upload_dir = Path(settings.upload_dir)

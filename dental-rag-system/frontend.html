@@ -290,8 +290,8 @@ input,textarea{font-family:inherit;font-size:inherit}
       showToast('不支持的文件格式: ' + ext, 'error');
       return;
     }
-    if (file.size > 50 * 1024 * 1024) {
-      showToast('文件超过 50MB 限制', 'error');
+    if (file.size > 2 * 1024 * 1024 * 1024) {
+      showToast('文件超过 2GB 限制', 'error');
       return;
     }
 
