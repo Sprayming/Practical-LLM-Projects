@@ -277,10 +277,10 @@ class DocumentChunker:
         """验证文档参数"""
         if not document:
             raise ValueError("Document cannot be empty")
-        if not hasattr(document, 'content'): #如果文档没有 content 属性，就抛出 ValueError 异常
-            raise ValueError("Document must have content attribute")
-        if not hasattr(document, 'metadata'): #如果文档没有 metadata 属性，就抛出 ValueError 异常
-            raise ValueError("Document must have metadata attribute")
+        if not hasattr(document, 'full_text'): #如果文档没有 content 属性，就抛出 ValueError 异常
+            raise ValueError("Document must have full_text attribute")
+        if not hasattr(document, 'pages'): #如果文档没有 metadata 属性，就抛出 ValueError 异常
+            raise ValueError("Document must have pages attribute")
             
     def _preprocess_content(self, content): #如果 content 为空，就返回一个空列表
         """预处理文档内容"""
@@ -301,7 +301,7 @@ class DocumentChunker:
             print(f"Error creating chunk: {str(e)}")
             return None
             
-    def _process_paragraph(para, buffer, buffer_token_count, chunks, chunk_index, page_number, document_id, chunk_size, tokenizer):
+    def _process_paragraph(self, para, buffer, buffer_token_count, chunks, chunk_index, page_number, document_id, chunk_size, tokenizer):
         # 情况1.2：如果当前段落切分出的句子的token 数量超过 chunk_size
         # 第一步先把 buffer 里攒的内容 flush 出去
         if buffer.strip(): 
@@ -392,10 +392,10 @@ class DocumentChunker:
             chunk_index = 0
             buffer = ""
             buffer_token_count = 0
-            metadata = document.metadata
+            metadata = document.metadata or {}
             
             # 预处理内容
-            paragraphs = self._preprocess_content(document.content)
+            paragraphs = self._preprocess_content(document.full_text)
             
             # 处理每个段落
             for paragraph in paragraphs:
@@ -403,8 +403,12 @@ class DocumentChunker:
                     continue
                     
                 # 处理段落
-                buffer, chunk_index = self._process_paragraph(
-                    paragraph, buffer, chunks, chunk_index, metadata
+                page_number = metadata.get('page_number', 1)
+                document_id = metadata.get('document_id', '')
+                buffer, buffer_token_count, chunk_index = self._process_paragraph(
+                    paragraph, buffer, buffer_token_count, chunks,
+                    chunk_index, page_number, document_id,
+                    self.chunk_size, self.tokenizer
                 )
                 
             # 处理剩余的buffer
