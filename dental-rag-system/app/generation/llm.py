@@ -62,7 +62,7 @@ class LLMService:
         # 2. 调用 DeepSeek API 生成回答
         response = self.client.chat.completions.create(
             model=self.model,
-            messages=[{"role": "user", "content": prompt}],
+            messages=prompt,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
         )
@@ -83,8 +83,8 @@ class LLMService:
         for i, s in enumerate(sources):
             ref =(
                 f"=== 参考资料 {i} ===\n"
-                f"来源: {s.filename} (第{s.page}页)\n"
-                f"{s.document}\n"
+                f"来源: {s.filename} (第{s.page_number}页)\n"
+                f"{s.content}\n"
             )
             if s.page_number:#如果存在页码，则添加页码信息
                 ref += f"第 {s.page_number} 页\n"

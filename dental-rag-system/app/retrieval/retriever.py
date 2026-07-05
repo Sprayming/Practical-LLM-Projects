@@ -62,9 +62,9 @@ class Retriever:
             sources.append(CitationSourceModel(
                 document_id=metadata.get("document_id",""),
                 filename=metadata.get("filename",""),
-                page=metadata.get("page",""),
-                chunk_index=metadata.get("chunk_index",0),
-                document= document[:500],
+                page_number=metadata.get("page_number", 1),
+                chunk_index=metadata.get("chunk_index", 0),
+                content=document[:500],
                 score=score,
             ))
         return sources

@@ -90,6 +90,155 @@ def count_tokens(text: str, enc: tiktoken.Encoding) -> int:
     except Exception as e:# 如果转换过程中出现异常，就抛出异常
         raise ValueError(f"Failed to count tokens: {str(e)}")
 
+
+class DocumentChunker:
+    def __init__(self, chunk_size=1000, tokenizer=None):
+        self.chunk_size = chunk_size
+        self.tokenizer = tokenizer
+        
+    def _validate_document(self, document):
+        """验证文档参数"""
+        if not document:
+            raise ValueError("Document cannot be empty")
+        if not hasattr(document, 'full_text'): #如果文档没有 content 属性，就抛出 ValueError 异常
+            raise ValueError("Document must have full_text attribute")
+        if not hasattr(document, 'pages'): #如果文档没有 metadata 属性，就抛出 ValueError 异常
+            raise ValueError("Document must have pages attribute")
+            
+    def _preprocess_content(self, content): #如果 content 为空，就返回一个空列表
+        """预处理文档内容"""
+        if not content:
+            return []
+        return content.split('\n\n')  # 按段落分割
+        
+    def _create_chunk(self, content, chunk_index, metadata): #如果 content 为空，就返回 None
+        """创建文本块"""
+        try:
+            return TextChunk(
+                content=content.strip(),
+                chunk_index=chunk_index,
+                page_number=metadata.get('page_number', 1),
+                document_id=metadata.get('document_id', ''),
+            )
+        except Exception as e:
+            print(f"Error creating chunk: {str(e)}")
+            return None
+            
+    def _process_paragraph(self, para, buffer, buffer_token_count, chunks, chunk_index, page_number, document_id, chunk_size, tokenizer):
+        # 情况1.2：如果当前段落切分出的句子的token 数量超过 chunk_size
+        # 第一步先把 buffer 里攒的内容 flush 出去
+        if buffer.strip(): 
+            chunks.append(TextChunk(
+                content=buffer.strip(),
+                chunk_index=chunk_index,
+                page_number=page_number,
+                document_id=document_id,
+            ))
+            chunk_index += 1
+            buffer = "" 
+            buffer_token_count = 0 
+
+        # 第二步需要将句子继续按标点符号切分
+        sentences = re.split(r"(?<=[。！？.!?])\s*", para) 
+        
+        for sentence_fragment in sentences:  
+            sentence_fragment = sentence_fragment.strip()
+            if not sentence_fragment:
+                continue
+                
+            fragment_token_count = count_tokens(sentence_fragment, tokenizer)  
+            
+            # 【关键修复】：处理单句超长的情况
+            if fragment_token_count > chunk_size:
+                # 策略二：允许超长，但必须独立成块
+                # 1. 先把当前 buffer 里已有的内容 flush 出去（如果有）
+                if buffer.strip():
+                    chunks.append(TextChunk(
+                        content=buffer.strip(),
+                        chunk_index=chunk_index,
+                        page_number=page_number,
+                        document_id=document_id,
+                    ))
+                    chunk_index += 1
+                    buffer = ""
+                    buffer_token_count = 0
+                
+                # 2. 将这个超长的短句直接作为一个独立的块 flush 出去，绝不留在 buffer 里
+                chunks.append(TextChunk(
+                    content=sentence_fragment, # 超长句独立成块
+                    chunk_index=chunk_index,
+                    page_number=page_number,
+                    document_id=document_id,
+                ))
+                chunk_index += 1
+                # 注意：这里不更新 buffer，因为超长句已经被处理掉了，buffer 保持为空
+                continue
+                
+            # 【正常情况下的逻辑】：短句没有超过 chunk_size
+            if buffer_token_count + fragment_token_count > chunk_size:
+                if buffer.strip():
+                    chunks.append(TextChunk(
+                        content=buffer.strip(),
+                        chunk_index=chunk_index,
+                        page_number=page_number,
+                        document_id=document_id,
+                    ))
+                    chunk_index += 1
+                buffer = sentence_fragment
+                buffer_token_count = fragment_token_count
+            else:
+                if buffer:
+                    buffer += "\n" + sentence_fragment
+                else:
+                    buffer = sentence_fragment
+                buffer_token_count += fragment_token_count
+
+        # 循环结束后，返回 buffer 和 chunk_index，交由外层主函数继续处理下一个段落
+        # 注意：这里不再强制清空 buffer，因为 buffer 里的内容可能需要和下一段拼接
+        return buffer, buffer_token_count, chunk_index
+
+        
+    def chunk(self, document):
+        """主分块方法"""
+        try:
+            # 验证文档
+            self._validate_document(document)
+            
+            # 初始化变量
+            chunks = []
+            chunk_index = 0
+            buffer = ""
+            buffer_token_count = 0
+            metadata = document.metadata or {}
+            
+            # 预处理内容
+            paragraphs = self._preprocess_content(document.full_text)
+            
+            # 处理每个段落
+            for paragraph in paragraphs:
+                if not paragraph.strip():#如果段落为空，就跳过
+                    continue
+                    
+                # 处理段落
+                page_number = metadata.get('page_number', 1)
+                document_id = metadata.get('document_id', '')
+                buffer, buffer_token_count, chunk_index = self._process_paragraph(
+                    paragraph, buffer, buffer_token_count, chunks,
+                    chunk_index, page_number, document_id,
+                    self.chunk_size, self.tokenizer
+                )
+                
+            # 处理剩余的buffer
+            if buffer.strip():
+                chunk = self._create_chunk(buffer, chunk_index, metadata)
+                if chunk:
+                    chunks.append(chunk)
+                    
+            return chunks
+            
+        except Exception as e:
+            print(f"Error chunking document: {str(e)}")
+            return []
 # ============================================================
 # def chunk_document(
 #     doc: LoadedDocument,                # 待切分的文档
@@ -266,159 +415,3 @@ def count_tokens(text: str, enc: tiktoken.Encoding) -> int:
 #             buffer_token_count = 0 #清空 buffer 的 token 数量
 
 #     return chunks
-
-
-class DocumentChunker:
-    def __init__(self, chunk_size=1000, tokenizer=None):
-        self.chunk_size = chunk_size
-        self.tokenizer = tokenizer
-        
-    def _validate_document(self, document):
-        """验证文档参数"""
-        if not document:
-            raise ValueError("Document cannot be empty")
-        if not hasattr(document, 'full_text'): #如果文档没有 content 属性，就抛出 ValueError 异常
-            raise ValueError("Document must have full_text attribute")
-        if not hasattr(document, 'pages'): #如果文档没有 metadata 属性，就抛出 ValueError 异常
-            raise ValueError("Document must have pages attribute")
-            
-    def _preprocess_content(self, content): #如果 content 为空，就返回一个空列表
-        """预处理文档内容"""
-        if not content:
-            return []
-        return content.split('\n\n')  # 按段落分割
-        
-    def _create_chunk(self, content, chunk_index, metadata): #如果 content 为空，就返回 None
-        """创建文本块"""
-        try:
-            return TextChunk(
-                content=content.strip(),
-                chunk_index=chunk_index,
-                page_number=metadata.get('page_number', 1),
-                document_id=metadata.get('document_id', ''),
-            )
-        except Exception as e:
-            print(f"Error creating chunk: {str(e)}")
-            return None
-            
-    def _process_paragraph(self, para, buffer, buffer_token_count, chunks, chunk_index, page_number, document_id, chunk_size, tokenizer):
-        # 情况1.2：如果当前段落切分出的句子的token 数量超过 chunk_size
-        # 第一步先把 buffer 里攒的内容 flush 出去
-        if buffer.strip(): 
-            chunks.append(TextChunk(
-                content=buffer.strip(),
-                chunk_index=chunk_index,
-                page_number=page_number,
-                document_id=document_id,
-            ))
-            chunk_index += 1
-            buffer = "" 
-            buffer_token_count = 0 
-
-        # 第二步需要将句子继续按标点符号切分
-        sentences = re.split(r"(?<=[。！？.!?])\s*", para) 
-        
-        for sentence_fragment in sentences:  
-            sentence_fragment = sentence_fragment.strip()
-            if not sentence_fragment:
-                continue
-                
-            fragment_token_count = count_tokens(sentence_fragment, tokenizer)  
-            
-            # 【关键修复】：处理单句超长的情况
-            if fragment_token_count > chunk_size:
-                # 策略二：允许超长，但必须独立成块
-                # 1. 先把当前 buffer 里已有的内容 flush 出去（如果有）
-                if buffer.strip():
-                    chunks.append(TextChunk(
-                        content=buffer.strip(),
-                        chunk_index=chunk_index,
-                        page_number=page_number,
-                        document_id=document_id,
-                    ))
-                    chunk_index += 1
-                    buffer = ""
-                    buffer_token_count = 0
-                
-                # 2. 将这个超长的短句直接作为一个独立的块 flush 出去，绝不留在 buffer 里
-                chunks.append(TextChunk(
-                    content=sentence_fragment, # 超长句独立成块
-                    chunk_index=chunk_index,
-                    page_number=page_number,
-                    document_id=document_id,
-                ))
-                chunk_index += 1
-                # 注意：这里不更新 buffer，因为超长句已经被处理掉了，buffer 保持为空
-                continue
-                
-            # 【正常情况下的逻辑】：短句没有超过 chunk_size
-            if buffer_token_count + fragment_token_count > chunk_size:
-                if buffer.strip():
-                    chunks.append(TextChunk(
-                        content=buffer.strip(),
-                        chunk_index=chunk_index,
-                        page_number=page_number,
-                        document_id=document_id,
-                    ))
-                    chunk_index += 1
-                buffer = sentence_fragment
-                buffer_token_count = fragment_token_count
-            else:
-                if buffer:
-                    buffer += "\n" + sentence_fragment
-                else:
-                    buffer = sentence_fragment
-                buffer_token_count += fragment_token_count
-
-        # 循环结束后，返回 buffer 和 chunk_index，交由外层主函数继续处理下一个段落
-        # 注意：这里不再强制清空 buffer，因为 buffer 里的内容可能需要和下一段拼接
-        return buffer, buffer_token_count, chunk_index
-
-    
-
-
-
-        
-
-        
-    def chunk(self, document):
-        """主分块方法"""
-        try:
-            # 验证文档
-            self._validate_document(document)
-            
-            # 初始化变量
-            chunks = []
-            chunk_index = 0
-            buffer = ""
-            buffer_token_count = 0
-            metadata = document.metadata or {}
-            
-            # 预处理内容
-            paragraphs = self._preprocess_content(document.full_text)
-            
-            # 处理每个段落
-            for paragraph in paragraphs:
-                if not paragraph.strip():#如果段落为空，就跳过
-                    continue
-                    
-                # 处理段落
-                page_number = metadata.get('page_number', 1)
-                document_id = metadata.get('document_id', '')
-                buffer, buffer_token_count, chunk_index = self._process_paragraph(
-                    paragraph, buffer, buffer_token_count, chunks,
-                    chunk_index, page_number, document_id,
-                    self.chunk_size, self.tokenizer
-                )
-                
-            # 处理剩余的buffer
-            if buffer.strip():
-                chunk = self._create_chunk(buffer, chunk_index, metadata)
-                if chunk:
-                    chunks.append(chunk)
-                    
-            return chunks
-            
-        except Exception as e:
-            print(f"Error chunking document: {str(e)}")
-            return []

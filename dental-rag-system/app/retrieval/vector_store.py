@@ -69,8 +69,8 @@ class VectorStore:
         results = self._collection.query(
             query_embeddings=[query_embedding],
             where=where,
-            include=["documents", "metadatas", "ids", "distances"],
-            top_k=top_k,
+            include=["documents", "metadatas", "distances"],
+            n_results=top_k,
         )
         
         items:list[tuple[str, float, str, dict]] = []

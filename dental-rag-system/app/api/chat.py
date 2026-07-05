@@ -16,7 +16,7 @@ from app.generation.llm import get_llm                 # LLM 服务
 
 router = APIRouter(prefix="/api/chat",tags=["Chat"])
 
-@router.post("/chat", response_model=ChatResponseModel)
+@router.post("/", response_model=ChatResponseModel)
 async def chat(request: ChatRequestModel):
     """问答 API
     完整流程：
