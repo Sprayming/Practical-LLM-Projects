@@ -89,14 +89,8 @@ def count_tokens(text: str, enc: tiktoken.Encoding) -> int:
         return len(enc.encode(text))#使用编码器的 encode 方法将文本转换为 token 列表，然后返回列表的长度就是 token 数量了
     except Exception as e:# 如果转换过程中出现异常，就抛出异常
         raise ValueError(f"Failed to count tokens: {str(e)}")
+
 # ============================================================
-    """
-
-    """
-    """返回文本中的 token 数量。"""
-    return len(enc.encode(text)) #使用编码器的 encode 方法将文本转换为 token 列表，然后返回列表的长度就是 token 数量了
-
-
 # def chunk_document(
 #     doc: LoadedDocument,                # 待切分的文档
 #     chunk_size: int = 800,              # 每块的目标 token 数
@@ -272,6 +266,8 @@ def count_tokens(text: str, enc: tiktoken.Encoding) -> int:
 #             buffer_token_count = 0 #清空 buffer 的 token 数量
 
 #     return chunks
+
+
 class DocumentChunker:
     def __init__(self, chunk_size=1000, tokenizer=None):
         self.chunk_size = chunk_size
