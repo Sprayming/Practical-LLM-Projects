@@ -21,3 +21,7 @@ uploads/
 # IDE
 .vscode/
 .idea/
+
+model_cache/
+
+model_cache/
