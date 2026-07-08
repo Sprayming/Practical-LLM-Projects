@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -8,60 +8,40 @@
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:-apple-system,sans-serif;background:#f0f2f5;color:#1a1d2e;padding:20px}
 .container{max-width:960px;margin:0 auto}
-
 .header{background:linear-gradient(135deg,#1e2235,#2a2f45);color:#fff;padding:24px 32px;border-radius:10px;margin-bottom:20px}
-.header h1{font-size:20px;margin-bottom:4px}
-.header p{font-size:13px;color:#a0a5b8}
+.header h1{font-size:20px}.header p{font-size:13px;color:#a0a5b8}
 .header .status{float:right;font-size:12px;color:#10b981}
-
 .card{background:#fff;border-radius:8px;padding:20px 24px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,0.08)}
-.card h2{font-size:15px;margin-bottom:12px;color:#1e2235;border-left:3px solid #4f6ef7;padding-left:10px}
-
+.card h2{font-size:15px;margin-bottom:12px;border-left:3px solid #4f6ef7;padding-left:10px}
 .upload-zone{border:2px dashed #d0d5e0;border-radius:8px;padding:24px;text-align:center;cursor:pointer;transition:.2s}
-.upload-zone:hover{border-color:#4f6ef7;background:#f8f9ff}
-.upload-zone .icon{font-size:32px;margin-bottom:4px}
-.upload-zone .text{font-size:13px;color:#6b7280}
-
+.upload-zone:hover{border-color:#4f6ef7;background:#f8f9ff}.upload-zone .icon{font-size:32px}.upload-zone .text{font-size:13px;color:#6b7280}
 .btn{display:inline-block;padding:8px 20px;border:none;border-radius:6px;font-size:13px;cursor:pointer;transition:.2s}
-.btn-primary{background:#4f6ef7;color:#fff}
-.btn-primary:hover{background:#3b57d9}
-.btn-secondary{background:#e5e7eb;color:#374151}
-.btn-secondary:hover{background:#d1d5db}
-
+.btn-primary{background:#4f6ef7;color:#fff}.btn-primary:hover{background:#3b57d9}
+.btn-secondary{background:#e5e7eb;color:#374151}.btn-secondary:hover{background:#d1d5db}
 .kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
 .kpi-item{background:#f8f9fc;border-radius:6px;padding:10px;text-align:center}
 .kpi-item .value{font-size:20px;font-weight:600;color:#1e2235}
-.kpi-item .label{font-size:11px;color:#6b7280;margin-top:2px}
-
+.kpi-item .label{font-size:11px;color:#6b7280}
 table{width:100%;border-collapse:collapse;font-size:13px}
-th{background:#f8f9fc;padding:8px 12px;text-align:left;font-weight:600;color:#374151;border-bottom:2px solid #e5e7eb}
-td{padding:8px 12px;border-bottom:1px solid #f0f1f4;color:#4b5563}
+th{background:#f8f9fc;padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #e5e7eb}
+td{padding:8px 12px;border-bottom:1px solid #f0f1f4}
 .anomaly-high{background:#fef2f2;color:#dc2626;padding:2px 8px;border-radius:4px;font-size:12px}
 .anomaly-medium{background:#fffbeb;color:#d97706;padding:2px 8px;border-radius:4px;font-size:12px}
-
 .ai-box{background:#f0f4ff;border-radius:6px;padding:16px;font-size:13px;line-height:1.7;white-space:pre-wrap;color:#1e40af}
-
-/* 聊天区 */
-.chat-box{border:1px solid #e5e7eb;border-radius:8px;height:400px;overflow-y:auto;padding:16px;margin-bottom:10px;background:#fafbfc;display:flex;flex-direction:column;gap:12px}
+.chat-box{border:1px solid #e5e7eb;border-radius:8px;height:380px;overflow-y:auto;padding:16px;margin-bottom:10px;background:#fafbfc;display:flex;flex-direction:column;gap:12px}
 .chat-msg{max-width:85%;padding:10px 14px;border-radius:8px;font-size:13px;line-height:1.6}
 .chat-user{align-self:flex-end;background:#4f6ef7;color:#fff;border-radius:8px 8px 2px 8px}
 .chat-ai{align-self:flex-start;background:#fff;color:#1a1d2e;border:1px solid #e5e7eb;border-radius:8px 8px 8px 2px;white-space:pre-wrap}
 .chat-ai.loading{color:#9ca3af;font-style:italic}
-.chat-input{display:flex;gap:8px}
-.chat-input input{flex:1;padding:10px 14px;border:1px solid #d0d5e0;border-radius:6px;font-size:13px;outline:none}
+.chat-input{display:flex;gap:8px}.chat-input input{flex:1;padding:10px 14px;border:1px solid #d0d5e0;border-radius:6px;font-size:13px;outline:none}
 .chat-input input:focus{border-color:#4f6ef7}
-
 .example-questions{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
-.example-questions button{font-size:12px;padding:4px 10px;border:1px solid #d0d5e0;border-radius:12px;background:#fff;color:#6b7280;cursor:pointer;transition:.2s}
+.example-questions button{font-size:12px;padding:4px 10px;border:1px solid #d0d5e0;border-radius:12px;background:#fff;color:#6b7280;cursor:pointer}
 .example-questions button:hover{border-color:#4f6ef7;color:#4f6ef7}
-
 .message{padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px;display:none}
 .message.success{display:block;background:#ecfdf5;color:#065f46}
 .message.error{display:block;background:#fef2f2;color:#991b1b}
 .message.info{display:block;background:#eff6ff;color:#1e40af}
-
-.loading{display:none;text-align:center;padding:20px;color:#6b7280}
-.loading.active{display:block}
 .hidden{display:none}
 </style>
 </head>
@@ -81,14 +61,14 @@ td{padding:8px 12px;border-bottom:1px solid #f0f1f4;color:#4b5563}
       <div class="icon">📂</div>
       <div class="text">点击选择 CSV / Excel 文件</div>
     </div>
-<div id="uploadProgress" style="display:none; margin-top:12px">
-  <div style="font-size:12px;color:#6b7280;margin-bottom:4px" id="progressText">上传中 0%</div>
-  <div style="width:100%;height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden">
-    <div id="progressFill" style="width:0%;height:100%;background:linear-gradient(90deg,#4f6ef7,#10b981);border-radius:4px;transition:width 0.3s"></div>
-  </div>
-</div>
-<input type="file" id="fileInput" accept=".csv,.xlsx" style="display:none"onchange="uploadFile(this.files[0])">
-    <div style="margin-top:8px;font-size:12px;color:#6b7280" id="uploadInfo"></div>
+    <div id="uploadProgress" style="display:none;margin-top:12px">
+      <div style="font-size:12px;color:#6b7280;margin-bottom:4px" id="progressText">准备上传...</div>
+      <div style="width:100%;height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden">
+        <div id="progressFill" style="width:0%;height:100%;background:linear-gradient(90deg,#4f6ef7,#10b981);border-radius:4px;transition:width 0.3s"></div>
+      </div>
+    </div>
+    <input type="file" id="fileInput" accept=".csv,.xlsx" style="display:none">
+    <div id="uploadInfo" style="margin-top:8px;font-size:12px;color:#6b7280"></div>
   </div>
 
   <!-- 数据概览 -->
@@ -100,9 +80,6 @@ td{padding:8px 12px;border-bottom:1px solid #f0f1f4;color:#4b5563}
   <!-- 分析结果 -->
   <div class="card hidden" id="resultCard">
     <h2>📈 分析报告</h2>
-    <div style="margin-bottom:8px">
-      <button class="btn btn-primary" onclick="runAnalysis()">🔄 重新分析</button>
-    </div>
     <div id="analysisResult"></div>
   </div>
 
@@ -110,19 +87,14 @@ td{padding:8px 12px;border-bottom:1px solid #f0f1f4;color:#4b5563}
   <div class="card hidden" id="chatCard">
     <h2>💬 AI 智能问答</h2>
     <p style="font-size:12px;color:#6b7280;margin:-8px 0 10px 13px">向 AI 提问，基于你的数据回答</p>
-
     <div class="example-questions">
-      <button onclick="ask('最近订单量怎么样？趋势如何？')">📈 订单趋势</button>
-      <button onclick="ask('哪个时间段订单最多？')">⏰ 高峰时段</button>
-      <button onclick="ask('收入最高的司机是谁？')">🏆 最佳司机</button>
-      <button onclick="ask('有没有什么异常数据？')">⚠️ 异常检测</button>
-      <button onclick="ask('帮我写一份今天的运营简报')">📋 运营简报</button>
+      <button onclick="ask('数据大概情况怎么样？')">📊 数据概况</button>
+      <button onclick="ask('有哪些数据表？')">📋 查看Sheet</button>
+      <button onclick="ask('有什么异常数据吗？')">⚠️ 异常检测</button>
     </div>
-
     <div class="chat-box" id="chatBox">
-      <div class="chat-msg chat-ai">👋 你好！数据已加载，你可以直接提问，或者点击上面的示例问题试试。</div>
+      <div class="chat-msg chat-ai">👋 上传数据后，在这里提问！</div>
     </div>
-
     <div class="chat-input">
       <input type="text" id="chatInput" placeholder="输入你的问题..." onkeydown="if(event.key==='Enter') sendQuestion()">
       <button class="btn btn-primary" onclick="sendQuestion()">发送</button>
@@ -133,142 +105,141 @@ td{padding:8px 12px;border-bottom:1px solid #f0f1f4;color:#4b5563}
 <script>
 const API = "http://127.0.0.1:8000";
 
-async function checkHealth() {
-  try {
-    let r = await fetch(API + "/api/health");
-    let d = await r.json();
-    document.getElementById("statusDot").textContent = d.api_key_configured ? "● AI 已就绪" : "● 服务正常";
-  } catch(e) {
-    document.getElementById("statusDot").textContent = "⚠️ 连接失败";
-  }
-}
 checkHealth();
 
-function showMessage(text, type="info") {
-  let m = document.getElementById("message");
-  m.className = "message " + type;
-  m.textContent = text;
-  setTimeout(() => m.style.display = "none", 5000);
-}
-
-async function uploadFile(file) {
-  if (!file) return;
-  document.getElementById("uploadInfo").textContent = "⏳ 上传中 ...";
-  let form = new FormData();
-  form.append("file", file);
-  try {
-    let r = await fetch(API + "/api/data/upload", { method: "POST", body: form });
-    let d = await r.json();
-    if (d.success) {
-      showMessage(d.message, "success");
-      document.getElementById("uploadInfo").textContent = "✅ " + d.message;
-      loadSummary();
-      runAnalysis();
-      document.getElementById("chatCard").classList.remove("hidden");
-      addChatMsg("ai", "✅ 数据已加载！现在你可以问我任何关于运营数据的问题了。");
-    } else {
-      showMessage(d.detail || "上传失败", "error");
-    }
-  } catch(e) {
-    showMessage("连接失败，请确认服务已启动", "error");
-  }
-}
-
-async function loadSummary() {
-  try {
-    let r = await fetch(API + "/api/data/summary");
-    let d = await r.json();
-    if (d.total_orders === 0) return;
-    document.getElementById("summaryCard").classList.remove("hidden");
-    document.getElementById("summaryGrid").innerHTML = `
-      <div class="kpi-item"><div class="value">${d.total_orders}</div><div class="label">总订单</div></div>
-      <div class="kpi-item"><div class="value">${d.total_drivers}</div><div class="label">司机数</div></div>
-      <div class="kpi-item"><div class="value">${d.date_range}</div><div class="label">数据范围</div></div>
-    `;
-  } catch(e) {}
-}
-
-async function runAnalysis() {
-  document.getElementById("resultCard").classList.remove("hidden");
-  document.getElementById("analysisResult").innerHTML = '<div class="loading active">⏳ 分析中...</div>';
-  try {
-    let r = await fetch(API + "/api/analysis/run?date_start=&date_end=", { method: "POST" });
-    let d = await r.json();
-    if (!d.success) { document.getElementById("analysisResult").innerHTML = `<div class="error">${d.detail}</div>`; return; }
-    renderAnalysis(d);
-  } catch(e) {
-    document.getElementById("analysisResult").innerHTML = `<div class="error">分析失败</div>`;
-  }
-}
-
-function renderAnalysis(d) {
-  let kpi = d.kpi || {};
-  let html = '<div class="kpi-grid">';
-  [["总订单",kpi.total_orders],["完成",kpi.completed_orders],["取消率",kpi.cancelled_rate+"%"],
-   ["总收入",kpi.total_revenue+"元"],["客单价",kpi.avg_fare+"元"],["评分",kpi.avg_rating],
-   ["司机",kpi.active_drivers],["高峰",kpi.peak_hour]].forEach(([l,v])=>{
-    html += `<div class="kpi-item"><div class="value">${v??"-"}</div><div class="label">${l}</div></div>`;
+function checkHealth() {
+  fetch(API + "/api/health").then(r=>r.json()).then(d=>{
+    document.getElementById("statusDot").textContent = d.api_key_configured ? "● AI 已就绪" : "● 服务正常";
+  }).catch(()=>{
+    document.getElementById("statusDot").textContent = "⚠️ 连接失败";
   });
-  html += '</div>';
-
-  if (d.anomalies && d.anomalies.length) {
-    html += '<h3 style="margin:12px 0 6px;font-size:13px">⚠️ 异常提醒</h3><table><tr><th>日期</th><th>指标</th><th>严重</th></tr>';
-    d.anomalies.forEach(a => {
-      html += `<tr><td>${a.date}</td><td>${a.metric}</td><td><span class="anomaly-${a.severity}">${a.severity}</span></td></tr>`;
-    });
-    html += '</table>';
-  }
-  if (d.ai_analysis) {
-    html += `<h3 style="margin:12px 0 6px;font-size:13px">🤖 AI 分析</h3><div class="ai-box">${d.ai_analysis}</div>`;
-  }
-  document.getElementById("analysisResult").innerHTML = html;
 }
 
-// 问答功能
+function showMessage(text, type) {
+  var m = document.getElementById("message");
+  m.className = "message " + (type || "info");
+  m.textContent = text;
+  setTimeout(function(){ m.style.display = "none"; }, 5000);
+}
+
+// 上传文件（XHR + 进度条）
+function uploadFile(file) {
+  if (!file) return;
+  document.getElementById("uploadProgress").style.display = "block";
+  document.getElementById("uploadInfo").textContent = "";
+  document.getElementById("progressText").textContent = "上传中 0%";
+  document.getElementById("progressFill").style.width = "0%";
+
+  var form = new FormData();
+  form.append("file", file);
+  var xhr = new XMLHttpRequest();
+
+  xhr.upload.onprogress = function(e) {
+    if (e.lengthComputable) {
+      var pct = Math.round(e.loaded / e.total * 100);
+      document.getElementById("progressFill").style.width = pct + "%";
+      var info = "上传中 " + pct + "%";
+      if (file.size > 1048576) {
+        info += " (" + (e.loaded / 1048576).toFixed(1) + "/" + (e.total / 1048576).toFixed(1) + " MB)";
+      }
+      document.getElementById("progressText").textContent = info;
+    }
+  };
+
+  xhr.onload = function() {
+    document.getElementById("uploadProgress").style.display = "none";
+    if (xhr.status == 200) {
+      var d = JSON.parse(xhr.responseText);
+      document.getElementById("uploadInfo").textContent = d.message || "上传成功";
+      showMessage(d.message || "上传成功", "success");
+      if (d.type == "dataset" && d.sheets) {
+        var keys = Object.keys(d.sheets).slice(0, 3);
+        addChatMsg("ai", "✅ 共 " + d.total_sheets + " 个数据表，" + d.total_rows + " 行。\\n可以这样问：\\n- 「\" + keys[0] + "有什么数据？」\\n- 「帮我分析一下」");
+      } else if (d.type == "orders") {
+        addChatMsg("ai", "✅ 加载了 " + d.orders_loaded + " 条订单。可以提问了！");
+      }
+      loadSummary();
+      document.getElementById("chatCard").classList.remove("hidden");
+    } else {
+      try {
+        var d = JSON.parse(xhr.responseText);
+        showMessage(d.detail || "上传失败", "error");
+      } catch(e) {
+        showMessage("上传失败 (" + xhr.status + ")", "error");
+      }
+    }
+  };
+
+  xhr.onerror = function() {
+    document.getElementById("uploadProgress").style.display = "none";
+    showMessage("网络错误，请确认服务已启动", "error");
+  };
+
+  xhr.open("POST", API + "/api/data/upload", true);
+  xhr.send(form);
+}
+
+// 绑定文件选择事件
+document.getElementById("fileInput").onchange = function() {
+  if (this.files && this.files[0]) uploadFile(this.files[0]);
+};
+document.getElementById("uploadZone").onclick = function() {
+  document.getElementById("fileInput").click();
+};
+
+function loadSummary() {
+  fetch(API + "/api/data/summary").then(r=>r.json()).then(function(d){
+    if (d.total_orders === 0 && !d.type) return;
+    document.getElementById("summaryCard").classList.remove("hidden");
+    var html = "<div class='kpi-item'><div class='value'>" + (d.total_orders||d.total_rows||0) + "</div><div class='label'>总数据量</div></div>";
+    if (d.total_drivers) html += "<div class='kpi-item'><div class='value'>" + d.total_drivers + "</div><div class='label'>司机数</div></div>";
+    if (d.sheets) html += "<div class='kpi-item'><div class='value'>" + d.total_sheets + "</div><div class='label'>数据表</div></div>";
+    document.getElementById("summaryGrid").innerHTML = html;
+  });
+}
+
 function addChatMsg(role, content) {
-  let box = document.getElementById("chatBox");
-  let div = document.createElement("div");
+  var box = document.getElementById("chatBox");
+  var div = document.createElement("div");
   div.className = "chat-msg chat-" + role;
   div.textContent = content;
   box.appendChild(div);
   box.scrollTop = box.scrollHeight;
 }
 
-async function ask(text) {
+function ask(text) {
   document.getElementById("chatInput").value = text;
   sendQuestion();
 }
 
-async function sendQuestion() {
-  let input = document.getElementById("chatInput");
-  let q = input.value.trim();
+function sendQuestion() {
+  var input = document.getElementById("chatInput");
+  var q = input.value.trim();
   if (!q) return;
   input.value = "";
   addChatMsg("user", q);
-
-  let loading = document.createElement("div");
+  var loading = document.createElement("div");
   loading.className = "chat-msg chat-ai loading";
   loading.textContent = "⏳ 思考中...";
   document.getElementById("chatBox").appendChild(loading);
-
-  try {
-    let r = await fetch(API + "/api/analysis/ask", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ query: q })
+  fetch(API + "/api/analysis/ask", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({query: q}) })
+    .then(function(r){ return r.json(); }).then(function(d){
+      loading.remove();
+      addChatMsg("ai", d.answer || d.detail || "未知错误");
+    }).catch(function(){
+      loading.remove();
+      addChatMsg("ai", "连接失败");
     });
-    let d = await r.json();
-    loading.remove();
-    if (d.success) {
-      addChatMsg("ai", d.answer);
-    } else {
-      addChatMsg("ai", "❌ " + (d.detail || "请求失败"));
-    }
-  } catch(e) {
-    loading.remove();
-    addChatMsg("ai", "❌ 连接失败，请确认服务已启动");
-  }
 }
+
+// 页面加载时检查数据
+fetch(API + "/api/data/info").then(function(r){ return r.json(); }).then(function(d){
+  if (d.type !== "empty") {
+    document.getElementById("chatCard").classList.remove("hidden");
+    addChatMsg("ai", "当前有数据，可以提问了！");
+    loadSummary();
+  }
+});
 </script>
 </body>
 </html>
