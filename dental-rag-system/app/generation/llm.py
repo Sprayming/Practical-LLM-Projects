@@ -67,8 +67,12 @@ class LLMService:
             max_tokens=self.max_tokens,
         )
 
-        answer = response.choices[0].message.content or ""
-        token_count = response.usage.total_tokens
+        try:
+            answer = response.choices[0].message.content
+            token_count = response.usage.total_tokens
+        except Exception:
+            answer = "Unexpected response format"
+            token_count = 0
         return answer, token_count
     
     def _format_context(self, sources: list[CitationSourceModel]) -> str:
