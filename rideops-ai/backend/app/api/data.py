@@ -39,8 +39,8 @@ async def upload_data(file: UploadFile = File(...)):
                 "filename": file.filename,
                 "orders_loaded": result["orders_loaded"],
                 "drivers_found": result["drivers"],
-                "errors": result["errors"][:5],
-                "preview": result["preview"],
+                "errors": result.get("warnings", [])[:5],
+                "preview": result.get("preview", []),
                 "message": f"成功加载 {result['orders_loaded']} 条订单，{result['drivers']} 位司机"
             }
         else:
@@ -50,8 +50,8 @@ async def upload_data(file: UploadFile = File(...)):
                 "filename": file.filename,
                 "rows": result["rows"],
                 "columns": result["columns"],
-                "errors": result["errors"][:5],
-                "preview": result["preview"],
+                "errors": result.get("warnings", [])[:5],
+                "preview": result.get("preview", []),
                 "message": f"已加载 {result['rows']} 行数据，{len(result['columns'])} 列（{', '.join(result['columns'][:6])}...）"
             }
     except ValueError as e:
