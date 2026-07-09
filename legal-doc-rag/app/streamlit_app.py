@@ -3,6 +3,7 @@ from __future__ import annotations
 import os, ssl, json, tiktoken
 from pathlib import Path
 from dotenv import load_dotenv
+from app.memory.memory_manager import MemorySystem
 
 os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 os.environ["CURL_CA_BUNDLE"] = ""
@@ -81,7 +82,15 @@ for msg in st.session_state.messages:
         st.write(msg["content"])
 
 if uploaded_file:
-    if "vector_store" not in st.session_state:
+    if "embedder" not in st.session_state:
+        st.session_state.embedder = HuggingFaceEmbeddings(
+            model_name="shibing624/text2vec-base-chinese",
+            cache_folder="./model_cache"
+        )
+        st.session_state.memory = MemorySystem(
+            st.session_state.embedder, "./memory_db"
+        )
+if "vector_store" not in st.session_state:
         with st.spinner("Parsing PDF..."):
             reader = PdfReader(uploaded_file)
             text = "\n".join([(page.extract_text() or "") for page in reader.pages])
@@ -105,6 +114,7 @@ if prompt := st.chat_input("Ask a legal question:"):
         st.error("Input too long (max 2000 chars)")
         st.stop()
     st.session_state.messages.append({"role": "user", "content": prompt})
+    st.session_state.memory.add("user", prompt)
     with st.chat_message("user"):
         st.write(prompt)
     with st.chat_message("assistant"):
@@ -157,6 +167,7 @@ Requirements: Cite relevant clauses when possible. If the text doesn't contain t
                 st.session_state.total_tokens += total
                 placeholder.markdown(answer + f"\n\n---\n*Token: {input_tokens} in + {output_tokens} out = {total}*")
                 st.session_state.messages.append({"role": "assistant", "content": answer})
+                st.session_state.memory.add("assistant", answer)
                 if len(st.session_state.messages) >= 8:
                     old = st.session_state.messages[:-6]
                     new_summary = summarize_history(old)
