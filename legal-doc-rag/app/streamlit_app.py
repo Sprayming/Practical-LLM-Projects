@@ -173,6 +173,7 @@ Requirements: Cite relevant clauses when possible. If the text doesn't contain t
                 placeholder.markdown(answer + f"\n\n---\n*Token: {input_tokens} in + {output_tokens} out = {total}*")
                 st.session_state.messages.append({"role": "assistant", "content": answer})
                 st.session_state.memory.add("assistant", answer)
+                # 影子提取：后台异步更新用户画像（不阻塞对话）
                 st.session_state.memory.extract_entities(prompt, answer, memory_llm)
                 if len(st.session_state.messages) >= 8:
                     old = st.session_state.messages[:-6]
