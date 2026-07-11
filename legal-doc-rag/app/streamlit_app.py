@@ -3,6 +3,8 @@ from __future__ import annotations
 import os, ssl, json, tiktoken
 from pathlib import Path
 from dotenv import load_dotenv
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.memory.memory_manager import MemorySystem
 
 os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
@@ -91,6 +93,9 @@ if uploaded_file:
             st.session_state.embedder, "./memory_db"
         )
 if "vector_store" not in st.session_state:
+        if uploaded_file is None:
+            st.info("Please upload a PDF file to begin")
+            st.stop()
         with st.spinner("Parsing PDF..."):
             reader = PdfReader(uploaded_file)
             text = "\n".join([(page.extract_text() or "") for page in reader.pages])
@@ -168,6 +173,7 @@ Requirements: Cite relevant clauses when possible. If the text doesn't contain t
                 placeholder.markdown(answer + f"\n\n---\n*Token: {input_tokens} in + {output_tokens} out = {total}*")
                 st.session_state.messages.append({"role": "assistant", "content": answer})
                 st.session_state.memory.add("assistant", answer)
+                st.session_state.memory.extract_entities(prompt, answer, memory_llm)
                 if len(st.session_state.messages) >= 8:
                     old = st.session_state.messages[:-6]
                     new_summary = summarize_history(old)
