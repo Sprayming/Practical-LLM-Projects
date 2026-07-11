@@ -1,4 +1,17 @@
-﻿
+﻿# Generated data
+chroma_db/
+memory_db/
 model_cache/
-_fix_*.py
+data/
 profile.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Env
+.env
+
+# Temp
+_fix_*.py
