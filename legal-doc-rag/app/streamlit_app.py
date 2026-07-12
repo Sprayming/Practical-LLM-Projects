@@ -7,6 +7,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.memory.memory_manager import MemorySystem
 
+# Network config
 os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 os.environ["CURL_CA_BUNDLE"] = ""
 os.environ["REQUESTS_CA_BUNDLE"] = ""
@@ -22,14 +23,17 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 
+# Load env
 env_path = Path(__file__).resolve().parent.parent / ".env"
 if env_path.exists():
     load_dotenv(str(env_path))
 
+# Config
 DEEPSEEK_API_KEY = os.getenv("LLM_API_KEY", "")
 DEEPSEEK_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1")
 TOKENIZER = tiktoken.get_encoding("cl100k_base")
 
+# Session state
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "total_tokens" not in st.session_state:
@@ -37,8 +41,10 @@ if "total_tokens" not in st.session_state:
 if "summary" not in st.session_state:
     st.session_state.summary = ""
 
+# Page config
 st.set_page_config(page_title="Legal Document RAG", layout="wide")
 
+# Sidebar
 with st.sidebar:
     st.header("Legal Document RAG")
     uploaded_file = st.file_uploader("Upload PDF", type="pdf")
@@ -51,26 +57,32 @@ with st.sidebar:
         st.session_state.messages = []
         st.session_state.summary = ""
         st.session_state.total_tokens = 0
+    # Rerun UI
         st.rerun()
     st.caption("Rounds: " + str(len(st.session_state.messages) // 2))
 
+# Token counter
 def count_tokens(text: str) -> int:
     return len(TOKENIZER.encode(text))
 
+# Memory summarizer
 def summarize_history(messages: list) -> str:
     if not messages:
         return ""
     history_text = "\n".join([f"{m['role']}: {m['content'][:200]}" for m in messages])
     prompt = f"Summarize the following conversation (50 chars max):\n{history_text}\nSummary:"
     try:
+    # Call DeepSeek API
         resp = requests.post(
             f"{DEEPSEEK_BASE_URL}/chat/completions",
             headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
             json={"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}], "temperature": 0.1},
             timeout=15, verify=False,
         )
+    # Parse response
         if resp.status_code == 200:
             data = resp.json()
+    # Defensive JSON check
             if isinstance(data, dict) and data.get("choices") and data["choices"][0].get("message"):
                 return data["choices"][0]["message"]["content"] or ""
         return ""
@@ -79,6 +91,7 @@ def summarize_history(messages: list) -> str:
 
 st.title("Legal Document Q&A")
 
+# Chat history
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
@@ -114,7 +127,9 @@ if "vector_store" not in st.session_state:
             st.session_state.retriever = st.session_state.vector_store.as_retriever(search_kwargs={"k": 3})
         st.success("Ready. Ask your question below.")
 
+# Chat input
 if prompt := st.chat_input("Ask a legal question:"):
+    # Input limit check
     if len(prompt) > 2000:
         st.error("Input too long (max 2000 chars)")
         st.stop()
@@ -145,6 +160,7 @@ if prompt := st.chat_input("Ask a legal question:"):
         recent = st.session_state.messages[-6:-1]
         if recent:
             history += "\n".join([f"{m['role']}: {m['content'][:200]}" for m in recent]) + "\n\n"
+    # Build final prompt
         full_prompt = f"""You are a legal expert. Answer based on the provided text.
 
 {history}Reference text:
@@ -153,17 +169,22 @@ if prompt := st.chat_input("Ask a legal question:"):
 Question: {prompt}
 
 Requirements: Cite relevant clauses when possible. If the text doesn't contain the answer, state that clearly."""
+    # Build final prompt
         input_tokens = count_tokens(full_prompt)
         try:
+    # Call DeepSeek API
             resp = requests.post(
                 f"{DEEPSEEK_BASE_URL}/chat/completions",
                 headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
+    # Build final prompt
                 json={"model": "deepseek-chat", "messages": [{"role": "user", "content": full_prompt}], "temperature": 0.1},
                 timeout=60, verify=False,
             )
+    # Parse response
             if resp.status_code == 200:
                 data = resp.json()
                 answer = "Unexpected response format"
+    # Defensive JSON check
                 if isinstance(data, dict) and data.get("choices") and data["choices"][0].get("message"):
                     answer = data["choices"][0]["message"]["content"] or "Empty response"
                 output_tokens = count_tokens(answer)
@@ -174,6 +195,7 @@ Requirements: Cite relevant clauses when possible. If the text doesn't contain t
                 st.session_state.messages.append({"role": "assistant", "content": answer})
                 st.session_state.memory.add("assistant", answer)
                 # 影子提取：后台异步更新用户画像（不阻塞对话）
+    # Shadow extraction: async profile update
                 st.session_state.memory.extract_entities(prompt, answer, memory_llm)
                 if len(st.session_state.messages) >= 8:
                     old = st.session_state.messages[:-6]
@@ -184,4 +206,5 @@ Requirements: Cite relevant clauses when possible. If the text doesn't contain t
                 placeholder.error(f"API error: {resp.status_code}")
         except Exception as e:
             placeholder.error(f"Error: {e}")
+    # Rerun UI
     st.rerun()
