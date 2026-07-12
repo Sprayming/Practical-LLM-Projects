@@ -25,66 +25,60 @@
 ## 框架总览
 
 ```
-用户操作（浏览器）
-     │
-     ▼
-streamlit_app.py（主入口）
-     │
-     ├── 页面渲染（sidebar + 聊天区）
-     ├── PDF 上传处理
-     │      ├── loader.py（解析 PDF → 纯文本）
-     │      └── chunker.py（按条款切分）
-     │
-     ├── 问答处理
-     │      ├── 文档检索（ChromaDB）
-     │      │      ├── embeddings.py（HuggingFace 模型）
-     │      │      └── vector_store.py（向量库操作）
-     │      ├── 记忆系统（memory_manager.py）
-     │      │      ├── 短期记忆 raw text
-     │      │      ├── 中期记忆摘要
-     │      │      ├── 长期记忆向量库
-     │      │      └── 实体画像 profile.json
-     │      └── LLM 调用（streamlit_app.py）
-     │
-     └── 后台影子提取
-            └── memory.extract_entities() → profile.json
+streamlit_app.py（唯一入口，~210 行）
+  │
+  ├── 初始化模块
+  │     ├── 网络配置（HF_ENDPOINT, SSL）
+  │     ├── 环境加载（.env + API Key）
+  │     ├── 会话状态（messages, tokens, memory）
+  │     └── 页面设置（Streamlit config）
+  │
+  ├── UI 模块
+  │     ├── 侧边栏（上传、统计、控制按钮）
+  │     └── 对话历史显示
+  │
+  ├── 文档处理模块
+  │     ├── PDF 解析（PyPDF2）
+  │     ├── 文本切分（RecursiveCharacterTextSplitter）
+  │     └── 向量库构建（ChromaDB）
+  │
+  ├── 问答处理模块
+  │     ├── 用户输入处理（限长 + 校验）
+  │     ├── 文档检索（ChromaDB similarity_search）
+  │     ├── 记忆构建 → memory_manager.py
+  │     ├── Prompt 组装（文档 + 记忆 + 画像 + 历史）
+  │     └── LLM 调用（DeepSeek API）
+  │
+  ├── 记忆模块 memory_manager.py（~150 行）
+  │     ├── add()             短期记忆追加（最近3轮原文）
+  │     ├── consolidate()     中期摘要压缩（LLM自动摘要）
+  │     ├── retrieve()        长期向量检索（ChromaDB top-k）
+  │     ├── extract_entities() 实体画像提取（LLM影子调用）
+  │     ├── get_context()     完整上下文拼接（三层 + 画像）
+  │     └── _merge_fact()     画像冲突合并（置信度加权）
+  │
+  └── 辅助函数
+        ├── count_tokens()     Token 统计（tiktoken）
+        ├── summarize_history() 旧对话摘要生成
+        └── memory_llm()       记忆专用 LLM 回调（短超时）
 ```
-
----
-
 ## 文件关系图
 
 ```
-streamlit_app.py          ← 主入口，所有逻辑从这里发起的
+streamlit_app.py（主入口，所有逻辑从这里发起）
   │
-  ├── app/memory/memory_manager.py   ← 三层记忆系统（本项目独有的设计）
+  ├── 直接调用：PyPDF2（PDF解析）
+  │             RecursiveCharacterTextSplitter（文本切分）
+  │             ChromaDB（文档向量库 + 检索）
+  │             DeepSeek API（LLM 调用）
+  │             tiktoken（Token 计数）
+  │
+  ├── memory/memory_manager.py（三层记忆系统）
   │     ├── ChromaDB（记忆向量库）
-  │     └── profile.json（用户画像）
+  │     └── profile.json（用户画像持久化）
   │
-  ├── app/streamlit_app.py        ← HF_ENDPOINT 配置 + HuggingFace 嵌入
-  │
-  ├── app/ingestion/
-  │     ├── loader.py                 ← PDF/DOCX/TXT 文本提取
-  │     └── chunker.py               ← 按条款优先的文本切分
-  │
-  ├── app/retrieval/
-  │     └── vector_store.py           ← ChromaDB 向量存储操作
-  │
-  └── app/generation/
-        └── llm.py                    ← ChatOpenAI 配置 + QA 链（LangChain 版）
-                ↓
-            DeepSeek API
-
-其他文件（FastAPI 支架，当前未在 Streamlit 中使用）：
-  ├── app/config.py          ← 配置中心
-  ├── app/models.py          ← 数据模型
-  ├── app/main.py            ← FastAPI 入口
-  ├── （已整合到 streamlit_app.py）        ← 聊天 API
-  └── （已整合到 streamlit_app.py）   ← 文档上传 API
+  └── model_cache（嵌入模型缓存，自动生成）
 ```
-
----
-
 ## 核心架构：三层记忆系统
 
 ```
