@@ -11,12 +11,12 @@
 | | 综合案例（单文件） | 本项目（多文件） |
 |--|-----------------|----------------|
 | 设计目的 | 教学演示，一眼看完完整流程 | 可扩展的生产级架构 |
-| VolcEngineEmbeddings | 嵌入逻辑嵌在主文件里 | 抽到 `utils/embeddings.py` |
+| VolcEngineEmbeddings | 嵌入逻辑嵌在主文件里 | 抽到 `streamlit_app.py` |
 | 记忆系统 | 无 | 独立模块 `memory/`（200+行） |
-| DeepSeek 调用 | 手写 requests | 抽到 `generation/llm.py` |
+| DeepSeek 调用 | 手写 requests | 抽到 `streamlit_app.py` |
 | 配置 | 硬编码在 `global_var` | `config.py` + `.env` |
-| PDF 解析 | 写在主文件里 | 抽到 `ingestion/loader.py` |
-| 切分逻辑 | 写在主文件里 | 抽到 `ingestion/chunker.py` |
+| PDF 解析 | 写在主文件里 | 抽到 `streamlit_app.py` |
+| 切分逻辑 | 写在主文件里 | 抽到 `streamlit_app.py` |
 
 **核心原则**：单文件适合教学，多文件适合迭代。当记忆系统超过 200 行时，不拆开根本没法维护。
 
@@ -44,7 +44,7 @@ streamlit_app.py（主入口）
      │      │      ├── 中期记忆摘要
      │      │      ├── 长期记忆向量库
      │      │      └── 实体画像 profile.json
-     │      └── LLM 调用（generation/llm.py）
+     │      └── LLM 调用（streamlit_app.py）
      │
      └── 后台影子提取
             └── memory.extract_entities() → profile.json
@@ -61,7 +61,7 @@ streamlit_app.py          ← 主入口，所有逻辑从这里发起的
   │     ├── ChromaDB（记忆向量库）
   │     └── profile.json（用户画像）
   │
-  ├── app/utils/embeddings.py        ← HF_ENDPOINT 配置 + HuggingFace 嵌入
+  ├── app/streamlit_app.py        ← HF_ENDPOINT 配置 + HuggingFace 嵌入
   │
   ├── app/ingestion/
   │     ├── loader.py                 ← PDF/DOCX/TXT 文本提取
@@ -79,8 +79,8 @@ streamlit_app.py          ← 主入口，所有逻辑从这里发起的
   ├── app/config.py          ← 配置中心
   ├── app/models.py          ← 数据模型
   ├── app/main.py            ← FastAPI 入口
-  ├── app/api/chat.py        ← 聊天 API
-  └── app/api/documents.py   ← 文档上传 API
+  ├── （已整合到 streamlit_app.py）        ← 聊天 API
+  └── （已整合到 streamlit_app.py）   ← 文档上传 API
 ```
 
 ---
@@ -179,13 +179,13 @@ streamlit run app/streamlit_app.py
 | 组件 | 选型 | 文件 |
 |------|------|------|
 | 前端 UI | Streamlit | `streamlit_app.py` |
-| 嵌入模型 | text2vec-base-chinese | `utils/embeddings.py` |
-| 文档向量库 | ChromaDB | `retrieval/vector_store.py` |
+| 嵌入模型 | text2vec-base-chinese | `streamlit_app.py` |
+| 文档向量库 | ChromaDB | `streamlit_app.py` |
 | 记忆向量库 | ChromaDB | `memory/memory_manager.py` |
 | 用户画像 | JSON 文件 | `memory/memory_manager.py` |
-| LLM | DeepSeek API | `generation/llm.py` |
-| PDF 解析 | PyPDF2 | `ingestion/loader.py` |
-| 文本切分 | RecursiveCharacterTextSplitter | `ingestion/chunker.py` |
+| LLM | DeepSeek API | `streamlit_app.py` |
+| PDF 解析 | PyPDF2 | `streamlit_app.py` |
+| 文本切分 | RecursiveCharacterTextSplitter | `streamlit_app.py` |
 
 ---
 
