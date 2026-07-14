@@ -1,3 +1,5 @@
+# =+= NEW MODULE - Added 2026-07-14 by Codex =+=
+
 """
 Redis 客户端 - 短期/中期记忆存储（自动 TTL 过期 + 内存回退）
 """

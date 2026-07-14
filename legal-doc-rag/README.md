@@ -1,4 +1,4 @@
-﻿# 法律文书 RAG 系统（Legal Document RAG）
+# 法律文书 RAG 系统（Legal Document RAG）
 
 基于 LangChain + Streamlit 的法律文书智能问答系统。上传合同、法规等 PDF 文档后，可以用自然语言提问，系统自动检索相关条款并生成带引用的回答。
 
@@ -194,3 +194,49 @@ streamlit run app/streamlit_app.py
 - 🚧 异步影子 Worker
 - 🚧 多租户隔离
 - 🚧 遗忘机制
+
+
+---
+
+## 今日更新 (2026-07-14)
+
+本次更新为项目增加了四大模块，完善了多模态、混合检索、Redis记忆和RAG评估能力。
+
+### 模块架构
+
+`
+legal-doc-rag/
+├── app/
+│   ├── evaluation/              [NEW] RAGAS 评估框架
+│   │   └── evaluator.py         6道测试题 + 4个指标
+│   │
+│   ├── memory/                   [MODIFIED] 记忆系统
+│   │   ├── memory_manager.py   Redis + ChromaDB + 异步持久化
+│   │   └── redis_client.py     [NEW] Redis客户端（TTL自动过期）
+│   │
+│   ├── processing/               [NEW] 多模态处理管线
+│   │   ├── pdf_extractor.py    PyMuPDF 图文提取
+│   │   ├── ocr_engine.py       OCR引擎（自动切换后端）
+│   │   └── multimodal_pipeline.py 图文处理管线
+│   │
+│   └── retrieval/                [NEW] 混合检索
+│       └── hybrid_retriever.py    稠密+BM25+RRF+BGE-Reranker
+│
+└── scripts/
+    └── evaluate.py             [NEW] RAG评估脚本
+`
+
+### 添加的能力
+
+| 模块 | 能力 | 说明 |
+|------|---------|------|
+| 多模态 | 图文提取 + OCR | PyMuPDF提取PDF图片，支持PaddleOCR/Tesseract |
+| Redis记忆 | 短/中/长期分层 | TTL自动过期 + 内存回退 + 距离阈值过滤 |
+| RAG评估 | RAGAS 4指标 | Faithfulness / AnswerRelevancy / ContextPrecision / ContextRecall |
+| 混合检索 | 稠密+BM25+RRF | RRF权重融合 + BGE重排序 |
+
+### 文件标记说明
+- [NEW] 标记的文件为本次新增
+- [MODIFIED] 标记的文件为本次修改
+- 修改文件的.orig版本保留在同目录下
+- 每个新增/修改文件头部均有# =+=标记说明变更内容

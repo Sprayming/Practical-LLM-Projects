@@ -1,3 +1,5 @@
+# =+= NEW MODULE - Added 2026-07-14 by Codex =+=
+
 """运行 RAG 评估"""
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

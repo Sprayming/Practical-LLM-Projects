@@ -1,3 +1,5 @@
+# =+= NEW MODULE - Added 2026-07-14 by Codex =+=
+
 """
 OCR 引擎 - 支持多种后端引擎的 OCR 接口
 """
