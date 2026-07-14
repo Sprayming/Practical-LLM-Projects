@@ -1,3 +1,22 @@
+
+# =+= MODIFIED 2026-07-14 by Codex =+=
+# Changes compared to .orig version:
+#   1. Added RedisClient integration (short/mid-term memory)
+#   2. Added distance threshold filtering (retrieve by min_score)
+#   3. Added async_consolidate() - background thread consolidation
+#   4. Added extract_entities() stub
+#   5. Added _score_to_threshold() conversion
+#   6. Updated get_context() to include Redis-stored memories
+# Original: memory_manager.py.orig
+# =+=
+
+"""
+三层记忆系统 - Redis + ChromaDB + 异步持久化 + 距离阈值
+短 期：Redis List（TTL 2h），回退：内存列表
+中 期：Redis String（TTL 24h），回退：内存字符串
+长 期：ChromaDB 向量检索（相似度阈值过滤）
+异步持久化：后台线程自动将短期→中期→长期归档
+"""
 """
 三层记忆系统 - Redis + ChromaDB + 异步持久化 + 距离阈值
 短 期：Redis List（TTL 2h），回退：内存列表

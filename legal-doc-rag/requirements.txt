@@ -1,3 +1,7 @@
+# =+= MODIFIED 2026-07-14 by Codex =+=
+# Added: ragas, langchain-text-splitters, langchain-chroma, langchain-huggingface, PyMuPDF, paddleocr, paddlepaddle, redis
+# Original: requirements.txt.orig
+# =+=
 langchain>=0.3.0
 langchain-community>=0.3.0
 langchain-chroma>=0.1.0
