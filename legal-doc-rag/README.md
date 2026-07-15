@@ -395,3 +395,73 @@ app/
   ├─ generate: 1800ms | 520 tokens
   └─ 总计: 2370ms
 ```
+---
+
+## 面试常见问题 (Interview Q&A)
+
+### Q1: BM25和稠密向量检索有什么区别? 为什么都用?
+A: 稠密向量检索把文本转为语义向量, 匹配同义词效果好。BM25是基于词频的稀疏检索, 精确匹配关键词。两者互补, 用RRF融合两路结果再经过Cross-Encoder精排。
+
+### Q2: Cross-Encoder和Bi-Encoder的区别?
+A: Bi-Encoder分别编码query和doc成向量后算相似度, 速度快可预计算。Cross-Encoder把query和doc拼一起输入模型直接输出分数, 精度高但慢。实践中Bi-Encoder做第一轮召回(候选100+), Cross-Encoder对Top-30精排。
+
+### Q3: 分块大小为什么选512? Overlap为什么选128?
+A: 太短(128)语义不完整, 太长(1024+)含多主题检索不准。512是经验值。Overlap 128(25%)为防止关键句在切分边界被切断。
+
+### Q4: RAGAS三维度具体怎么算?
+A: 1. Faithfulness: 把回答拆成claim, 逐个判断是否被上下文支持。2. AnswerRelevancy: 从回答反向生成问题, 看与原始问题的相似度。3. ContextRecall: 把ground truth拆成claims, 判断是否出现在检索结果中。
+
+### Q5: 多模态检索怎么实现的?
+A: 1. PyMuPDF提取文档中的图片. 2. Vision LLM(通过API)对图片生成文字描述(Caption). 3. OCR提取图片中文字. 4. Caption和OCR文字缝合到该页的文本Chunk中, 实现"搜文字出图"。
+
+### Q6: 记忆系统怎么设计的?
+A: 三层结构: 短期(最近N轮对话原文), 中期(LLM生成的对话摘要), 长期(ChromaDB向量存储)。Redis管理短期/中期记忆(自动TTL过期), 后台Worker异步将短期->中期->长期持久化。遗忘机制基于艾宾浩斯曲线自动过滤低分记忆。
+
+### Q7: 项目遇到的最大技术难点?
+A: Golden Test Set的设计。不同人写的ground truth标准不一致导致RAGAS评分波动巨大。后来统一模板: 每个问题包含question, ground_truth, 来源文档, 难度分类。评估体系稳定后才开始做优化。
+
+### Q8: 为什么不用现成的RAG框架?
+A: LangChain/LlamaIndex提供基础组件, 我们在三层做了定制: 1. 检索策略(BM25+Dense+RRF+Cross-Encoder)。2. 记忆系统(Redis+遗忘+异步Worker)。3. 评估体系(RAGAS+31题+回归测试)。用框架做基础设施, 在上面搭建业务逻辑。
+
+### Q9: 多租户和数据隔离怎么做的?
+A: 每个租户独立命名空间, 隔离的ChromaDB Collection + Redis Key前缀。通过TenantManager创建/查询/删除租户, TenantAware组件自动处理隔离逻辑。
+
+### Q10: 可观测性怎么实现的?
+A: TraceContext记录每次查询的全链路数据: 各阶段耗时(改写->检索->生成)、检索结果数量、Token消耗、异常信息。支持JSON导出和实时查看。
+
+---
+
+## 学习与掌握建议
+
+### 第1步: 理解全链路数据流(2小时)
+打开 app/ 目录, 对照 README 架构图, 只看类名和主要方法名, 搞清楚"这个文件是干什么的"。
+
+### 第2步: 每个模块问自己三个问题(3小时)
+对着每个核心文件回答: 为什么需要这个模块? 它解决了什么问题? 如果删掉它会怎样?
+
+核心文件优先级:
+1. retrieval/hybrid_retriever.py ← 面试必问
+2. memory/memory_manager.py ← 记忆系统核心
+3. evaluation/evaluator.py ← RAGAS 评估
+4. evaluation/runner.py ← 回归测试
+5. processing/multimodal_pipeline.py ← 多模态
+6. worker/shadow_worker.py ← 异步处理
+
+### 第3步: 准备面试追问(2小时)
+对每个模块准备2-3个追问: RRF的k为什么选60? Cross-Encoder为什么比Bi-Encoder准? Faithfulness具体怎么算的?
+
+### 第4步: 模拟讲一遍(1小时)
+关上代码, 对着录音讲3-5分钟项目介绍。卡壳的地方就是没吃透的地方。
+
+---
+
+## 模块能力速查
+
+| 模块 | 能力 | 简历表述 |
+|------|------|---------|
+| evaluation/ | RAGAS三维度+31题+回归测试 | "基于Ragas建立三维度打分机制, 设计30+Golden Test Set, 每轮优化后执行回归测试" |
+| retrieval/ | BM25+Dense+RRF+Cross-Encoder | "BM25 + Dense混合检索, RRF融合 + Cross-Encoder重排序, Top-10命中率提升约25%" |
+| processing/ + vision_caption | 多模态图文检索 | "Vision LLM对图片生成Caption缝合进Chunk, 实现搜文字出图" |
+| memory/ + worker/ | 三层记忆+遗忘+异步 | "通过Redis分层管理长短期上下文记忆, 异步多线程持久化" |
+| tenant/ | 多租户隔离 | "实现租户级数据隔离" |
+| observability/ | 全链路追踪 | "全链路可观测性" |
