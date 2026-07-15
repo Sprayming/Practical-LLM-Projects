@@ -240,3 +240,50 @@ legal-doc-rag/
 - [MODIFIED] 标记的文件为本次修改
 - 修改文件的.orig版本保留在同目录下
 - 每个新增/修改文件头部均有# =+=标记说明变更内容
+
+### 2026-07-15 更新：异步 Worker + 多租户 + 遗忘机制
+
+新增三个生产级能力模块：
+
+```
+app/
+├── memory/
+│   └── forgetting.py            [NEW] 遗忘机制（艾宾浩斯曲线）
+│       - 记忆评分：近因性 50% + 频率 30% + 重要性 20%
+│       - 遗忘曲线衰减，低于阈值自动过滤
+│       - 集成到 MemorySystem.retrieve()
+│
+├── worker/
+│   └── shadow_worker.py         [NEW] 异步影子 Worker
+│       - 优先级任务队列（HIGH / MEDIUM / LOW）
+│       - 多线程并行消费 + 自动重试
+│       - 任务状态追踪（pending→running→done/failed）
+│       - MemorySystem 通过 Worker 异步整理记忆
+│
+└── tenant/
+    └── tenant_manager.py        [NEW] 多租户隔离
+        - 每个租户独立命名空间
+        - 隔离的 ChromaDB Collection + Redis Key 前缀
+        - 默认租户 + 动态创建/删除
+        - create_tenant_memory() 创建租户级记忆系统
+```
+
+#### 遗忘机制算法
+```
+记忆分数 = 0.5 × 近因性 + 0.3 × 频率 + 0.2 × 重要性
+近因性 = exp(-小时数 / 168)            # 7天半衰期
+频率  = log(访问次数 + 1) / 10
+重要性 = min(内容长度 / 500, 1.0)
+```
+
+#### 异步 Worker 架构
+```
+主线程                     影子 Worker 线程
+  │                            │
+  ├─ submit(consolidate) ─────→├─ run()
+  │                            ├─ success → done
+  ├─ submit(cleanup) ─────────→├─ run()
+  │                            ├─ fail → retry(1次)
+  │                            │
+  └─ get_status(task_id) ←─────┘ 可查询任务状态
+```

@@ -143,3 +143,87 @@ class MemorySystem:
             "redis_available": self.redis.is_available(),
             "long_term_chunks": self.store._collection.count(),
         }
+# =+= MODIFIED 2026-07-15 by Codex =+=
+# Added: ForgettingMechanism integration in retrieve()
+# Added: ShadowWorker integration in async_consolidate()
+# Added: Tenant isolation support in __init__()
+# =+=
+
+"""
+三层记忆系统 - Redis + ChromaDB + 异步持久化 + 距离阈值 + 遗忘机制 + Worker
+短 期：Redis List（TTL 2h），回退：内存列表
+中 期：Redis String（TTL 24h），回退：内存字符串
+长 期：ChromaDB 向量检索（相似度阈值过滤 + 遗忘曲线衰减）
+异步 Worker：后台线程池自动整理记忆、清理过期数据
+"""
+
+from app.memory.forgetting import ForgettingMechanism
+from app.worker.shadow_worker import ShadowWorker, ShadowTask, TaskPriority, get_worker
+
+
+# 在 MemorySystem 类中注入遗忘机制和 Worker
+original_init = MemorySystem.__init__
+original_retrieve = MemorySystem.retrieve
+original_async_consolidate = MemorySystem.async_consolidate
+
+
+def patched_init(self, embedding_model, persist_dir="./memory_db", redis_url=None, tenant_id=None, forgetting_threshold=0.15):
+    original_init(self, embedding_model, persist_dir, redis_url)
+    self.forgetting = ForgettingMechanism(threshold=forgetting_threshold)
+    self.worker = get_worker()
+    self.tenant_id = tenant_id or "default"
+    logger.info("MemorySystem [{}] initialized with forgetting={}", self.tenant_id, forgetting_threshold)
+
+
+def patched_retrieve(self, query, k=3, min_score=None):
+    """检索 + 遗忘曲线衰减"""
+    docs = original_retrieve(self, query, k=k * 2, min_score=min_score)
+    filtered = []
+    import math
+    from datetime import datetime
+    now = datetime.now()
+    for doc in docs:
+        ts_str = doc.metadata.get("timestamp", now.isoformat())
+        try:
+            ts = datetime.fromisoformat(ts_str)
+        except:
+            ts = now
+        access = doc.metadata.get("access_count", 0)
+        score = self.forgetting.score(doc.page_content, ts, access)
+        if not self.forgetting.should_forget(score):
+            doc.metadata["forgetting_score"] = score
+            filtered.append(doc)
+    filtered.sort(key=lambda d: d.metadata.get("forgetting_score", 0), reverse=True)
+    return filtered[:k]
+
+
+def patched_async_consolidate(self, llm_func):
+    """通过 ShadowWorker 异步整理记忆"""
+    task = ShadowTask(
+        name=f"consolidate_{self.tenant_id}",
+        fn=lambda: self.consolidate(llm_func),
+        priority=TaskPriority.MEDIUM,
+        max_retries=1,
+    )
+    self.worker.submit(task)
+
+
+# 应用补丁
+MemorySystem.__init__ = patched_init
+MemorySystem.retrieve = patched_retrieve
+MemorySystem.async_consolidate = patched_async_consolidate
+
+
+def create_tenant_memory(embedding_model, tenant_id, persist_dir="./memory_db"):
+    """创建租户隔离的记忆系统"""
+    ns = f"memory_{tenant_id}"
+    from app.memory.redis_client import RedisClient
+    store = Chroma(
+        collection_name=f"conversation_memory_{tenant_id}",
+        embedding_function=embedding_model,
+        persist_directory=persist_dir,
+    )
+    memory = MemorySystem(embedding_model, persist_dir, tenant_id=tenant_id)
+    memory.store = store
+    logger.info("Tenant memory created: {}", tenant_id)
+    return memory
