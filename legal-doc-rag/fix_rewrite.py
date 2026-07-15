@@ -1,4 +1,6 @@
-# =+= NEW MODULE - Added 2026-07-15 by Codex =+=
+﻿import os
+
+content = """# =+= NEW MODULE - Added 2026-07-15 by Codex =+=
 # Forgetting mechanism - Ebbinghaus forgetting curve
 
 import math, time
@@ -40,3 +42,12 @@ class ForgettingMechanism:
 
     def estimate_forgetting_curve(self, hours):
         return [round(math.exp(-h / self.decay_hours), 4) for h in hours]
+"""
+
+with open("D:/git/legal-doc-rag/app/memory/forgetting.py", "w", encoding="utf-8") as f:
+    f.write(content)
+
+# 验证
+import py_compile
+py_compile.compile("D:/git/legal-doc-rag/app/memory/forgetting.py", doraise=True)
+print("语法正确")
