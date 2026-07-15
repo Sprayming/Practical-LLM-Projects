@@ -1,3 +1,64 @@
+# legal-doc-rag - 法律文档 RAG 系统
+
+## 架构总览
+
+`
+Streamlit App (streamlit_app.py)
+  │
+  ├── 记忆系统 (memory/)
+  │   ├── memory_manager.py  3层记忆 (短/中/长期)
+  │   ├── redis_client.py    Redis 连接 + TTL 过期
+  │   ├── forgetting.py      艾宾浩斯遗忘曲线
+  │   └── shadow_worker.py   异步持久化 Worker
+  │
+  ├── 文档处理 (processing/)
+  │   ├── pdf_extractor.py   PyMuPDF 图文提取
+  │   ├── ocr_engine.py      PaddleOCR / Tesseract
+  │   └── multimodal_pipeline.py  图文处理管线
+  │
+  ├── 检索 (retrieval/)
+  │   ├── hybrid_retriever.py  BM25 + Dense + RRF + Cross-Encoder
+  │   ├── query_rewriter.py    LLM 查询改写/扩展
+  │   └── citation.py          检索来源追踪
+  │
+  ├── 评估 (evaluation/)
+  │   └── evaluator.py          RAGAS 三维度打分
+  │
+  ├── 多租户 (tenant/)
+  │   └── tenant_manager.py    租户级数据隔离
+  │
+  └── 可观测性 (observability/)
+      └── tracker.py            全链路耗时/Token 追踪
+`
+
+## 文件关系图 (import 链)
+
+`
+streamlit_app.py (入口)
+  └── memory/memory_manager.py
+       ├── memory/redis_client.py
+       ├── memory/forgetting.py
+       └── worker/shadow_worker.py
+
+multimodal_pipeline.py (processing/)
+  ├── processing/pdf_extractor.py
+  └── processing/ocr_engine.py
+
+retrieval/ (独立模块)
+  ├── hybrid_retriever.py
+  ├── citation.py
+  └── query_rewriter.py
+
+evaluation/ (独立)
+  └── evaluator.py
+
+独立模块:
+  - worker/shadow_worker.py
+  - tenant/tenant_manager.py
+  - observability/tracker.py
+`
+
+---
 # 法律文书 RAG 系统（Legal Document RAG）
 
 基于 LangChain + Streamlit 的法律文书智能问答系统。上传合同、法规等 PDF 文档后，可以用自然语言提问，系统自动检索相关条款并生成带引用的回答。
