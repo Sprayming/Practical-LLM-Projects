@@ -1,0 +1,45 @@
+# =+= NEW MODULE - Added 2026-07-15 by Codex =+=\n\n{
+  "_meta": {
+    "description": "RAG 智能知识检索系统 - Golden Test Set",
+    "total": 31,
+    "dimensions": ["faithfulness", "answer_relevancy", "context_recall"],
+    "created": "2026-07-15"
+  },
+  "questions": [
+    {"id": "RET-001", "category": "文档检索", "difficulty": "easy", "question": "企业知识库中如何查找特定文档？", "ground_truth": "通过关键词搜索或向量语义检索查找文档"},
+    {"id": "RET-002", "category": "文档检索", "difficulty": "easy", "question": "PDF文档上传后能否被检索到？", "ground_truth": "可以，系统支持PDF解析并向量化存储"},
+    {"id": "RET-003", "category": "文档检索", "difficulty": "easy", "question": "支持哪些文档格式上传？", "ground_truth": "支持PDF、DOCX、TXT、Markdown、CSV、Excel等格式"},
+    {"id": "RET-004", "category": "文档检索", "difficulty": "medium", "question": "文档中的图片能不能被检索到？", "ground_truth": "可以，通过OCR提取图片中的文字，或通过Vision LLM生成描述后纳入索引"},
+    {"id": "RET-005", "category": "文档检索", "difficulty": "medium", "question": "如何提高同义词匹配的准确率？", "ground_truth": "通过查询改写扩展同义词，结合BM25稀疏检索和稠密向量检索的混合检索策略"},
+    {"id": "RET-006", "category": "文档检索", "difficulty": "hard", "question": "混合检索中稠密向量和稀疏向量如何融合？", "ground_truth": "使用RRF（Reciprocal Rank Fusion）加权融合算法合并检索候选列表"},
+    {"id": "RET-007", "category": "文档检索", "difficulty": "medium", "question": "检索结果的排序依据是什么？", "ground_truth": "先通过RRF融合排序，再经过Cross-Encoder重排序模型精细化排序"},
+    {"id": "RET-008", "category": "文档检索", "difficulty": "easy", "question": "能否限制只在某几个文档中搜索？", "ground_truth": "可以，通过文档ID过滤实现限定范围检索"},
+    {"id": "RET-009", "category": "文档检索", "difficulty": "hard", "question": "检索时如何过滤不相关的结果？", "ground_truth": "设置相似度分数阈值（min_score），低于阈值的结果直接过滤掉"},
+    {"id": "RET-010", "category": "文档检索", "difficulty": "medium", "question": "Metadata增强在检索中有什么作用？", "ground_truth": "通过添加文档来源、页码、章节等元信息，支持元数据过滤和多维度检索"},
+
+    {"id": "QA-001", "category": "问答质量", "difficulty": "easy", "question": "AI回答是否总是基于提供的文档？", "ground_truth": "是的，遵循RAG原则，只基于检索到的文档内容回答"},
+    {"id": "QA-002", "category": "问答质量", "difficulty": "medium", "question": "如果文档中没有答案AI会怎么做？", "ground_truth": "AI会明确说明根据现有资料无法回答，不会编造信息"},
+    {"id": "QA-003", "category": "问答质量", "difficulty": "easy", "question": "AI回答时是否会标注信息来源？", "ground_truth": "会，每个回答都会标注引用的文档来源，便于追溯验证"},
+    {"id": "QA-004", "category": "问答质量", "difficulty": "medium", "question": "如何评估AI回答的准确性？", "ground_truth": "通过RAGAS框架的Faithfulness、AnswerRelevancy、ContextRecall三个维度评估"},
+    {"id": "QA-005", "category": "问答质量", "difficulty": "hard", "question": "Faithfulness指标具体衡量什么？", "ground_truth": "衡量AI生成的回答是否完全基于检索到的上下文，没有编造信息"},
+    {"id": "QA-006", "category": "问答质量", "difficulty": "hard", "question": "Context Recall指标衡量什么？", "ground_truth": "衡量检索到的上下文是否包含了回答问题所需的全部相关信息"},
+    {"id": "QA-007", "category": "问答质量", "difficulty": "medium", "question": "如何保证回答不产生幻觉？", "ground_truth": "通过RAGAS的Faithfulness评估、检索质量优化、以及提示词约束共同保障"},
+    {"id": "QA-008", "category": "问答质量", "difficulty": "easy", "question": "同一个问题不同时间问结果会一样吗？", "ground_truth": "检索结果可能因知识库更新而变化，但相同内容下结果一致"},
+    {"id": "QA-009", "category": "问答质量", "difficulty": "medium", "question": "回答中可以包含表格或列表吗？", "ground_truth": "可以，AI会根据文档内容自动以表格或列表形式组织信息"},
+    {"id": "QA-010", "category": "问答质量", "difficulty": "hard", "question": "多轮对话中AI能否记住上文？", "ground_truth": "通过Redis分层记忆系统管理短期和长期对话上下文"},
+
+    {"id": "SYS-001", "category": "系统能力", "difficulty": "medium", "question": "系统支持哪些部署方式？", "ground_truth": "支持本地部署和Docker容器化部署"},
+    {"id": "SYS-002", "category": "系统能力", "difficulty": "easy", "question": "上传文档后多久能被检索到？", "ground_truth": "上传完成后即被解析、分块、向量化，立即可检索"},
+    {"id": "SYS-003", "category": "系统能力", "difficulty": "medium", "question": "系统可以处理多大批量的文档？", "ground_truth": "支持批量上传，通过异步流水线处理，不阻塞查询"},
+    {"id": "SYS-004", "category": "系统能力", "difficulty": "hard", "question": "如何监控系统检索性能？", "ground_truth": "通过全链路追踪系统记录每次查询的耗时、检索数量、Token消耗"},
+    {"id": "SYS-005", "category": "系统能力", "difficulty": "medium", "question": "多租户场景下数据如何隔离？", "ground_truth": "通过独立的向量库Collection和Redis命名空间实现租户级数据隔离"},
+
+    {"id": "EVAL-001", "category": "评估优化", "difficulty": "hard", "question": "优化后如何验证改进效果？", "ground_truth": "通过30+Golden Test Set执行回归测试，对比优化前后的RAGAS指标"},
+    {"id": "EVAL-002", "category": "评估优化", "difficulty": "hard", "question": "RAGAS三维度打分体系中哪个最关键？", "ground_truth": "Faithfulness最关键，因为它直接衡量回答是否忠于原文，避免幻觉"},
+    {"id": "EVAL-003", "category": "评估优化", "difficulty": "hard", "question": "ContextPrecision和ContextRecall有什么区别？", "ground_truth": "Precision衡量检索结果中有多少是相关的，Recall衡量所有相关内容是否都被检索到"},
+    {"id": "EVAL-004", "category": "评估优化", "difficulty": "medium", "question": "如何设计有效的测试集？", "ground_truth": "覆盖不同难度和类型的场景，包含边界情况，每个问题有明确的ground truth"},
+    {"id": "EVAL-005", "category": "评估优化", "difficulty": "hard", "question": "优化迭代中如何防止退化？", "ground_truth": "每轮优化后执行全量回归测试，确保所有指标不下降"},
+
+    {"id": "USR-001", "category": "用户体验", "difficulty": "easy", "question": "系统有Web界面吗？", "ground_truth": "有，提供基于Streamlit的交互界面和RESTful API"}
+  ]
+}
