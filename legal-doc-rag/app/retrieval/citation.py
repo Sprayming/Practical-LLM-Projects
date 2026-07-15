@@ -1,12 +1,10 @@
-# =+= NEW MODULE - Added 2026-07-15 by Codex =+=\n\n"""
-来源标注 - 追踪检索来源 + 生成可信引用
-
-流程：
-  检索时记录每个 chunk 的来源信息
-  → 拼上下文时附带来源标记 [来源: filename]
-  → AI 回答后提取实际引用的来源
-  → 返回结构化引用列表
-"""
+# =+= NEW MODULE - Added 2026-07-15 by Codex =+=\n\n# 来源标注 - 追踪检索来源 + 生成可信引用
+# 
+# 流程：
+#   检索时记录每个 chunk 的来源信息
+#   → 拼上下文时附带来源标记 [来源: filename]
+#   → AI 回答后提取实际引用的来源
+#   → 返回结构化引用列表
 from typing import Optional
 from dataclasses import dataclass, field
 from datetime import datetime

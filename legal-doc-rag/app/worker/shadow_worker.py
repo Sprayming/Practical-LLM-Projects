@@ -1,13 +1,11 @@
-# =+= NEW MODULE - Added 2026-07-15 by Codex =+=\n\n"""
-异步影子 Worker - 后台任务处理器
-
-功能：
-  - 优先级任务队列（HIGH / MEDIUM / LOW）
-  - 多 Worker 线程并行消费
-  - 自动重试（可配置最大重试次数）
-  - 任务状态追踪（pending / running / done / failed）
-  - 优雅关闭
-"""
+# =+= NEW MODULE - Added 2026-07-15 by Codex =+=\n\n# 异步影子 Worker - 后台任务处理器
+# 
+# 功能：
+#   - 优先级任务队列（HIGH / MEDIUM / LOW）
+#   - 多 Worker 线程并行消费
+#   - 自动重试（可配置最大重试次数）
+#   - 任务状态追踪（pending / running / done / failed）
+#   - 优雅关闭
 import threading, queue, time, uuid
 from enum import Enum
 from typing import Callable, Optional

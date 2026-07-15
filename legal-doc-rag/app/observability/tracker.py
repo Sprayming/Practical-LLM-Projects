@@ -1,12 +1,10 @@
-# =+= NEW MODULE - Added 2026-07-15 by Codex =+=\n\n"""
-可观测性追踪 - 全链路追踪 + 指标采集
-
-记录每次查询的：
-  - 各阶段耗时（改写 → 检索 → 生成）
-  - Token 消耗
-  - 检索结果数量
-  - 异常信息
-"""
+# =+= NEW MODULE - Added 2026-07-15 by Codex =+=\n\n# 可观测性追踪 - 全链路追踪 + 指标采集
+# 
+# 记录每次查询的：
+#   - 各阶段耗时（改写 → 检索 → 生成）
+#   - Token 消耗
+#   - 检索结果数量
+#   - 异常信息
 import json, uuid, time, threading
 from datetime import datetime
 from typing import Optional
