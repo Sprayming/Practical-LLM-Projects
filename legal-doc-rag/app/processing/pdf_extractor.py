@@ -1,4 +1,3 @@
-# =+= NEW MODULE - Added 2026-07-14 by Codex =+=
 
 """
 PDF 提取器 - 使用 PyMuPDF 提取文本和图片

@@ -1,4 +1,3 @@
-# =+= NEW MODULE - Added 2026-07-15 by Codex =+=
 # Forgetting mechanism - Ebbinghaus forgetting curve
 
 import math, time

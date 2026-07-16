@@ -1,4 +1,3 @@
-# =+= NEW MODULE - Added 2026-07-15 by Codex =+=\n\n# 异步影子 Worker - 后台任务处理器
 # 
 # 功能：
 #   - 优先级任务队列（HIGH / MEDIUM / LOW）

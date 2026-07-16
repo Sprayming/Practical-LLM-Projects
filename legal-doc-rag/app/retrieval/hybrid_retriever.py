@@ -1,4 +1,3 @@
-# =+= NEW MODULE - Added 2026-07-14 by Codex =+=
 
 """
 混合检索器 - 稠密向量 + 稀疏BM25 + RRF融合 + BGE重排序

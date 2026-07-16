@@ -1,4 +1,3 @@
-# =+= NEW MODULE - Added 2026-07-14 by Codex =+=
 
 """
 RAG 评估模块 - 基于 RAGAS 框架

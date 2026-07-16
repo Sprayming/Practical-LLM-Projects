@@ -1,4 +1,3 @@
-# =+= NEW MODULE - Added 2026-07-15 by Codex =+=\n\n# 多租户隔离管理器
 # 
 # 每个租户拥有隔离的：
 #   - 命名空间（Redis Key 前缀、ChromaDB Collection）

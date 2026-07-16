@@ -1,4 +1,3 @@
-# =+= NEW MODULE - Added 2026-07-14 by Codex =+=
 
 """
 多模态处理管线 - PDF 图文提取 + OCR + 向量化

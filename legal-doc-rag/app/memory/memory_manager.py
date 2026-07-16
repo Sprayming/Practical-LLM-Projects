@@ -1,5 +1,4 @@
 
-# =+= MODIFIED 2026-07-14 by Codex =+=
 # Changes compared to .orig version:
 #   1. Added RedisClient integration (short/mid-term memory)
 #   2. Added distance threshold filtering (retrieve by min_score)
@@ -143,7 +142,6 @@ class MemorySystem:
             "redis_available": self.redis.is_available(),
             "long_term_chunks": self.store._collection.count(),
         }
-# =+= MODIFIED 2026-07-15 by Codex =+=
 # Added: ForgettingMechanism integration in retrieve()
 # Added: ShadowWorker integration in async_consolidate()
 # Added: Tenant isolation support in __init__()
