@@ -1,35 +1,34 @@
 from __future__ import annotations
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
+import sqlite3
+from pathlib import Path
 from loguru import logger
-from app.config import settings
 
+DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "ride_hailing.db"
+SQL_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "schema_sqlite.sql"
 
-def get_engine():
-    url = f"mysql+pymysql://{settings.db_user}:{settings.db_password}@{settings.db_host}:{settings.db_port}/{settings.db_name}?charset=utf8mb4"
-    return create_engine(url, echo=settings.debug)
-
-
-engine = None
-SessionLocal = None
-
+def get_connection():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(DB_PATH))
+    conn.row_factory = sqlite3.Row
+    return conn
 
 def init_db():
-    global engine, SessionLocal
-    engine = get_engine()
-    SessionLocal = sessionmaker(bind=engine)
-    logger.info("Database connection established")
-
-
-def get_session():
-    if SessionLocal is None:
-        init_db()
-    return SessionLocal()
-
+    conn = get_connection()
+    schema = SQL_PATH.read_text(encoding="utf-8")
+    conn.executescript(schema)
+    conn.commit()
+    conn.close()
+    logger.info("SQLite DB initialized: {}", DB_PATH)
 
 def execute_sql(sql: str) -> tuple[list[dict], list[str]]:
-    with get_session() as session:
-        result = session.execute(text(sql))
-        columns = list(result.keys())
-        rows = [dict(zip(columns, row)) for row in result.fetchall()]
+    conn = get_connection()
+    try:
+        cursor = conn.execute(sql)
+        columns = [desc[0] for desc in cursor.description] if cursor.description else []
+        rows = [dict(row) for row in cursor.fetchall()]
         return rows, columns
+    except Exception as e:
+        logger.error("SQL execute error: {}", e)
+        return [], []
+    finally:
+        conn.close()
