@@ -515,3 +515,38 @@ MemorySystem.async_consolidate = patched_async_consolidate
 | ???????? | ???????????????+??????+????????????? Worker ?????????????? |
 | patched_retrieve ?? list[Document] ????? list[str] ???? | ?? bug????? `retrieve_long_term` ???? `list[str]` |
 | ?????? Worker ???????????? | `ShadowWorker` ? `threading.Thread(daemon=True)` ??????????`PriorityQueue` ?????????????????? |
+
+---
+
+## 2026-07-19 更新：5 项生产级改进（memory_manager.py）
+
+### 1. clear_session Redis 僵尸数据修复 [P0]
+**问题**：原代码先重置 session_id 再用新 ID 清 Redis，旧数据成僵尸。
+**改法**：redis.clear_session 移到 session_id 重置之前。
+
+### 2. 检索反遗忘：异步访问计数 [P1]
+**问题**：每次检索只读不计，低热度记忆被遗忘过快。
+**改法**：命中 doc 的 access_count 由 ShadowWorker 异步批量更新 ChromaDB 元数据。
+
+### 3. 实体提取实现（原为 pass） [P1]
+**问题**：streamlit_app.py 真实调用 extract_entities，实现为空。
+**改法**：ShadowWorker 提交 _do_extract_entity，LLM 提取 JSON 结构化实体写入长期记忆。
+
+### 4. 中期记忆增量摘要合并 [P1]
+**问题**：consolidate 只对新对话做摘要，不参考旧摘要，早期信息丢失。
+**改法**：prompt 拼接旧摘要 + 新对话，LLM 做合并而非覆盖。
+
+### 5. Redis 容灾恢复 [P2]
+**问题**：服务重启后内存数据丢失，Redis 缓存不自动加载。
+**改法**：__init__ 末尾调用 _restore_from_redis() 恢复短期列表和中期摘要。
+
+### 面试官可能追问
+
+| 问题 | 回答要点 |
+|------|---------|
+| 为什么反遗忘不走同步路径？ | 检索是高频率读，写 ChromaDB 耗时 50-200ms，放同步路径增大 P99 延迟。走异步 Worker 队列批量消化。 |
+| access_count 读不到最新值？ | 最终一致，几秒的延迟对遗忘曲线影响可忽略。强一致场景改用 Redis INCR。 |
+| 实体提取 JSON 解析失败？ | 当前静默跳过。生产版可加重试 + 降级为正则提取。 |
+| 增量摘要超 token？ | 旧摘要约 200 token，新窗口约 1000 token，远低于 4k 限制。 |
+| 旧 session Redis 数据残留？ | 有 TTL（短期 2h，中期 24h），到期自动过期。 |
+
