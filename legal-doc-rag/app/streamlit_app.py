@@ -88,6 +88,23 @@ def summarize_history(messages: list) -> str:
         return ""
     except:
         return ""
+# Shadow LLM: for background async tasks (entity extraction, memory consolidation, etc.)
+def memory_llm(prompt: str) -> str:
+    try:
+        resp = requests.post(
+            f"{DEEPSEEK_BASE_URL}/chat/completions",
+            headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
+            json={"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}], "temperature": 0.1},
+            timeout=15, verify=False,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, dict) and data.get("choices") and data["choices"][0].get("message"):
+                return data["choices"][0]["message"]["content"] or ""
+        return ""
+    except:
+        return ""
+
 
 st.title("Legal Document Q&A")
 
