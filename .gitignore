@@ -29,3 +29,12 @@ uploads/
 
 # Environment
 .env
+
+# Large files (git history bloat prevention)
+*.pdf
+*.sqlite3
+memory_db/
+chroma_db/
+model_cache/
+knowledge_base/
+uploads/
