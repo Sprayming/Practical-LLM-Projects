@@ -22,6 +22,10 @@ from PyPDF2 import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
+from app.retrieval.hybrid_retriever import HybridRetriever
+from app.retrieval.citation import CitationTracker
+from app.retrieval.query_rewriter import QueryRewriter
+from app.observability.tracker import TraceContext, get_trace_store
 
 # 加载环境变量
 env_path = Path(__file__).resolve().parent.parent / ".env"
@@ -141,7 +145,13 @@ if "vector_store" not in st.session_state:
                 texts=chunks, embedding=embed,
                 metadatas=[{"source": f"{uploaded_file.name} - chunk {i+1}"} for i in range(len(chunks))],
             )
-            st.session_state.retriever = st.session_state.vector_store.as_retriever(search_kwargs={"k": 3})
+            st.session_state.chunks = chunks
+            st.session_state.retriever = HybridRetriever(
+                dense_store=st.session_state.vector_store,
+                texts=chunks,
+                k=3,
+                use_reranker=False,
+            )
         st.success("Ready. Ask your question below.")
 
 # 用户输入
@@ -157,10 +167,22 @@ if prompt := st.chat_input("Ask a legal question:"):
     with st.chat_message("assistant"):
         placeholder = st.empty()
         placeholder.markdown("Thinking...")
+        trace = TraceContext()
+        trace.set_input(prompt)
+        
+        trace.begin_span("query_rewrite")
+        rewriter = QueryRewriter(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
+        variants = rewriter.rewrite(prompt, num_variants=1)
+        search_query = variants[0] if variants else prompt
+        trace.end_span()
+
         docs = st.session_state.get("retriever")
         context = ""
+        citations_section = ""
         if docs:
-            docs_result = docs.invoke(prompt)
+            trace.begin_span("retrieve")
+            docs_result = docs.invoke(search_query)
+            trace.end_span()
             if docs_result:
                 seen = set()
                 unique = []
@@ -170,7 +192,10 @@ if prompt := st.chat_input("Ask a legal question:"):
                         seen.add(key)
                         unique.append(d)
                 docs_result = unique
-                context = "\n\n".join([d.page_content for d in docs_result])
+                citation_tracker = CitationTracker()
+                citation_tracker.add_sources(docs_result)
+                context = citation_tracker.format_context()
+                citations_section = citation_tracker.format_citations()
         history = st.session_state.summary
         if history:
             history = "History: " + history + "\n\n"
@@ -185,7 +210,9 @@ if prompt := st.chat_input("Ask a legal question:"):
 
 Question: {prompt}
 
-Requirements: Cite relevant clauses when possible. If the text doesn't contain the answer, state that clearly."""
+Requirements: Cite relevant clauses using [source:N] notation. If the text doesn't contain the answer, state that clearly.
+
+{citations_section}"""
     # 构建 Prompt
         input_tokens = count_tokens(full_prompt)
         try:
@@ -208,6 +235,11 @@ Requirements: Cite relevant clauses when possible. If the text doesn't contain t
                 total = input_tokens + output_tokens
                 st.session_state.last_tokens = total
                 st.session_state.total_tokens += total
+                trace.set_output(answer)
+                trace.set_tokens(total)
+                trace.end_span()
+                trace.print_summary()
+                get_trace_store().save(trace)
                 placeholder.markdown(answer + f"\n\n---\n*Token: {input_tokens} in + {output_tokens} out = {total}*")
                 st.session_state.messages.append({"role": "assistant", "content": answer})
                 st.session_state.memory.add("assistant", answer)
