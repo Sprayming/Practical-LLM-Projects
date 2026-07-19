@@ -10,15 +10,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from ragas import evaluate
 from ragas.dataset_schema import EvaluationDataset
 from ragas.metrics import Faithfulness, AnswerRelevancy, ContextPrecision, ContextRecall
-from ragas.embeddings import LangchainEmbeddingsWrapper
-from langchain_community.embeddings import HuggingFaceEmbeddings
 
 env_path = Path(__file__).resolve().parent.parent / '.env'
 if env_path.exists(): load_dotenv(str(env_path))
 API_KEY = os.getenv('LLM_API_KEY', '')
 BASE_URL = os.getenv('LLM_BASE_URL', 'https://api.deepseek.com/v1')
-os.environ['OPENAI_API_KEY'] = API_KEY
-os.environ['OPENAI_BASE_URL'] = BASE_URL
+ARK_API_KEY = 'df9c9b2d-35d9-4df6-b49d-f489708e1eab'
+ARK_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3/'
+ARK_LLM_MODEL = 'doubao-1-5-pro-32k-250115'
+ARK_EMBEDDING_ENDPOINT = 'ep-m-20251117205847-trwgz'
+os.environ['OPENAI_API_KEY'] = ARK_API_KEY
+os.environ['OPENAI_BASE_URL'] = ARK_BASE_URL
 
 TEST_QUESTIONS = [
   {
@@ -97,17 +99,38 @@ def run_eval():
   ds = EvaluationDataset.from_list(s)
   from langchain_openai import ChatOpenAI
   from ragas.llms import LangchainLLMWrapper
-  ragas_llm = LangchainLLMWrapper(ChatOpenAI(model="deepseek-chat", openai_api_key=API_KEY, openai_api_base=BASE_URL, temperature=0.1))
-  hf_emb = HuggingFaceEmbeddings(model_name="shibing624/text2vec-base-chinese", cache_folder="./model_cache")
-  ragas_emb = LangchainEmbeddingsWrapper(hf_emb)
-  r = evaluate(ds, metrics=[Faithfulness(llm=ragas_llm), AnswerRelevancy(llm=ragas_llm, embeddings=ragas_emb), ContextPrecision(llm=ragas_llm), ContextRecall(llm=ragas_llm)])
+  from openai import OpenAI
+  ragas_llm = LangchainLLMWrapper(ChatOpenAI(model=ARK_LLM_MODEL, openai_api_key=ARK_API_KEY, openai_api_base=ARK_BASE_URL, temperature=0.1))
+  _oc = OpenAI(api_key=ARK_API_KEY, base_url=ARK_BASE_URL)
+  class _DirectEmbed:
+    def embed_documents(self, texts):
+      resp = _oc.embeddings.create(input=texts, model=ARK_EMBEDDING_ENDPOINT)
+      return [d.embedding for d in resp.data]
+    def embed_query(self, text):
+      resp = _oc.embeddings.create(input=text, model=ARK_EMBEDDING_ENDPOINT)
+      return resp.data[0].embedding
+    def embed_text(self, text):
+      return self.embed_query(text)
+    def embed_texts(self, texts):
+      return self.embed_documents(texts)
+  ragas_emb = _DirectEmbed()
+  r = evaluate(ds, metrics=[Faithfulness(llm=ragas_llm), AnswerRelevancy(llm=ragas_llm, embeddings=ragas_emb), ContextPrecision(llm=ragas_llm), ContextRecall(llm=ragas_llm)], embeddings=ragas_emb)
+  print("DEB: mro=" + str([c.__name__ for c in type(r).__mro__]))
+  d = r.data if hasattr(r, 'data') else {}
+  print("DEB: data=" + str(d))
   print(chr(10) + '=== Report ===')
   for k, l in {'faithfulness': 'Faithfulness', 'answer_relevancy': 'Relevancy', 'context_precision': 'Precision', 'context_recall': 'Recall'}.items():
     v = r[k] if isinstance(r, dict) else getattr(r, k, 0)
     print(f'  {l}: {float(v):.4f}' if isinstance(v, (int, float)) else f'  {l}: {v}')
   with open(Path(__file__).resolve().parent.parent / 'evaluation_report.json', 'w', encoding='utf-8') as fo:
-    rd = dict(r) if hasattr(r, 'items') else {k: getattr(r, k, 0) for k in ['faithfulness', 'answer_relevancy', 'context_precision', 'context_recall']}
-    json.dump({'metrics': {k: float(rd[k]) if isinstance(rd.get(k), (int, float)) else str(rd.get(k, 0)) for k in ['faithfulness', 'answer_relevancy', 'context_precision', 'context_recall']}, 'total': len(s)}, fo, ensure_ascii=False, indent=2)
+    if hasattr(r, 'scores') and r.scores:
+      avg = {}
+      for key in ['faithfulness', 'answer_relevancy', 'context_precision', 'context_recall']:
+        vals = [sc.get(key, 0) for sc in r.scores if isinstance(sc, dict)]
+        avg[key] = sum(vals) / len(vals) if vals else 0.0
+    else:
+      avg = {k: 0.0 for k in ['faithfulness', 'answer_relevancy', 'context_precision', 'context_recall']}
+    json.dump({'metrics': avg, 'total': len(s)}, fo, ensure_ascii=False, indent=2)
   print('Saved: evaluation_report.json')
 
 if __name__ == '__main__': run_eval()
