@@ -1,253 +1,206 @@
 # Legal Document RAG
 
-A legal document Q&A system built with Streamlit. Upload PDF contracts, regulations, or legal documents, then ask questions in natural language. The system retrieves relevant clauses and generates answers with source citations.
+## Overview
 
-## Architecture
+基于 Streamlit 的法律文书智能问答系统。上传 PDF 合同、法规、法律文件，用自然语言提问，系统自动检索相关条款并生成带引用的回答。
+
+## 架构总览
 
 ```
-streamlit_app.py (entry point - ~220 lines)
+streamlit_app.py (唯一入口, ~220 行)
   |
-  +-- memory/memory_manager.py    3-layer memory (short/mid/long)
-  |     +-- redis_client.py        Redis + TTL expiration + fallback
-  |     +-- forgetting.py           Ebbinghaus forgetting curve
-  |     +-- shadow_worker.py        Async background thread pool
+  +-- memory/memory_manager.py    3 层记忆 (短/中/长期)
+  |     +-- redis_client.py        Redis 连接 + TTL 过期 + 内存回退
+  |     +-- forgetting.py           艾宾浩斯遗忘曲线
+  |     +-- shadow_worker.py        异步后台线程池
   |
-  +-- processing/multimodal_pipeline.py  PDF text + image extraction
-  |     +-- pdf_extractor.py        PyMuPDF text + image extraction
+  +-- processing/multimodal_pipeline.py  PDF 图文提取
+  |     +-- pdf_extractor.py        PyMuPDF 图文提取
   |     +-- ocr_engine.py           OCR (PaddleOCR / Tesseract)
   |
   +-- retrieval/
   |     +-- hybrid_retriever.py     BM25 + Dense + RRF + Cross-Encoder
-  |     +-- query_rewriter.py       LLM query rewrite / expansion
-  |     +-- citation.py             Source citation tracking
+  |     +-- query_rewriter.py       LLM 查询改写/扩展
+  |     +-- citation.py             来源引用追踪
   |
-  +-- evaluation/                   (offline - not in online flow)
-  |     +-- evaluator.py            RAGAS 3-dimension scoring
-  |     +-- runner.py               Batch evaluation with golden test set
+  +-- evaluation/                   (离线评测, 不在在线流中)
+  |     +-- evaluator.py            RAGAS 三维度打分
+  |     +-- runner.py               批量评测 + Golden Test Set
   |
-  +-- tenant/tenant_manager.py     Multi-tenant data isolation
+  +-- tenant/tenant_manager.py     多租户数据隔离
   |
-  +-- observability/tracker.py     Full-pipeline trace (duration, tokens)
+  +-- observability/tracker.py     全链路追踪 (耗时, Token)
   |
-  +-- worker/shadow_worker.py      Shared async worker pool
+  +-- worker/shadow_worker.py      共享异步线程池
 ```
 
-## Import Graph
+## 数据流 (在线)
 
 ```
-streamlit_app.py (main entry)
-  +-- memory/memory_manager.py
-  |     +-- memory/redis_client.py
-  |     +-- memory/forgetting.py
-  |     +-- worker/shadow_worker.py
-  |
-  +-- processing/multimodal_pipeline.py
-  |     +-- processing/pdf_extractor.py
-  |     +-- processing/ocr_engine.py
-  |
-  +-- retrieval/hybrid_retriever.py (contains Reranker class)
-  |     +-- retrieval/citation.py
-  |
-  +-- retrieval/query_rewriter.py
-  +-- observability/tracker.py
-```
-
-## Data Flow (Online)
-
-```
-User Input
+用户输入
   |
   v
 MultimodalPipeline.process(PDF path)
-  |  Extracts text from PDF, runs OCR on images,
-  |  generates image captions, merges into chunks
-  |  Output: MultimodalChunk[] with .text / .page_number / .images
+  |  从 PDF 提取文字, 对图片运行 OCR,
+  |  生成图片描述, 合并到文本分块
   v
-Chroma.from_texts(chunks) -> vector_store
 HybridRetriever(dense_store, texts) -> retriever
   |
-  v  (per user question)
+  v  (每次用户提问)
 QueryRewriter.rewrite(query)
-  |  LLM rewrites/expands the question
-  |  Output: rewritten search query
+  |  LLM 改写/扩展用户查询
   v
-HybridRetriever.invoke(search_query)
-  |  BM25 + Dense + RRF fusion -> documents[]
+HybridRetriever.invoke(query)
+  |  BM25 + 稠密向量 + RRF 融合 -> documents[]
   v
 CitationTracker.add_sources(docs)
-  |  Annotates each doc with source metadata
-  |  format_context() -> annotated text
-  |  format_citations() -> [source:N] list
+  |  标注 [source:N] 引用
   v
 MemorySystem.get_context(query)
-  |  1. long_term: Chroma similarity search + forgetting filter
-  |  2. mid_term: Redis summary string
-  |  3. short_term: last 4 rounds of raw conversation
+  |  1. 长期记忆: Chroma + 遗忘过滤
+  |  2. 中期记忆: Redis 摘要
+  |  3. 短期记忆: 最近 4 轮原话
   v
 LLM (DeepSeek)
-  |  Receives: system prompt + context + citations + memory + question
-  |  Outputs: answer with [source:N] references
+  |  Prompt = system + context + citations + memory + question
   v
 MemorySystem.add(assistant, answer)
-MemorySystem.extract_entities()
-  |  ShadowWorker async: LLM extracts structured JSON entities
-  |  -> stores into long-term ChromaDB
+MemorySystem.extract_entities() -> ShadowWorker 异步
   v
-TraceContext.print_summary() -> get_trace_store().save()
-  |  Logs: query_rewrite_time, retrieve_time, generate_time, token_count
+TraceContext -> get_trace_store().save()
 ```
 
-## Memory System (3-layer)
+## 三层记忆系统
 
 ```
-Short-term (last 6 rounds of raw text, ~600 tokens)
-  Memory + Redis List (TTL 2h, auto-expire)
-  Maintains current conversation coherence
+短期记忆 (最近 6 轮原文, ~600 token)
+  内存 + Redis List (TTL 2h)
+  维持当前对话连贯性
   |
-  v  (when short_term exceeds max = 6 rounds)
-Mid-term (LLM-compressed summary, ~200 tokens)
-  Memory + Redis String (TTL 24h)
-  Keeps core intent + facts across rounds
-  (incremental merge: old summary + new conversation -> LLM -> merged summary)
+  v  (超过 6 轮时触发整理)
+中期记忆 (LLM 压缩摘要, ~200 token)
+  内存 + Redis String (TTL 24h)
+  增量合并: 旧摘要 + 新对话 -> LLM -> 合并摘要
   |
-  v  (async background via ShadowWorker)
-Long-term (ChromaDB vector store, permanent)
-  Ebbinghaus forgetting curve: score = 0.5 * recency + 0.3 * frequency + 0.2 * importance
-  Async access_count bump on retrieval (re-activation)
+  v  (ShadowWorker 异步执行)
+长期记忆 (ChromaDB 向量库, 永久)
+  遗忘曲线: score = 0.5*近因 + 0.3*频率 + 0.2*重要性
+  访问即激活: 检索时异步递增 access_count
   |
   v
-Entity Profile (async extraction)
-  LLM extracts structured JSON entities from each conversation round
-  Stores as type=entity documents in long-term ChromaDB
+实体画像 (异步提取)
+  LLM 从每轮对话提取结构化 JSON 实体
+  存入长期记忆的 type=entity 文档
 ```
 
-## Token Budget
+## Token 预算分配
 
-```
-Layer                  Budget  Notes
------                  ------  -----
-System Prompt           ~100   Fixed
-Short-term (6 rounds)  ~600   Auto-truncate oldest
-Entity Profile         ~100   Structured JSON, always loaded
-Long-term (retrieved)  ~500   Top-3, forgetting filtered
-Retrieved docs         ~2000  Top-5, deduplicated
-User input             <500   Front-end limited
-Total                  ~3800  Room for response
-```
+| 层级 | 预算 | 说明 |
+|------|------|------|
+| System Prompt | ~100 | 固定不变 |
+| 短期记忆 (6轮) | ~600 | 超出丢弃最旧 |
+| 实体画像 | ~100 | JSON 结构化, 始终加载 |
+| 长期记忆 (检索) | ~500 | Top-3, 遗忘过滤 |
+| 检索文档 | ~2000 | Top-5, 去重 |
+| 用户输入 | <500 | 前端限制 |
+| 总计 | ~3800 | 预留回答空间 |
 
-## Quick Start
+## 快速开始
 
 ```bash
 pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple/
 cp .env.example .env
-# Edit .env: fill LLM_API_KEY
+# 编辑 .env: 填入 LLM_API_KEY
 cd legal-doc-rag
 streamlit run app/streamlit_app.py
 ```
 
-## Tech Stack
+## 技术栈
 
-| Component        | Choice                    | File |
-|-----------------|---------------------------|------|
-| Frontend UI     | Streamlit                 | streamlit_app.py |
-| Embedding       | text2vec-base-chinese     | streamlit_app.py |
-| Doc vectorstore | ChromaDB                  | streamlit_app.py |
-| Memory store    | ChromaDB                  | memory/memory_manager.py |
-| Cache layer     | Redis (optional, fallback)| memory/redis_client.py |
-| LLM             | DeepSeek API              | streamlit_app.py |
-| PDF parsing     | PyMuPDF + MultimodalPipeline| processing/ |
-| Hybrid search   | BM25 + Dense + RRF        | retrieval/hybrid_retriever.py |
-| Query rewrite   | LLM (DeepSeek)            | retrieval/query_rewriter.py |
-| Citation        | Source tracking            | retrieval/citation.py |
-| Async worker    | Thread pool (daemon)      | worker/shadow_worker.py |
-| Trace           | In-memory store           | observability/tracker.py |
+| 组件 | 选型 | 文件 |
+|------|------|------|
+| 前端 UI | Streamlit | streamlit_app.py |
+| 嵌入模型 | text2vec-base-chinese | streamlit_app.py |
+| 文档向量库 | ChromaDB | streamlit_app.py |
+| 记忆向量库 | ChromaDB | memory/memory_manager.py |
+| 缓存层 | Redis (可选, 有回退) | memory/redis_client.py |
+| LLM | DeepSeek API | streamlit_app.py |
+| PDF 解析 | PyMuPDF + MultimodalPipeline | processing/ |
+| 混合检索 | BM25 + Dense + RRF | retrieval/hybrid_retriever.py |
+| 查询改写 | LLM (DeepSeek) | retrieval/query_rewriter.py |
+| 引用标注 | Source tracking | retrieval/citation.py |
+| 异步 Worker | 守护线程池 | worker/shadow_worker.py |
+| 全链路追踪 | 内存存储 | observability/tracker.py |
 
-## Project Status
+## 项目状态
 
-- [x] Basic RAG Q&A (document retrieval + source tracing)
-- [x] 3-layer memory system (short/mid/long + entity profile)
-- [x] Entity extraction (async LLM -> structured JSON)
-- [x] Token stats and budget control
-- [x] Hybrid retriever (BM25 + Dense + RRF)
-- [x] Query rewriter (LLM query expansion)
-- [x] Citation tracker (source annotation)
-- [x] Multimodal pipeline (PDF text + image + OCR)
-- [x] Async shadow worker (background memory consolidation)
-- [x] Forgetting mechanism (Ebbinghaus curve)
-- [x] Redis fault tolerance (in-memory fallback)
-- [ ] Multi-tenant isolation
-- [ ] RAGAS evaluation (offline runner)
+- [x] 基础 RAG 问答 (文档检索 + 引用溯源)
+- [x] 三层记忆系统 (短/中/长 + 实体画像)
+- [x] 实体提取 (异步 LLM -> 结构化 JSON)
+- [x] Token 统计与预算控制
+- [x] 混合检索器 (BM25 + Dense + RRF)
+- [x] 查询改写 (LLM 扩展)
+- [x] 引用追踪 (来源标注)
+- [x] 多模态管线 (PDF 文字 + 图片 + OCR)
+- [x] 异步 Shadow Worker (后台记忆整理)
+- [x] 遗忘机制 (艾宾浩斯曲线)
+- [x] Redis 容错 (内存回退)
+- [ ] 多租户隔离
+- [ ] RAGAS 离线评测
 
-## Changelog
+## 更新日志
 
-### 2026-07-19: Wire up all dormant modules
-- MultimodalPipeline: replaced PyPDF2 + splitter (text + images + OCR)
-- HybridRetriever: replaced direct Chroma retriever (BM25 + Dense + RRF)
-- QueryRewriter: LLM-based query rewriting before retrieval
-- CitationTracker: source annotation for retrieved docs
-- TraceContext: full pipeline timing + token tracking
-- Removed PyPDF2 and RecursiveCharacterTextSplitter imports
+### 2026-07-19: 接通全部闲置模块
+- MultimodalPipeline: 替换 PyPDF2 + splitter (图文+OCR)
+- HybridRetriever: 替换直接 Chroma retriever (BM25+Dense+RRF)
+- QueryRewriter: 检索前 LLM 改写查询
+- CitationTracker: 检索结果来源标注
+- TraceContext: 全链路耗时 + Token 追踪
+- 移除 PyPDF2 和 RecursiveCharacterTextSplitter import
 
-### 2026-07-19: 5 production improvements (memory_manager.py)
-1. clear_session: fix Redis stale data (clear before resetting session_id)
-2. Async access_count bump: retrieval re-activates memories via ShadowWorker
-3. Entity extraction: implemented (was pass)
-4. Incremental summary merge: old + new -> LLM -> merged
-5. Redis restore: _restore_from_redis() on startup
+### 2026-07-19: 5 项生产级改进 (memory_manager.py)
+1. clear_session: 修复 Redis 僵尸数据 (先清数据再重置 session_id)
+2. 异步访问计数: 检索时反遗忘 (ShadowWorker 批量更新)
+3. 实体提取: 实现 _do_extract_entity (原为 pass)
+4. 增量摘要合并: 旧摘要+新对话 -> LLM -> 合并
+5. Redis 容灾恢复: __init__ 末尾调用 _restore_from_redis()
 
-### 2026-07-18: Remove monkey patching
-- Replaced patched_init / patched_retrieve / patched_async_consolidate with direct methods
-- ForgettingMechanism and ShadowWorker now injected via __init__
-- Fixed extract_entities stub, memory_llm callback
-- Removed .orig file
+### 2026-07-18: 消除 Monkey Patching
+- 删除 original_xxx / patched_xxx / 模块末尾赋值
+- ForgettingMechanism 和 ShadowWorker 直接内建在类方法中
+- 修复 extract_entities stub, 添加 memory_llm 回调
+- 删除 .orig 备份文件
 
-### Earlier
-- RAGAS evaluation framework (31 golden test cases, 4 metrics)
-- Redis memory (short/mid/long + TTL auto-expire)
-- Multimodal processing (PyMuPDF + OCR + vision caption)
-- Hybrid search (BM25 + Dense + RRF + Cross-Encoder)
-- Query rewriter (LLM expansion + rule-based fallback)
-- Citation tracker (source annotation)
-- Observable tracker (full-pipeline trace)
-- Async shadow worker (priority queue + retry)
-- Forgetting mechanism (Ebbinghaus curve)
-- Multi-tenant isolation (ChromaDB collection prefix)
-- Memory system (monkey patched version, replaced 2026-07-18)
+## 面试常见问题
 
-## Interview Q&A
+### Q1: 为什么用 BM25 + Dense + RRF, 不用纯语义检索?
+BM25 精确匹配关键词 (条款编号、法律术语). Dense 向量捕捉同义词和意译. RRF 无参数融合两路排序. 纯语义检索漏精确匹配, 纯 BM25 漏语义匹配.
 
-### Q1: Why BM25 + Dense + RRF instead of pure semantic search?
-BM25 excels at exact keyword matching (clause numbers, legal terms). Dense vectors capture synonyms and paraphrases. RRF fuses both rankings without tuning. Pure semantic search misses exact matches, pure BM25 misses semantic matches.
+### Q2: Cross-Encoder 和 Bi-Encoder 的区别?
+Bi-Encoder 分别编码 query 和 doc, 速度快但精度低. Cross-Encoder 将 query+doc 配对输入, 精度高但慢. 生产: Bi-Encoder 初筛 (top-100), Cross-Encoder 精排 (top-30).
 
-### Q2: How does Cross-Encoder differ from Bi-Encoder?
-Bi-Encoder encodes query and doc separately, fast but less accurate. Cross-Encoder processes query+doc as a pair, more accurate but slower. Production: Bi-Encoder for first-stage recall (top-100), Cross-Encoder for re-ranking (top-30).
+### Q3: 分块大小为什么选 500?
+太小 (128) 语义不完整. 太大 (1024+) 含多个主题检索不准. 500 是经验值. Overlap 50 防止关键句被切在边界.
 
-### Q3: Why chunk_size=500, overlap=50?
-Too small (128) loses semantic completeness. Too large (1024+) mixes multiple topics. 500 is empirical. Overlap 50 (10%) prevents key sentences from being split at boundaries.
+### Q4: RAGAS 四个指标怎么算?
+1. Faithfulness: 将回答拆成 claim, 逐条判断是否被上下文支持. 2. AnswerRelevancy: 从回答反向生成问题, 与原问题的相似度. 3. ContextPrecision: 检索结果中相关 chunk 的比例. 4. ContextRecall: ground truth claims 是否出现在检索结果中.
 
-### Q4: How does RAGAS scoring work?
-1. Faithfulness: split answer into claims, check each against retrieved context
-2. AnswerRelevancy: reverse-generate questions from answer, measure similarity to original question
-3. ContextPrecision: proportion of relevant chunks among retrieved results
-4. ContextRecall: check if ground-truth claims appear in retrieved results
+### Q5: 多模态 PDF 解析怎么做的?
+PyMuPDF 提取 PDF 中的图片. Vision LLM (通过 API) 对图片生成描述. OCR 提取图片中文字. 描述+OCR 文字合并到该页的文本 chunk 中. 实现搜文字出图.
 
-### Q5: How does multimodal PDF parsing work?
-PyMuPDF extracts images from PDF pages. Vision LLM (via API) generates captions for each image. OCR extracts text from images. Caption + OCR text merged into the page's text chunk. Result: search 'chart' finds chart images.
+### Q6: 记忆系统怎么设计的?
+三层: 短期(最近 N 轮原文, Redis List TTL 2h), 中期(LLM 摘要, Redis String TTL 24h), 长期(ChromaDB 向量库, 永久). 后台 Worker 异步整理 短->中->长. 遗忘机制基于艾宾浩斯曲线自动过滤低分记忆.
 
-### Q6: How is the memory system designed?
-3-layer: short-term (last N raw rounds, Redis List TTL 2h), mid-term (LLM summary, Redis String TTL 24h), long-term (ChromaDB vector store, permanent). Background Worker async consolidates short->mid->long. Forgetting mechanism based on Ebbinghaus curve auto-filters low-score memories.
+### Q7: 最大的技术挑战是什么?
+Golden Test Set 的设计. 不同人写的 ground truth 标准不一致导致 RAGAS 评分波动. 统一模板: question / ground_truth / source_doc / difficulty. 评估体系稳定后才开始做优化.
 
-### Q7: What was the biggest technical challenge?
-Golden Test Set design. Different people write ground truth inconsistently, causing RAGAS score oscillation. Unified template with question / ground_truth / source_doc / difficulty. Stabilized evaluation before doing any optimization.
+### Q8: 为什么不用 LangChain/LlamaIndex 端到端?
+它们提供基础组件. 我们在三层做了定制: 检索策略 (BM25+Dense+RRF+Cross-Encoder), 记忆系统 (Redis+遗忘+异步Worker), 评估体系 (RAGAS+31 题). 框架做基础设施, 业务逻辑自己写.
 
-### Q8: Why not use LangChain/LlamaIndex end-to-end?
-They provide base components. We customized at 3 layers: retrieval strategy (BM25+Dense+RRF+Cross-Encoder), memory system (Redis+forgetting+async Worker), evaluation system (RAGAS+31 test cases). Framework for infrastructure, custom code for business logic.
+## 学习建议
 
-## How to Learn This Codebase
-
-1. Start with streamlit_app.py - understand the full flow (2 hours)
-2. Study memory/memory_manager.py - memory system (3 hours)
-3. Study retrieval/hybrid_retriever.py - hybrid search (2 hours)
-4. Prepare for follow-up questions (2 hours)
-5. Practice explaining without looking at code (1 hour)
-
+1. 先看 streamlit_app.py 理解完整流程 (2 小时)
+2. 研究 memory/memory_manager.py 记忆系统 (3 小时)
+3. 研究 retrieval/hybrid_retriever.py 混合检索 (2 小时)
+4. 准备面试追问 (2 小时)
+5. 不看代码复述项目 (1 小时)
