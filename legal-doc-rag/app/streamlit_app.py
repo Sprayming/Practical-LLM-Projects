@@ -197,6 +197,7 @@ if prompt := st.chat_input("Ask a legal question:"):
                 citation_tracker.add_sources(docs_result)
                 context = citation_tracker.format_context()
                 citations_section = citation_tracker.format_citations()
+                profile_text = st.session_state.memory.profile.to_prompt_text("default")
         history = st.session_state.summary
         if history:
             history = "History: " + history + "\n\n"
@@ -213,7 +214,7 @@ Question: {prompt}
 
 Requirements: Cite relevant clauses using [source:N] notation. If the text doesn't contain the answer, state that clearly.
 
-{citations_section}"""
+{profile_text}\n\n{citations_section}"""
     # 构建 Prompt
         input_tokens = count_tokens(full_prompt)
         try:

@@ -1,7 +1,6 @@
 import json
 import uuid
 import os
-import hashlib
 from datetime import datetime
 from typing import Callable, Optional, List, Dict
 from loguru import logger
@@ -10,6 +9,7 @@ from langchain_chroma import Chroma
 from app.memory.redis_client import RedisClient
 from app.memory.forgetting import ForgettingMechanism
 from app.worker.shadow_worker import ShadowWorker, ShadowTask, TaskPriority, get_worker
+from app.memory.profile_store import ProfileStore
 
 
 class MemorySystem:
@@ -57,6 +57,7 @@ class MemorySystem:
         # ---- 高级机制 ----
         self.forgetting = ForgettingMechanism(threshold=forgetting_threshold)
         self.worker = get_worker()
+        self.profile = ProfileStore()
 
         # ---- 启动时从 Redis 恢复 ----
         self._restore_from_redis()
@@ -221,68 +222,22 @@ class MemorySystem:
         self.worker.submit(task)
 
     def _do_extract_entity(self, user_input: str, answer: str, llm_func: Callable):
-        """后台线程执行实体提取并存入长期记忆"""
+        """Background entity extraction. Writes to ProfileStore (not ChromaDB)."""
         try:
-            prompt = (
-                f"Extract key user profile entities from the conversation.\n\n"
-                f"User: {user_input[:500]}\n"
-                f"Assistant: {answer[:500]}\n\n"
-                'Output JSON format: {"entities": [{"key": "preference", "value": "likes spicy food"}]}'
-            )
+            prompt = ("Extract key user profile entities. " + 
+                "Output format: entities as JSON list with key, value, confidence. " + 
+                "User: " + str(user_input[:500]) + "\n" + 
+                "Assistant: " + str(answer[:500]))
             result = llm_func(prompt)
             if not result:
                 return
-
             data = json.loads(result)
             entities = data.get("entities", [])
-
-            for ent in entities:
-                key = ent.get("key", "").strip()
-                value = ent.get("value", "").strip()
-                if not key or not value:
-                    continue
-
-                doc_id = f"entity_{self.tenant_id}_{hashlib.md5(key.encode()).hexdigest()[:12]}"
-                self.store.add_texts(
-                    texts=[f"{key}: {value}"],
-                    metadatas=[{
-                        "type": "entity",
-                        "timestamp": datetime.now().isoformat(),
-                        "id": doc_id,
-                        "access_count": 1,
-                    }],
-                    ids=[doc_id],
-                )
-
             if entities:
+                self.profile.merge_entities(self.tenant_id, entities)
                 logger.info("Extracted {} entities for tenant {}", len(entities), self.tenant_id)
-
         except (json.JSONDecodeError, Exception) as e:
             logger.debug("Entity extraction skipped: {}", e)
-
-    # ==========================================
-    # 4. 系统管理接口
-    # ==========================================
-
-    def _restore_from_redis(self):
-        """启动时从 Redis 恢复短期和中期记忆（容灾恢复）"""
-        if not self.redis.is_available():
-            return
-
-        try:
-            mid = self.redis.get_mid_term(self.session_id)
-            if mid:
-                self.mid_term = mid
-
-            short = self.redis.get_short_term(self.session_id)
-            if short:
-                self.short_term = short
-
-            if mid or short:
-                logger.info("Restored memory from Redis for session {}", self.session_id)
-        except Exception as e:
-            logger.warning("Redis restore failed: {}", e)
-
     def clear_session(self):
         """清除当前会话记忆"""
         # 先清理旧 session 的 Redis 数据，再重置 ID
