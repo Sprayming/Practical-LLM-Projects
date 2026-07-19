@@ -1,9 +1,19 @@
-import json, os, sys
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# -*- coding: utf-8 -*-
+import json, os, sys, requests
+from pathlib import Path
+from dotenv import load_dotenv
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ragas import evaluate
 from ragas.dataset_schema import SingleTurnSample, EvaluationDataset
 from ragas.metrics.collections import faithfulness, answer_relevancy, context_precision, context_recall
+
+env_path = Path(__file__).resolve().parent.parent / ".env"
+if env_path.exists():
+    load_dotenv(str(env_path))
+
+API_KEY = os.getenv("LLM_API_KEY", "")
+BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1")
 
 TEST_QUESTIONS = [
   {
@@ -32,17 +42,57 @@ TEST_QUESTIONS = [
   }
 ]
 
-def run_evaluation(data_path=None):
-    """Run RAGAS evaluation on the golden test set."""
+def call_llm(prompt, timeout=30):
+    if not API_KEY:
+        return ""
+    try:
+        resp = requests.post(
+            f"{BASE_URL}/chat/completions",
+            headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"},
+            json={"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}], "temperature": 0.1},
+            timeout=timeout, verify=False,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, dict) and data.get("choices") and data["choices"][0].get("message"):
+                return data["choices"][0]["message"]["content"] or ""
+        return ""
+    except Exception as e:
+        return ""
+
+def generate_answer(question, contexts):
+    if not contexts:
+        return "No relevant context found."
+    context = "\n\n".join(contexts[:3])
+    prompt = (
+        "You are a legal expert. Answer based on the provided text.\n\n"
+        f"Reference text:\n{context}\n\n"
+        f"Question: {question}\n\n"
+        "Requirements: Be concise. Cite relevant clauses. If unsure, say so."
+    )
+    return call_llm(prompt)
+
+def run_evaluation():
+    if not API_KEY:
+        print("WARNING: LLM_API_KEY not set in .env")
+        print("Evaluation will use empty answers.")
     samples = []
+    print(f"Evaluating {len(TEST_QUESTIONS)} questions...")
     for i, item in enumerate(TEST_QUESTIONS, 1):
         q = item["question"]
         contexts = item.get("contexts", [])
-        answer = contexts[0] if contexts else "No relevant context found."
-        ground_truth = item.get("ground_truth", "")
-        samples.append(SingleTurnSample(question=q, answer=answer, contexts=contexts, ground_truth=ground_truth))
+        gt = item.get("ground_truth", "")
+        print(f"  [{i}/{len(TEST_QUESTIONS)}] {q[:60]}...")
+        answer = generate_answer(q, contexts) if API_KEY else ""
+        if answer:
+            print(f"    Answer: {answer[:80]}...")
+        samples.append(SingleTurnSample(question=q, answer=answer, contexts=contexts, ground_truth=gt))
 
-    print("Running RAGAS evaluation...")
+    if not API_KEY:
+        print("\nSet LLM_API_KEY in .env and run again for real scores.")
+        return
+
+    print("\nRunning RAGAS evaluation...")
     dataset = EvaluationDataset.from_list(samples)
     result = evaluate(dataset, metrics=[faithfulness, answer_relevancy, context_precision, context_recall])
 
@@ -52,10 +102,10 @@ def run_evaluation(data_path=None):
         val = result.get(key, 0)
         print(f"  {label}: {float(val):.4f}" if isinstance(val, (int, float)) else f"  {label}: {val}")
 
-    report_path = os.path.join(os.path.dirname(__file__), "..", "evaluation_report.json")
+    report_path = Path(__file__).resolve().parent.parent / "evaluation_report.json"
     with open(report_path, "w", encoding="utf-8") as f:
         metrics = {k: float(result[k]) if isinstance(result.get(k), (int, float)) else str(result.get(k, 0)) for k in labels}
-        json.dump({"metrics": metrics}, f, ensure_ascii=False, indent=2)
+        json.dump({"metrics": metrics, "total_questions": len(samples)}, f, ensure_ascii=False, indent=2)
     print(f"\nReport saved: {report_path}")
     return result
 
