@@ -204,7 +204,15 @@ PyMuPDF 提取 PDF 中的图片. Vision LLM (通过 API) 对图片生成描述. 
 Golden Test Set 的设计. 不同人写的 ground truth 标准不一致导致 RAGAS 评分波动. 统一模板: question / ground_truth / source_doc / difficulty. 评估体系稳定后才开始做优化.
 
 ### Q8: 为什么不用 LangChain/LlamaIndex 端到端?
-它们提供基础组件. 我们在三层做了定制: 检索策略 (BM25+Dense+RRF+Cross-Encoder), 记忆系统 (Redis+遗忘+异步Worker), 评估体系 (RAGAS+31 题). 框架做基础设施, 业务逻辑自己写.
+它们解决的是搭积木的问题 — 提供现成的组件（ChromaDB 封装、Prompt 模板、文档加载器）, 让你快速拼出一条 RAG pipeline。但真正产生价值的地方是关键节点上的定制。
+
+1. **检索策略**: LangChain 的 as_retriever() 只调 ChromaDB similarity_search, 一条腿走路。我们手写了 BM25 + 稠密向量 + RRF 融合 + Cross-Encoder 精排。法律检索同时需要精确匹配条款编号和语义匹配同义表述。
+
+2. **记忆系统**: LangChain 自带的 ConversationBufferMemory 只是把所有历史拼进 prompt, 不做分层、不做摘要压缩、不做遗忘衰减。我们手写了三层记忆（短期原文→中期 LLM 摘要→长期向量 + 遗忘曲线）。
+
+3. **评测体系**: LangChain 不负责评测。RAGAS 框架能跑分, 但 Golden Test Set（题、答案、context）全是业务层的功夫。
+
+**结论**: LangChain/LlamaIndex 当工具用, 不当框架用。省掉连 ChromaDB 怎么写这类体力活, 但核心问题（检索不准、记忆不强、怎么评估）框架不管, 得自己写。
 
 ## 学习建议
 
