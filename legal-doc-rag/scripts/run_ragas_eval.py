@@ -6,12 +6,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ragas import evaluate
 from ragas.dataset_schema import EvaluationDataset
-from ragas.metrics import faithfulness, answer_relevancy, context_precision, context_recall
+from ragas.metrics import Faithfulness, AnswerRelevancy, ContextPrecision, ContextRecall
 
 env_path = Path(__file__).resolve().parent.parent / '.env'
 if env_path.exists(): load_dotenv(str(env_path))
 API_KEY = os.getenv('LLM_API_KEY', '')
 BASE_URL = os.getenv('LLM_BASE_URL', 'https://api.deepseek.com/v1')
+os.environ['OPENAI_API_KEY'] = API_KEY
+os.environ['OPENAI_BASE_URL'] = BASE_URL
 
 TEST_QUESTIONS = [
   {
@@ -85,16 +87,20 @@ def run_eval():
     print(f'  [{i}] {q[:40]}...')
     a = generate_answer(q, ctx)
     if a: print(f'    {a[:60]}...')
-    s.append({'question': q, 'answer': a, 'contexts': ctx, 'ground_truth': gt})
+    s.append({'user_input': q, 'response': a, 'retrieved_contexts': ctx, 'reference': gt})
   print(chr(10) + 'Running RAGAS...')
   ds = EvaluationDataset.from_list(s)
-  r = evaluate(ds, metrics=[faithfulness, answer_relevancy, context_precision, context_recall])
+  from langchain_openai import ChatOpenAI
+  from ragas.llms import LangchainLLMWrapper
+  ragas_llm = LangchainLLMWrapper(ChatOpenAI(model="deepseek-chat", openai_api_key=API_KEY, openai_api_base=BASE_URL, temperature=0.1))
+  r = evaluate(ds, metrics=[Faithfulness(llm=ragas_llm), AnswerRelevancy(llm=ragas_llm), ContextPrecision(llm=ragas_llm), ContextRecall(llm=ragas_llm)])
   print(chr(10) + '=== Report ===')
   for k, l in {'faithfulness': 'Faithfulness', 'answer_relevancy': 'Relevancy', 'context_precision': 'Precision', 'context_recall': 'Recall'}.items():
-    v = r.get(k, 0)
+    v = r[k] if isinstance(r, dict) else getattr(r, k, 0)
     print(f'  {l}: {float(v):.4f}' if isinstance(v, (int, float)) else f'  {l}: {v}')
   with open(Path(__file__).resolve().parent.parent / 'evaluation_report.json', 'w', encoding='utf-8') as fo:
-    json.dump({'metrics': {k: float(r[k]) if isinstance(r.get(k), (int, float)) else str(r.get(k, 0)) for k in ['faithfulness', 'answer_relevancy', 'context_precision', 'context_recall']}, 'total': len(s)}, fo, ensure_ascii=False, indent=2)
+    rd = dict(r) if hasattr(r, 'items') else {k: getattr(r, k, 0) for k in ['faithfulness', 'answer_relevancy', 'context_precision', 'context_recall']}
+    json.dump({'metrics': {k: float(rd[k]) if isinstance(rd.get(k), (int, float)) else str(rd.get(k, 0)) for k in ['faithfulness', 'answer_relevancy', 'context_precision', 'context_recall']}, 'total': len(s)}, fo, ensure_ascii=False, indent=2)
   print('Saved: evaluation_report.json')
 
 if __name__ == '__main__': run_eval()
