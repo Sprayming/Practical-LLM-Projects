@@ -42,6 +42,8 @@ if "total_tokens" not in st.session_state:
     st.session_state.total_tokens = 0
 if "summary" not in st.session_state:
     st.session_state.summary = ""
+if "tenant_id" not in st.session_state:
+    st.session_state.tenant_id = "default"
 
 # 页面设置
 st.set_page_config(page_title="Legal Document RAG", layout="wide")
@@ -49,6 +51,13 @@ st.set_page_config(page_title="Legal Document RAG", layout="wide")
 # 侧边栏
 with st.sidebar:
     st.header("Legal Document RAG")
+    tenant_id = st.text_input("Tenant ID", value=st.session_state.tenant_id, key="tenant_input")
+    if tenant_id != st.session_state.tenant_id:
+        st.session_state.tenant_id = tenant_id
+        st.session_state.messages = []
+        st.session_state.summary = ""
+        st.session_state.total_tokens = 0
+        st.rerun()
     uploaded_file = st.file_uploader("Upload PDF", type="pdf")
     st.divider()
     st.subheader("Token Stats")
@@ -122,7 +131,7 @@ if uploaded_file:
             cache_folder="./model_cache"
         )
         st.session_state.memory = MemorySystem(
-            st.session_state.embedder, "./memory_db"
+            st.session_state.embedder, "./memory_db", tenant_id=st.session_state.tenant_id
         )
 if "vector_store" not in st.session_state:
         if uploaded_file is None:
@@ -197,7 +206,7 @@ if prompt := st.chat_input("Ask a legal question:"):
                 citation_tracker.add_sources(docs_result)
                 context = citation_tracker.format_context()
                 citations_section = citation_tracker.format_citations()
-                profile_text = st.session_state.memory.profile.to_prompt_text("default")
+                profile_text = st.session_state.memory.profile.to_prompt_text(st.session_state.tenant_id)
         history = st.session_state.summary
         if history:
             history = "History: " + history + "\n\n"
