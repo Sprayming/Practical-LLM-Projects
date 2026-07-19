@@ -204,6 +204,33 @@ PyMuPDF 提取 PDF 中的图片. Vision LLM (通过 API) 对图片生成描述. 
 Golden Test Set 的设计. 不同人写的 ground truth 标准不一致导致 RAGAS 评分波动. 统一模板: question / ground_truth / source_doc / difficulty. 评估体系稳定后才开始做优化.
 
 ### Q8: 为什么不用 LangChain/LlamaIndex 端到端?
+它们解决的是搭积木的问题 — 提供现成的组件（ChromaDB 封装、Prompt 模板、文档加载器），让你快速拼出一条 RAG pipeline。但真正产生价值的地方是关键节点上的定制。
+
+1. **检索策略**: LangChain 的 as_retriever() 只调 ChromaDB similarity_search，一条腿走路。我们手写了 BM25 + 稠密向量 + RRF 融合 + Cross-Encoder 精排。法律检索同时需要精确匹配条款编号和语义匹配同义表述。
+
+2. **记忆系统**: LangChain 自带的 ConversationBufferMemory 只是把所有历史拼进 prompt，不做分层、不做摘要压缩、不做遗忘衰减。我们手写了三层记忆（短期原文→中期 LLM 摘要→长期向量 + 遗忘曲线）。
+
+3. **评测体系**: LangChain 不负责评测。RAGAS 框架能跑分，但 Golden Test Set（题、答案、context）全是业务层的功夫。
+
+**结论**: LangChain/LlamaIndex 当工具用，不当框架用。省掉连 ChromaDB 怎么写这类体力活，但核心问题（检索不准、记忆不强、怎么评估）框架不管，得自己写。
+
+### Q9: embedding 模型怎么选？为什么从 text2vec 换成了豆包？
+三种方式，改一行代码就能切：
+
+| 方式 | 示例 | 费用 | 备注 |
+|------|------|------|------|
+| 本地模型 | text2vec-base-chinese / BGE | 免费 | 需下载，离线可用 |
+| 在线 API | 豆包 / OpenAI | 按量付费 | 即开即用，无网络问题 |
+| 自定义 | DirectEmbed 包装任意 API | 视 API 而定 | 接口统一，可灵活切换 |
+
+实际项目中的选型原则：
+
+1. **原型期**: 在线 API 最快跑通。我们最初用 text2vec 本地模型，但服务器 SSL 证书问题连不上 huggingface，换成了豆包 embedding API。这是生产中的常见策略降级。
+2. **上线后**: 如果 QPS 高，切到本地 BGE 模型降本。如果 query 主要是法律条款精确匹配，BGE 可能比通用 embedding 更合适。
+3. **维度不是越高越好**: 2560 维对比 768 维，对单文档问答场景没有肉眼可见的提升，但内存占用高 3 倍。对 10 万级以上的知识库有明显成本差异。
+4. **很少自己训**: 除非有几十万条标注好的三元组（问题，相关文档，不相关文档），否则直接训不如拿 BGE 微调。
+
+**面试答案**: embedding 选型是个 trade-off — 要离线/在线、免费/付费、通用/领域、高维/低维。关键是你做过取舍，不是背参数表。
 它们解决的是搭积木的问题 — 提供现成的组件（ChromaDB 封装、Prompt 模板、文档加载器）, 让你快速拼出一条 RAG pipeline。但真正产生价值的地方是关键节点上的定制。
 
 1. **检索策略**: LangChain 的 as_retriever() 只调 ChromaDB similarity_search, 一条腿走路。我们手写了 BM25 + 稠密向量 + RRF 融合 + Cross-Encoder 精排。法律检索同时需要精确匹配条款编号和语义匹配同义表述。
