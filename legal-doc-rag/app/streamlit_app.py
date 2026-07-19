@@ -18,8 +18,6 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 import requests, streamlit as st
-from PyPDF2 import PdfReader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from app.retrieval.hybrid_retriever import HybridRetriever
@@ -130,15 +128,18 @@ if "vector_store" not in st.session_state:
         if uploaded_file is None:
             st.info("Please upload a PDF file to begin")
             st.stop()
-        with st.spinner("Parsing PDF..."):
-            reader = PdfReader(uploaded_file)
-            text = "\n".join([(page.extract_text() or "") for page in reader.pages])
-            if not text.strip():
+        with st.spinner("Parsing PDF with multimodal pipeline..."):
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                tmp.write(uploaded_file.read())
+                tmp_path = tmp.name
+            pipeline = MultimodalPipeline()
+            multimodal_chunks = pipeline.process(tmp_path)
+            os.unlink(tmp_path)
+            if not multimodal_chunks:
                 st.error("No text could be extracted")
                 st.stop()
-        with st.spinner("Chunking text..."):
-            splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50, separators=["\n\n", "\n", ".", "。"])
-            chunks = splitter.split_text(text)
+            chunks = [mc.text for mc in multimodal_chunks]
         with st.spinner("Building vector store..."):
             embed = HuggingFaceEmbeddings(model_name="shibing624/text2vec-base-chinese", cache_folder="./model_cache")
             st.session_state.vector_store = Chroma.from_texts(
