@@ -6,126 +6,95 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ragas import evaluate
 from ragas.dataset_schema import EvaluationDataset
-from ragas.metrics.collections import faithfulness, answer_relevancy, context_precision, context_recall
+from ragas.metrics import faithfulness, answer_relevancy, context_precision, context_recall
 
-env_path = Path(__file__).resolve().parent.parent / ".env"
-if env_path.exists():
-    load_dotenv(str(env_path))
-
-API_KEY = os.getenv("LLM_API_KEY", "")
-BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1")
+env_path = Path(__file__).resolve().parent.parent / '.env'
+if env_path.exists(): load_dotenv(str(env_path))
+API_KEY = os.getenv('LLM_API_KEY', '')
+BASE_URL = os.getenv('LLM_BASE_URL', 'https://api.deepseek.com/v1')
 
 TEST_QUESTIONS = [
   {
-    "question": "??????????????????",
+    "question": "建立劳动关系需要签订什么形式的合同？",
     "contexts": [
-      "????????????????????????????????????????????????????????????????????????????????????????????????????????????"
+      "《劳动合同法》第十条规定：建立劳动关系，应当订立书面劳动合同。"
     ],
-    "ground_truth": "???????????"
+    "ground_truth": "应当订立书面劳动合同。"
   },
   {
-    "question": "???????????????????????????",
+    "question": "已建立劳动关系但未同时订立书面合同的，应在多久内补签？",
     "contexts": [
-      "???????????????????????????????????????????????????????"
+      "《劳动合同法》第十条：应当自用工之日起一个月内订立书面劳动合同。"
     ],
-    "ground_truth": "???????????"
+    "ground_truth": "自用工之日起一个月内。"
   },
   {
-    "question": "?????????????",
+    "question": "什么是无固定期限劳动合同？",
     "contexts": [
-      "????????????????????????????????????????????????????????????????????????????"
+      "《劳动合同法》第十四条：无固定期限劳动合同，是指用人单位与劳动者约定无确定终止时间的劳动合同。"
     ],
-    "ground_truth": "?????????????"
+    "ground_truth": "无确定终止时间的劳动合同。"
   },
   {
-    "question": "??????????????????????????????",
+    "question": "劳动者在同一单位连续工作满多少年可以要求订立无固定期限合同？",
     "contexts": [
-      "????????????????????????????????????????????????????????????????????????????????????"
+      "《劳动合同法》第十四条：劳动者在该用人单位连续工作满十年的，应当订立无固定期限劳动合同。"
     ],
-    "ground_truth": "????????"
+    "ground_truth": "连续工作满十年。"
   },
   {
-    "question": "???????????????????????",
+    "question": "连续订立两次固定期限劳动合同后续签有什么规定？",
     "contexts": [
-      "????????????????????????????????????????????????????????????????????????????????????????????????????"
+      "《劳动合同法》第十四条：连续订立二次固定期限劳动合同，续订的应当订立无固定期限劳动合同。"
     ],
-    "ground_truth": "??????????????"
+    "ground_truth": "应当订立无固定期限劳动合同。"
   },
   {
-    "question": "????????????",
+    "question": "经济补偿按什么标准计算？",
     "contexts": [
-      "???????????????????????????????????????????????????????????????????????????????????????????????"
+      "《劳动合同法》第四十七条：经济补偿按劳动者在本单位工作的年限，每满一年支付一个月工资。"
     ],
-    "ground_truth": "??????????????????????????"
+    "ground_truth": "每满一年支付一个月工资。"
   }
 ]
 
 def call_llm(prompt, timeout=30):
-    if not API_KEY:
-        return ""
-    try:
-        resp = requests.post(
-            f"{BASE_URL}/chat/completions",
-            headers={"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"},
-            json={"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}], "temperature": 0.1},
-            timeout=timeout, verify=False,
-        )
-        if resp.status_code == 200:
-            data = resp.json()
-            if isinstance(data, dict) and data.get("choices") and data["choices"][0].get("message"):
-                return data["choices"][0]["message"]["content"] or ""
-        return ""
-    except Exception as e:
-        return ""
+  if not API_KEY: return ''
+  try:
+    r = requests.post(f'{BASE_URL}/chat/completions',
+      headers={'Authorization': f'Bearer {API_KEY}', 'Content-Type': 'application/json'},
+      json={'model': 'deepseek-chat', 'messages': [{'role': 'user', 'content': prompt}], 'temperature': 0.1},
+      timeout=timeout, verify=False)
+    if r.status_code == 200:
+      d = r.json()
+      if isinstance(d, dict) and d.get('choices') and d['choices'][0].get('message'):
+        return d['choices'][0]['message']['content'] or ''
+    return ''
+  except: return ''
 
-def generate_answer(question, contexts):
-    if not contexts:
-        return "No relevant context found."
-    context = "\n\n".join(contexts[:3])
-    prompt = (
-        "You are a legal expert. Answer based on the provided text.\n\n"
-        f"Reference text:\n{context}\n\n"
-        f"Question: {question}\n\n"
-        "Requirements: Be concise. Cite relevant clauses. If unsure, say so."
-    )
-    return call_llm(prompt)
+def generate_answer(q, ctxs):
+  if not ctxs: return 'No context.'
+  return call_llm('You are a legal expert. Answer based on:\n\n' + chr(10).join(ctxs[:3]) + '\n\nQuestion: ' + q)
 
-def run_evaluation():
-    if not API_KEY:
-        print("WARNING: LLM_API_KEY not set in .env")
-        print("Evaluation will use empty answers.")
-    samples = []
-    print(f"Evaluating {len(TEST_QUESTIONS)} questions...")
-    for i, item in enumerate(TEST_QUESTIONS, 1):
-        q = item["question"]
-        contexts = item.get("contexts", [])
-        gt = item.get("ground_truth", "")
-        print(f"  [{i}/{len(TEST_QUESTIONS)}] {q[:60]}...")
-        answer = generate_answer(q, contexts) if API_KEY else ""
-        if answer:
-            print(f"    Answer: {answer[:80]}...")
-        samples.append({"question": q, "answer": answer, "contexts": contexts, "ground_truth": gt})
+def run_eval():
+  if not API_KEY: print('WARNING: LLM_API_KEY not set'); return
+  s = []
+  print(f'Evaluating {len(TEST_QUESTIONS)} questions...')
+  for i, item in enumerate(TEST_QUESTIONS, 1):
+    q = item['question']; ctx = item.get('contexts', []); gt = item.get('ground_truth', '')
+    print(f'  [{i}] {q[:40]}...')
+    a = generate_answer(q, ctx)
+    if a: print(f'    {a[:60]}...')
+    s.append({'question': q, 'answer': a, 'contexts': ctx, 'ground_truth': gt})
+  print(chr(10) + 'Running RAGAS...')
+  ds = EvaluationDataset.from_list(s)
+  r = evaluate(ds, metrics=[faithfulness, answer_relevancy, context_precision, context_recall])
+  print(chr(10) + '=== Report ===')
+  for k, l in {'faithfulness': 'Faithfulness', 'answer_relevancy': 'Relevancy', 'context_precision': 'Precision', 'context_recall': 'Recall'}.items():
+    v = r.get(k, 0)
+    print(f'  {l}: {float(v):.4f}' if isinstance(v, (int, float)) else f'  {l}: {v}')
+  with open(Path(__file__).resolve().parent.parent / 'evaluation_report.json', 'w', encoding='utf-8') as fo:
+    json.dump({'metrics': {k: float(r[k]) if isinstance(r.get(k), (int, float)) else str(r.get(k, 0)) for k in ['faithfulness', 'answer_relevancy', 'context_precision', 'context_recall']}, 'total': len(s)}, fo, ensure_ascii=False, indent=2)
+  print('Saved: evaluation_report.json')
 
-    if not API_KEY:
-        print("\nSet LLM_API_KEY in .env and run again for real scores.")
-        return
-
-    print("\nRunning RAGAS evaluation...")
-    dataset = EvaluationDataset.from_list(samples)
-    result = evaluate(dataset, metrics=[faithfulness, answer_relevancy, context_precision, context_recall])
-
-    print("\n=== Evaluation Report ===")
-    labels = {"faithfulness": "Faithfulness", "answer_relevancy": "Answer Relevancy", "context_precision": "Context Precision", "context_recall": "Context Recall"}
-    for key, label in labels.items():
-        val = result.get(key, 0)
-        print(f"  {label}: {float(val):.4f}" if isinstance(val, (int, float)) else f"  {label}: {val}")
-
-    report_path = Path(__file__).resolve().parent.parent / "evaluation_report.json"
-    with open(report_path, "w", encoding="utf-8") as f:
-        metrics = {k: float(result[k]) if isinstance(result.get(k), (int, float)) else str(result.get(k, 0)) for k in labels}
-        json.dump({"metrics": metrics, "total_questions": len(samples)}, f, ensure_ascii=False, indent=2)
-    print(f"\nReport saved: {report_path}")
-    return result
-
-if __name__ == "__main__":
-    run_evaluation()
+if __name__ == '__main__': run_eval()
