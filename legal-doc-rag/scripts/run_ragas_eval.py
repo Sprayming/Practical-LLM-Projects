@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-import json, os, sys, requests
+import os, ssl
+os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
+ssl._create_default_https_context = ssl._create_unverified_context
+import json, sys, requests
 from pathlib import Path
 from dotenv import load_dotenv
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -7,6 +10,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from ragas import evaluate
 from ragas.dataset_schema import EvaluationDataset
 from ragas.metrics import Faithfulness, AnswerRelevancy, ContextPrecision, ContextRecall
+from ragas.embeddings import LangchainEmbeddingsWrapper
+from langchain_community.embeddings import HuggingFaceEmbeddings
 
 env_path = Path(__file__).resolve().parent.parent / '.env'
 if env_path.exists(): load_dotenv(str(env_path))
@@ -93,7 +98,9 @@ def run_eval():
   from langchain_openai import ChatOpenAI
   from ragas.llms import LangchainLLMWrapper
   ragas_llm = LangchainLLMWrapper(ChatOpenAI(model="deepseek-chat", openai_api_key=API_KEY, openai_api_base=BASE_URL, temperature=0.1))
-  r = evaluate(ds, metrics=[Faithfulness(llm=ragas_llm), AnswerRelevancy(llm=ragas_llm), ContextPrecision(llm=ragas_llm), ContextRecall(llm=ragas_llm)])
+  hf_emb = HuggingFaceEmbeddings(model_name="shibing624/text2vec-base-chinese", cache_folder="./model_cache")
+  ragas_emb = LangchainEmbeddingsWrapper(hf_emb)
+  r = evaluate(ds, metrics=[Faithfulness(llm=ragas_llm), AnswerRelevancy(llm=ragas_llm, embeddings=ragas_emb), ContextPrecision(llm=ragas_llm), ContextRecall(llm=ragas_llm)])
   print(chr(10) + '=== Report ===')
   for k, l in {'faithfulness': 'Faithfulness', 'answer_relevancy': 'Relevancy', 'context_precision': 'Precision', 'context_recall': 'Recall'}.items():
     v = r[k] if isinstance(r, dict) else getattr(r, k, 0)
