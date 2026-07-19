@@ -145,10 +145,19 @@ streamlit run app/streamlit_app.py
 - [x] 异步 Shadow Worker (后台记忆整理)
 - [x] 遗忘机制 (艾宾浩斯曲线)
 - [x] Redis 容错 (内存回退)
-- [ ] 多租户隔离
-- [ ] RAGAS 离线评测
+- [x] 用户画像 ProfileStore (JSON, 置信度合并)
+- [x] 多租户隔离 (Sidebar Tenant ID, 独立记忆/画像)
+- [x] RAGAS 离线评测 (6 题 Golden Test Set)
+  - Faithfulness: 0.38 / AnswerRelevancy: 0.96
+  - ContextPrecision: 1.0 / ContextRecall: 1.0
 
 ## 更新日志
+
+### 2026-07-19: RAGAS 评测跑通 + ProfileStore + 多租户
+- RAGAS 评测跑通真实分数 (豆包 API + 豆包 embedding)
+- 新增 ProfileStore: 用户画像独立存储 (置信度加权合并)
+- 多租户隔离: Sidebar Tenant ID, 隔离记忆/N/画像
+- 修复 EvaluationResult 访问方式 (r.scores 而非 dict)
 
 ### 2026-07-19: 接通全部闲置模块
 - MultimodalPipeline: 替换 PyPDF2 + splitter (图文+OCR)
