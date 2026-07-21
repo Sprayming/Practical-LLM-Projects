@@ -1,0 +1,31 @@
+﻿# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# Git
+.git/
+.gitignore
+
+# 环境变量
+.env
+*.bak
+*.orig
+
+# 本地数据卷（Docker 中用 volume 挂载）
+memory_db/
+model_cache/
+data/
+chroma_db/
+
+# IDE
+.idea/
+.vscode/
+
+# 测试文件（不应进镜像）
+test_*.py
+run_eval.py
+
+# OS
+.DS_Store
+Thumbs.db
