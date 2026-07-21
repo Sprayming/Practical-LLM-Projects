@@ -24,6 +24,9 @@ from app.retrieval.hybrid_retriever import HybridRetriever
 from app.retrieval.citation import CitationTracker
 from app.retrieval.query_rewriter import QueryRewriter
 from app.observability.tracker import TraceContext, get_trace_store
+from app.observability.structured_logger import StructuredLogger
+from app.memory.conversation_store import ConversationStore
+from app.retrieval.cache import QueryCache
 
 # 加载环境变量
 env_path = Path(__file__).resolve().parent.parent / ".env"
@@ -290,6 +293,41 @@ Requirements: Cite relevant clauses using [source:N] notation. If the text doesn
 {profile_text}\n\n{citations_section}"""
     # 构建 Prompt
         input_tokens = count_tokens(full_prompt)
+        import time as _time
+        _query_start = _time.time()
+        cached_answer = query_cache.get(full_prompt)
+        if cached_answer:
+            output_tokens = count_tokens(cached_answer)
+            total = input_tokens + output_tokens
+            st.session_state.last_tokens = total
+            st.session_state.total_tokens += total
+            trace.set_tokens(total)
+            trace.end_span()
+            trace.print_summary()
+            get_trace_store().save(trace)
+            placeholder.markdown(cached_answer + f"
+
+---
+*Token: {input_tokens} in + {output_tokens} out = {total} (cached)*")
+            fb_key = "fb_" + str(len(st.session_state.messages))
+            c1, c2 = st.columns([1, 1])
+            with c1:
+                if st.button("👍 有用", key=fb_key + "_up"):
+                    _save_feedback(prompt, cached_answer, "up")
+                    st.toast("✅ 感谢反馈！")
+            with c2:
+                if st.button("👎 没用", key=fb_key + "_down"):
+                    _save_feedback(prompt, cached_answer, "down")
+                    st.toast("✅ 感谢反馈！")
+            st.session_state.messages.append({"role": "assistant", "content": cached_answer})
+            st.session_state.memory.add("assistant", cached_answer)
+            st.session_state.memory.extract_entities(prompt, cached_answer, memory_llm)
+            latency_ms = int((_time.time() - _query_start) * 1000)
+            logger.info("query", question=prompt, answer_len=len(cached_answer), tokens=total, latency_ms=latency_ms, cache_hit=True)
+            conv_id = conversation_store.save(st.session_state.messages, conv_id=getattr(st.session_state, "conv_id", None))
+            st.session_state.conv_id = conv_id
+            st.stop()
+
         try:
     # 调用 DeepSeek API
             resp = requests.post(
