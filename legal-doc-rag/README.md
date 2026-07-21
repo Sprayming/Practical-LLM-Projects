@@ -358,3 +358,20 @@ docker compose down    # 停止
 ### 18. 用户反馈 (streamlit_app.py)
 改动: 每条回答后增加有用/没用按钮, 记录到 feedback_log.json
 原因: 收集反馈持续改进 RAG
+
+
+
+
+
+
+
+
+### 19. CI/CD (GitHub Actions)
+改动: 新增 GitHub Actions CI 工作流
+原因: 自动语法检查 + Golden Test Set 验证
+面试可能问: CI 跑什么检查? 答: 语法检查和测试集验证
+
+### 20. 健康检查 (healthcheck.py + docker-compose.yml)
+改动: 新增 Docker 健康检查
+原因: 容器编排需要健康检查
+面试可能问: 健康检查怎么实现? 答: TCP 连接检测 port 8501
