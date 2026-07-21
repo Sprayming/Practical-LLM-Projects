@@ -13,6 +13,12 @@ services:
       timeout: 3s
       retries: 5
     restart: unless-stopped
+    healthcheck:
+      test: python /app/healthcheck.py
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  
 
   app:
     build: .
@@ -32,6 +38,12 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: python /app/healthcheck.py
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  
 
 volumes:
   redis_data:
