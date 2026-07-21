@@ -375,3 +375,28 @@ docker compose down    # 停止
 改动: 新增 Docker 健康检查
 原因: 容器编排需要健康检查
 面试可能问: 健康检查怎么实现? 答: TCP 连接检测 port 8501
+
+
+### 21. 结构化日志 (app/observability/structured_logger.py)
+改动: 新增 JSON 结构化日志模块, 集成到主应用
+原因: 生产环境需要可搜索、可聚合的日志, RotatingFileHandler 自动轮转
+文件:
+  - app/observability/structured_logger.py: 日志类, JSON 格式, 支持 RotatingFileHandler
+  - streamlit_app.py: 在 query 流程中调用 logger.info()
+面试可能问: 为什么不用 print? 答: print 无法按照级别过滤, 不支持结构化输出, RotatingFileHandler 防止日志撑爆磁盘
+
+### 22. 对话持久化 (app/memory/conversation_store.py)
+改动: 新增对话历史持久化到文件, 每次问答后自动保存
+原因: 用户对话记录需要持久化保存, 支持断点续聊和历史追溯
+文件:
+  - app/memory/conversation_store.py: 以 JSON 格式保存对话到 conversations/ 目录
+  - streamlit_app.py: 在问答流程结束后调用 conversation_store.save()
+面试可能问: 为什么不用数据库? 答: 文件存储对单机部署足够, JSON 便于人工查看和调试
+
+### 23. 查询缓存 (app/retrieval/cache.py)
+改动: 新增查询结果缓存, 24h TTL, MD5 作为 key
+原因: 相同问题的重复查询直接返回缓存结果, 减少 API 调用次数和延迟
+文件:
+  - app/retrieval/cache.py: 文件级缓存, MD5 key, 24h 过期, 自动清理
+  - streamlit_app.py: 在查询缓存 hit 时直接返回, miss 时请求 API 后写入缓存
+面试可能问: 缓存过期策略? 答: 24h TTL, 读时惰性删除, 可扩展 LRU

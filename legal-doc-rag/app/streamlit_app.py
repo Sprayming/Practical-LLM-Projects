@@ -64,6 +64,11 @@ if APP_PASSWORD:
                 st.error("密码错误")
         st.stop()
 
+        # 初始化生产组件（结构化日志、对话持久化、查询缓存）
+        logger = StructuredLogger("app")
+        conversation_store = ConversationStore()
+        query_cache = QueryCache()
+
 
 
 # 侧边栏
@@ -305,10 +310,7 @@ Requirements: Cite relevant clauses using [source:N] notation. If the text doesn
             trace.end_span()
             trace.print_summary()
             get_trace_store().save(trace)
-            placeholder.markdown(cached_answer + f"
-
----
-*Token: {input_tokens} in + {output_tokens} out = {total} (cached)*")
+            placeholder.markdown(cached_answer + f"\n\n---\n*Token: {input_tokens} in + {output_tokens} out = {total} (cached)*")
             fb_key = "fb_" + str(len(st.session_state.messages))
             c1, c2 = st.columns([1, 1])
             with c1:
@@ -353,23 +355,27 @@ Requirements: Cite relevant clauses using [source:N] notation. If the text doesn
                 trace.end_span()
                 trace.print_summary()
                 get_trace_store().save(trace)
+                # 生产集成：缓存 + 日志 + 对话持久化
+                query_cache.set(full_prompt, answer)
+                latency_ms = int((_time.time() - _query_start) * 1000)
+                logger.info("query", question=prompt, answer_len=len(answer), tokens=total, latency_ms=latency_ms, cache_hit=False)
+                conv_id = conversation_store.save(st.session_state.messages, conv_id=getattr(st.session_state, "conv_id", None))
+                st.session_state.conv_id = conv_id
                 placeholder.markdown(answer + f"\n\n---\n*Token: {input_tokens} in + {output_tokens} out = {total}*")
-            # 用户反馈
-            fb_key = f"fb_{len(st.session_state.messages)}"
-            c1, c2 = st.columns([1, 1])
-            with c1:
-                if st.button("\U0001f44d 有用", key=f"{fb_key}_up"):
-                    _save_feedback(prompt, answer, "up")
-                    st.toast("\u2705 \u611f\u8c22\u53cd\u9988\uff01")
-            with c2:
-                if st.button("\U0001f44e 没用", key=f"{fb_key}_down"):
-                    _save_feedback(prompt, answer, "down")
-                    st.toast("\u2705 \u611f\u8c22\u53cd\u9988\uff01")
-)
+                # 用户反馈
+                fb_key = f"fb_{len(st.session_state.messages)}"
+                c1, c2 = st.columns([1, 1])
+                with c1:
+                    if st.button("\U0001f44d \u6709\u7528", key=f"{fb_key}_up"):
+                        _save_feedback(prompt, answer, "up")
+                        st.toast("\u2705 \u611f\u8c22\u53cd\u9988\uff01")
+                with c2:
+                    if st.button("\U0001f44e \u6ca1\u7528", key=f"{fb_key}_down"):
+                        _save_feedback(prompt, answer, "down")
+                        st.toast("\u2705 \u611f\u8c22\u53cd\u9988\uff01")
                 st.session_state.messages.append({"role": "assistant", "content": answer})
                 st.session_state.memory.add("assistant", answer)
                 # 影子提取：后台异步更新用户画像（不阻塞对话）
-    # 影子提取：异步更新画像
                 st.session_state.memory.extract_entities(prompt, answer, memory_llm)
                 if len(st.session_state.messages) >= 8:
                     old = st.session_state.messages[:-6]

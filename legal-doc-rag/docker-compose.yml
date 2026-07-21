@@ -13,11 +13,6 @@ services:
       timeout: 3s
       retries: 5
     restart: unless-stopped
-    healthcheck:
-      test: python /app/healthcheck.py
-      interval: 30s
-      timeout: 5s
-      retries: 3
   
 
   app:
@@ -34,6 +29,9 @@ services:
       - model_cache:/app/model_cache
       - memory_db:/app/memory_db
       - data_files:/app/data
+      - logs:/app/logs
+      - conversations:/app/conversations
+      - cache:/app/cache
     depends_on:
       redis:
         condition: service_healthy
@@ -50,3 +48,6 @@ volumes:
   model_cache:
   memory_db:
   data_files:
+  logs:
+  conversations:
+  cache:
