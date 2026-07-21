@@ -19,14 +19,23 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 import requests, streamlit as st
 from langchain_community.vectorstores import Chroma
-from langchain_huggingface import HuggingFaceEmbeddings
+from app.processing.multimodal_pipeline import MultimodalPipeline
+from openai import OpenAI
+
+class DirectEmbed:
+    def __init__(self, api_key, base_url, model):
+        self._client = OpenAI(api_key=api_key, base_url=base_url)
+        self._model = model
+    def embed_documents(self, texts):
+        resp = self._client.embeddings.create(input=texts, model=self._model)
+        return [d.embedding for d in resp.data]
+    def embed_query(self, text):
+        resp = self._client.embeddings.create(input=text, model=self._model)
+        return resp.data[0].embedding
 from app.retrieval.hybrid_retriever import HybridRetriever
 from app.retrieval.citation import CitationTracker
 from app.retrieval.query_rewriter import QueryRewriter
 from app.observability.tracker import TraceContext, get_trace_store
-from app.observability.structured_logger import StructuredLogger
-from app.memory.conversation_store import ConversationStore
-from app.retrieval.cache import QueryCache
 
 # 加载环境变量
 env_path = Path(__file__).resolve().parent.parent / ".env"
@@ -45,67 +54,40 @@ if "total_tokens" not in st.session_state:
     st.session_state.total_tokens = 0
 if "summary" not in st.session_state:
     st.session_state.summary = ""
+if "uploaded_docs" not in st.session_state:
+    st.session_state.uploaded_docs = []
 if "tenant_id" not in st.session_state:
     st.session_state.tenant_id = "default"
 
 # 页面设置
 st.set_page_config(page_title="Legal Document RAG", layout="wide")
-# 生产环境认证（可选, 通过 APP_PASSWORD 环境变量开启）
-APP_PASSWORD = os.getenv("APP_PASSWORD", "")
-if APP_PASSWORD:
-    if not st.session_state.get("authenticated"):
-        st.title("Legal Document RAG")
-        pw = st.text_input("请输入访问密码", type="password")
-        if st.button("登录"):
-            if pw == APP_PASSWORD:
-                st.session_state.authenticated = True
-                st.rerun()
-            else:
-                st.error("密码错误")
-        st.stop()
-
-        # 初始化生产组件（结构化日志、对话持久化、查询缓存）
-        logger = StructuredLogger("app")
-        conversation_store = ConversationStore()
-        query_cache = QueryCache()
-
-
+st.markdown("""<style>.stApp {background:#f5f5f5;} .stChatMessage {background:white;border-radius:8px;padding:12px;margin:8px 0;box-shadow:0 1px 3px rgba(0,0,0,0.1);} .stChatFade {display:none;} h1,h2,h3 {color:#1a237e!important;} section[data-testid="stSidebar"] {width:320px!important;} .stButton button {background:#1a237e;color:white;border-radius:6px;} </style>""", unsafe_allow_html=True)
 
 # 侧边栏
 with st.sidebar:
-    st.header("Legal Document RAG")
-    tenant_id = st.text_input("Tenant ID", value=st.session_state.tenant_id, key="tenant_input")
+    st.header("法律文书 RAG 系统")
+    tenant_id = st.text_input("租户 ID", value=st.session_state.tenant_id, key="tenant_input")
     if tenant_id != st.session_state.tenant_id:
         st.session_state.tenant_id = tenant_id
         st.session_state.messages = []
         st.session_state.summary = ""
         st.session_state.total_tokens = 0
         st.rerun()
-    uploaded_file = st.file_uploader("Upload PDF", type="pdf")
+    uploaded_file = st.file_uploader("上传 PDF 文件", type="pdf")
     st.divider()
-    st.subheader("Token Stats")
+    st.subheader("Token 统计")
     col1, col2 = st.columns(2)
-    col1.metric("Current", st.session_state.get("last_tokens", 0))
-    col2.metric("Total", st.session_state.total_tokens)
-    if st.button("Clear History"):
+    col1.metric("当前", st.session_state.get("last_tokens", 0))
+    col2.metric("总计", st.session_state.total_tokens)
+    if st.button("清除历史"):
         st.session_state.messages = []
         st.session_state.summary = ""
         st.session_state.total_tokens = 0
     # 刷新页面
         st.rerun()
-    st.caption("Rounds: " + str(len(st.session_state.messages) // 2))
+    st.caption("会话轮数: " + str(len(st.session_state.messages) // 2))
 
 # Token 计数
-
-def _save_feedback(query, answer, rating):
-    import json
-    fb = {"query": query[:100], "answer": answer[:100], "rating": rating, "timestamp": datetime.now().isoformat()}
-    path = "feedback_log.json"
-    data = json.loads(open(path, encoding="utf-8").read()) if os.path.exists(path) else []
-    data.append(fb)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
 def count_tokens(text: str) -> int:
     return len(TOKENIZER.encode(text))
 
@@ -134,80 +116,41 @@ def summarize_history(messages: list) -> str:
         return ""
 # Shadow LLM: for background async tasks (entity extraction, memory consolidation, etc.)
 def memory_llm(prompt: str) -> str:
-        placeholder.markdown("Thinking...")
-        # 流式输出: 逐字显示 LLM 回答
+    try:
         resp = requests.post(
             f"{DEEPSEEK_BASE_URL}/chat/completions",
             headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
-            json={
-                "model": "deepseek-chat",
-                "messages": [{"role": "user", "content": full_prompt}],
-                "temperature": 0.1,
-                "stream": True,
-            },
-            timeout=60, verify=False, stream=True,
+            json={"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}], "temperature": 0.1},
+            timeout=15, verify=False,
         )
         if resp.status_code == 200:
-            answer = ""
-            for chunk in resp.iter_lines():
-                if chunk:
-                    chunk_str = chunk.decode("utf-8")
-                    if chunk_str.startswith("data: "):
-                        chunk_data = chunk_str[6:]
-                        if chunk_data.strip() == "[DONE]":
-                            break
-                        try:
-                            import json
-                            delta = json.loads(chunk_data)["choices"][0]["delta"].get("content", "")
-                            if delta:
-                                answer += delta
-                                placeholder.markdown(answer + "▌")
-                        except Exception:
-                            pass
-            output_tokens = count_tokens(answer)
-            total = input_tokens + output_tokens
-            st.session_state.last_tokens = total
-            st.session_state.total_tokens += total
-            placeholder.markdown(answer + f"\n\n---\n*Token: {input_tokens} in + {output_tokens} out = {total}*")
-            st.session_state.messages.append({"role": "assistant", "content": answer})
-            st.session_state.memory.add("assistant", answer)
-            try:
-                if "memory" in st.session_state:
-                    def memory_llm(p):
-                        try:
-                            r = requests.post(f"{DEEPSEEK_BASE_URL}/chat/completions",
-                                headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
-                                json={"model": "deepseek-chat", "messages": [{"role": "user", "content": p}], "temperature": 0.1},
-                                timeout=15, verify=False)
-                            return r.json()["choices"][0]["message"]["content"] if r.status_code == 200 else ""
-                        except: return ""
-                    st.session_state.memory.async_consolidate(memory_llm)
-            except Exception:
-                pass
-        else:
-            placeholder.error(f"API error: {resp.status_code}")
+            data = resp.json()
+            if isinstance(data, dict) and data.get("choices") and data["choices"][0].get("message"):
+                return data["choices"][0]["message"]["content"] or ""
+        return ""
+    except:
         return ""
 
 
-st.title("Legal Document Q&A")
+st.title("法律文书智能问答")
 
 # 对话历史
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
+        if msg["role"] == "assistant" and msg.get("citations"):
+            with st.expander("????", expanded=False):
+                st.markdown(msg["citations"])
 
 if uploaded_file:
     if "embedder" not in st.session_state:
-        st.session_state.embedder = HuggingFaceEmbeddings(
-            model_name="shibing624/text2vec-base-chinese",
-            cache_folder="./model_cache"
-        )
+        st.session_state.embedder = DirectEmbed("df9c9b2d-35d9-4df6-b49d-f489708e1eab", "https://ark.cn-beijing.volces.com/api/v3/", "ep-m-20251117205847-trwgz")
         st.session_state.memory = MemorySystem(
             st.session_state.embedder, "./memory_db", tenant_id=st.session_state.tenant_id
         )
 if "vector_store" not in st.session_state:
         if uploaded_file is None:
-            st.info("Please upload a PDF file to begin")
+            st.info("请先上传一份 PDF 文件")
             st.stop()
         with st.spinner("Parsing PDF with multimodal pipeline..."):
             import tempfile
@@ -218,11 +161,13 @@ if "vector_store" not in st.session_state:
             multimodal_chunks = pipeline.process(tmp_path)
             os.unlink(tmp_path)
             if not multimodal_chunks:
-                st.error("No text could be extracted")
+                st.error("无法提取文本，请检查 PDF")
                 st.stop()
             chunks = [mc.text for mc in multimodal_chunks]
+            if uploaded_file.name not in st.session_state.uploaded_docs:
+                st.session_state.uploaded_docs.append(uploaded_file.name)
         with st.spinner("Building vector store..."):
-            embed = HuggingFaceEmbeddings(model_name="shibing624/text2vec-base-chinese", cache_folder="./model_cache")
+            embed = DirectEmbed("df9c9b2d-35d9-4df6-b49d-f489708e1eab", "https://ark.cn-beijing.volces.com/api/v3/", "ep-m-20251117205847-trwgz")
             st.session_state.vector_store = Chroma.from_texts(
                 texts=chunks, embedding=embed,
                 metadatas=[{"source": f"{uploaded_file.name} - chunk {i+1}"} for i in range(len(chunks))],
@@ -234,13 +179,13 @@ if "vector_store" not in st.session_state:
                 k=3,
                 use_reranker=False,
             )
-        st.success("Ready. Ask your question below.")
+        st.success("准备就绪，请在下方提问")
 
 # 用户输入
-if prompt := st.chat_input("Ask a legal question:"):
+if prompt := st.chat_input("请输入你的法律问题..."):
     # 输入长度限制
     if len(prompt) > 2000:
-        st.error("Input too long (max 2000 chars)")
+        st.error("输入过长（最大 2000 字符）")
         st.stop()
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.session_state.memory.add("user", prompt)
@@ -279,6 +224,7 @@ if prompt := st.chat_input("Ask a legal question:"):
                 context = citation_tracker.format_context()
                 citations_section = citation_tracker.format_citations()
                 profile_text = st.session_state.memory.profile.to_prompt_text(st.session_state.tenant_id)
+        st.session_state.profile_text = profile_text
         history = st.session_state.summary
         if history:
             history = "History: " + history + "\n\n"
@@ -298,38 +244,6 @@ Requirements: Cite relevant clauses using [source:N] notation. If the text doesn
 {profile_text}\n\n{citations_section}"""
     # 构建 Prompt
         input_tokens = count_tokens(full_prompt)
-        import time as _time
-        _query_start = _time.time()
-        cached_answer = query_cache.get(full_prompt)
-        if cached_answer:
-            output_tokens = count_tokens(cached_answer)
-            total = input_tokens + output_tokens
-            st.session_state.last_tokens = total
-            st.session_state.total_tokens += total
-            trace.set_tokens(total)
-            trace.end_span()
-            trace.print_summary()
-            get_trace_store().save(trace)
-            placeholder.markdown(cached_answer + f"\n\n---\n*Token: {input_tokens} in + {output_tokens} out = {total} (cached)*")
-            fb_key = "fb_" + str(len(st.session_state.messages))
-            c1, c2 = st.columns([1, 1])
-            with c1:
-                if st.button("👍 有用", key=fb_key + "_up"):
-                    _save_feedback(prompt, cached_answer, "up")
-                    st.toast("✅ 感谢反馈！")
-            with c2:
-                if st.button("👎 没用", key=fb_key + "_down"):
-                    _save_feedback(prompt, cached_answer, "down")
-                    st.toast("✅ 感谢反馈！")
-            st.session_state.messages.append({"role": "assistant", "content": cached_answer})
-            st.session_state.memory.add("assistant", cached_answer)
-            st.session_state.memory.extract_entities(prompt, cached_answer, memory_llm)
-            latency_ms = int((_time.time() - _query_start) * 1000)
-            logger.info("query", question=prompt, answer_len=len(cached_answer), tokens=total, latency_ms=latency_ms, cache_hit=True)
-            conv_id = conversation_store.save(st.session_state.messages, conv_id=getattr(st.session_state, "conv_id", None))
-            st.session_state.conv_id = conv_id
-            st.stop()
-
         try:
     # 调用 DeepSeek API
             resp = requests.post(
@@ -355,27 +269,11 @@ Requirements: Cite relevant clauses using [source:N] notation. If the text doesn
                 trace.end_span()
                 trace.print_summary()
                 get_trace_store().save(trace)
-                # 生产集成：缓存 + 日志 + 对话持久化
-                query_cache.set(full_prompt, answer)
-                latency_ms = int((_time.time() - _query_start) * 1000)
-                logger.info("query", question=prompt, answer_len=len(answer), tokens=total, latency_ms=latency_ms, cache_hit=False)
-                conv_id = conversation_store.save(st.session_state.messages, conv_id=getattr(st.session_state, "conv_id", None))
-                st.session_state.conv_id = conv_id
                 placeholder.markdown(answer + f"\n\n---\n*Token: {input_tokens} in + {output_tokens} out = {total}*")
-                # 用户反馈
-                fb_key = f"fb_{len(st.session_state.messages)}"
-                c1, c2 = st.columns([1, 1])
-                with c1:
-                    if st.button("\U0001f44d \u6709\u7528", key=f"{fb_key}_up"):
-                        _save_feedback(prompt, answer, "up")
-                        st.toast("\u2705 \u611f\u8c22\u53cd\u9988\uff01")
-                with c2:
-                    if st.button("\U0001f44e \u6ca1\u7528", key=f"{fb_key}_down"):
-                        _save_feedback(prompt, answer, "down")
-                        st.toast("\u2705 \u611f\u8c22\u53cd\u9988\uff01")
                 st.session_state.messages.append({"role": "assistant", "content": answer})
                 st.session_state.memory.add("assistant", answer)
                 # 影子提取：后台异步更新用户画像（不阻塞对话）
+    # 影子提取：异步更新画像
                 st.session_state.memory.extract_entities(prompt, answer, memory_llm)
                 if len(st.session_state.messages) >= 8:
                     old = st.session_state.messages[:-6]

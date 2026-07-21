@@ -238,6 +238,19 @@ class MemorySystem:
                 logger.info("Extracted {} entities for tenant {}", len(entities), self.tenant_id)
         except (json.JSONDecodeError, Exception) as e:
             logger.debug("Entity extraction skipped: {}", e)
+    def _restore_from_redis(self):
+        if not hasattr(self, "redis") or not self.redis.is_available():
+            return
+        try:
+            mid = self.redis.get_mid_term(self.session_id)
+            if mid:
+                self.mid_term = mid
+            short = self.redis.get_short_term(self.session_id)
+            if short:
+                self.short_term = short
+        except Exception as e:
+            logger.warning("Redis restore failed: {}", e)
+
     def clear_session(self):
         """清除当前会话记忆"""
         # 先清理旧 session 的 Redis 数据，再重置 ID
