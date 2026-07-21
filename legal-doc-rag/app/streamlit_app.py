@@ -47,6 +47,21 @@ if "tenant_id" not in st.session_state:
 
 # 页面设置
 st.set_page_config(page_title="Legal Document RAG", layout="wide")
+# 生产环境认证（可选, 通过 APP_PASSWORD 环境变量开启）
+APP_PASSWORD = os.getenv("APP_PASSWORD", "")
+if APP_PASSWORD:
+    if not st.session_state.get("authenticated"):
+        st.title("Legal Document RAG")
+        pw = st.text_input("请输入访问密码", type="password")
+        if st.button("登录"):
+            if pw == APP_PASSWORD:
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("密码错误")
+        st.stop()
+
+
 
 # 侧边栏
 with st.sidebar:
@@ -73,6 +88,16 @@ with st.sidebar:
     st.caption("Rounds: " + str(len(st.session_state.messages) // 2))
 
 # Token 计数
+
+def _save_feedback(query, answer, rating):
+    import json
+    fb = {"query": query[:100], "answer": answer[:100], "rating": rating, "timestamp": datetime.now().isoformat()}
+    path = "feedback_log.json"
+    data = json.loads(open(path, encoding="utf-8").read()) if os.path.exists(path) else []
+    data.append(fb)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
 def count_tokens(text: str) -> int:
     return len(TOKENIZER.encode(text))
 
@@ -101,19 +126,58 @@ def summarize_history(messages: list) -> str:
         return ""
 # Shadow LLM: for background async tasks (entity extraction, memory consolidation, etc.)
 def memory_llm(prompt: str) -> str:
-    try:
+        placeholder.markdown("Thinking...")
+        # 流式输出: 逐字显示 LLM 回答
         resp = requests.post(
             f"{DEEPSEEK_BASE_URL}/chat/completions",
             headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
-            json={"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}], "temperature": 0.1},
-            timeout=15, verify=False,
+            json={
+                "model": "deepseek-chat",
+                "messages": [{"role": "user", "content": full_prompt}],
+                "temperature": 0.1,
+                "stream": True,
+            },
+            timeout=60, verify=False, stream=True,
         )
         if resp.status_code == 200:
-            data = resp.json()
-            if isinstance(data, dict) and data.get("choices") and data["choices"][0].get("message"):
-                return data["choices"][0]["message"]["content"] or ""
-        return ""
-    except:
+            answer = ""
+            for chunk in resp.iter_lines():
+                if chunk:
+                    chunk_str = chunk.decode("utf-8")
+                    if chunk_str.startswith("data: "):
+                        chunk_data = chunk_str[6:]
+                        if chunk_data.strip() == "[DONE]":
+                            break
+                        try:
+                            import json
+                            delta = json.loads(chunk_data)["choices"][0]["delta"].get("content", "")
+                            if delta:
+                                answer += delta
+                                placeholder.markdown(answer + "▌")
+                        except Exception:
+                            pass
+            output_tokens = count_tokens(answer)
+            total = input_tokens + output_tokens
+            st.session_state.last_tokens = total
+            st.session_state.total_tokens += total
+            placeholder.markdown(answer + f"\n\n---\n*Token: {input_tokens} in + {output_tokens} out = {total}*")
+            st.session_state.messages.append({"role": "assistant", "content": answer})
+            st.session_state.memory.add("assistant", answer)
+            try:
+                if "memory" in st.session_state:
+                    def memory_llm(p):
+                        try:
+                            r = requests.post(f"{DEEPSEEK_BASE_URL}/chat/completions",
+                                headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
+                                json={"model": "deepseek-chat", "messages": [{"role": "user", "content": p}], "temperature": 0.1},
+                                timeout=15, verify=False)
+                            return r.json()["choices"][0]["message"]["content"] if r.status_code == 200 else ""
+                        except: return ""
+                    st.session_state.memory.async_consolidate(memory_llm)
+            except Exception:
+                pass
+        else:
+            placeholder.error(f"API error: {resp.status_code}")
         return ""
 
 
@@ -252,6 +316,18 @@ Requirements: Cite relevant clauses using [source:N] notation. If the text doesn
                 trace.print_summary()
                 get_trace_store().save(trace)
                 placeholder.markdown(answer + f"\n\n---\n*Token: {input_tokens} in + {output_tokens} out = {total}*")
+            # 用户反馈
+            fb_key = f"fb_{len(st.session_state.messages)}"
+            c1, c2 = st.columns([1, 1])
+            with c1:
+                if st.button("\U0001f44d 有用", key=f"{fb_key}_up"):
+                    _save_feedback(prompt, answer, "up")
+                    st.toast("\u2705 \u611f\u8c22\u53cd\u9988\uff01")
+            with c2:
+                if st.button("\U0001f44e 没用", key=f"{fb_key}_down"):
+                    _save_feedback(prompt, answer, "down")
+                    st.toast("\u2705 \u611f\u8c22\u53cd\u9988\uff01")
+)
                 st.session_state.messages.append({"role": "assistant", "content": answer})
                 st.session_state.memory.add("assistant", answer)
                 # 影子提取：后台异步更新用户画像（不阻塞对话）
