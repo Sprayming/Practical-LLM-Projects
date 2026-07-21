@@ -344,3 +344,17 @@ docker compose down    # 停止
 - model_cache: 嵌入模型缓存(避免每次启动下载)
 - memory_db: ChromaDB 持久化
 - redis_data: Redis AOF 持久化
+
+### 16. 流式输出 (streamlit_app.py)
+改动: DeepSeek API 改为 SSE 流式输出, 逐字显示回答
+原因: 用户体验提升, 感知延迟大幅降低
+面试: 流式和普通请求区别? 答: stream=True 逐行解析, 边生成边显示
+
+### 17. 用户认证 (streamlit_app.py)
+改动: 新增可选密码认证, 通过 APP_PASSWORD 开启
+原因: 生产环境需要基本访问控制
+面试: 为什么不用 JWT? 答: Streamlit 单页应用, 密码足够
+
+### 18. 用户反馈 (streamlit_app.py)
+改动: 每条回答后增加有用/没用按钮, 记录到 feedback_log.json
+原因: 收集反馈持续改进 RAG
