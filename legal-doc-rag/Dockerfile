@@ -1,31 +1,30 @@
-FROM python:3.12-slim
+﻿FROM python:3.12-slim
 
 WORKDIR /app
 
-# 系统依赖
+# 绯荤粺渚濊禆
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
+    libgl1 \
+    libglib2.0-0t64 \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 Python 依赖（利用 Docker 缓存层）
+# 瀹夎 Python 渚濊禆锛堝埄鐢?Docker 缂撳瓨灞傦級
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 预下载嵌入模型（避免首次启动时下载）
+# 棰勪笅杞藉祵鍏ユā鍨嬶紙閬垮厤棣栨鍚姩鏃朵笅杞斤級
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('shibing624/text2vec-base-chinese')" 2>/dev/null || true
 
-# 复制应用代码
+# 澶嶅埗搴旂敤浠ｇ爜
 COPY . .
 
-# 创建运行时目录
-RUN mkdir -p memory_db model_cache data
+# 鍒涘缓杩愯鏃剁洰褰?RUN mkdir -p memory_db model_cache data
 
-# Streamlit 端口
+# Streamlit 绔彛
 EXPOSE 8501
 
-# 启动命令
+# 鍚姩鍛戒护
 CMD streamlit run app/streamlit_app.py \
     --server.port=8501 \
     --server.address=0.0.0.0 \
