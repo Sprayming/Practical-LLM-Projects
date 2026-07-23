@@ -400,3 +400,16 @@ docker compose down    # 停止
   - app/retrieval/cache.py: 文件级缓存, MD5 key, 24h 过期, 自动清理
   - streamlit_app.py: 在查询缓存 hit 时直接返回, miss 时请求 API 后写入缓存
 面试可能问: 缓存过期策略? 答: 24h TTL, 读时惰性删除, 可扩展 LRU
+
+
+### 24. 前端界面重构 (streamlit_app.py)
+改动: 全面重写 UI 界面，注入自定义 CSS 主题
+原因: 原版 Streamlit 默认样式较为简陋，需要提升用户体验和专业感
+改动内容:
+  - 注入自定义 CSS: 深蓝导航主题, 圆角卡片, 渐变侧边栏
+  - 侧边栏重构: 品牌区域 + 分类卡片 + 会话统计 + 版本水印
+  - 主区域优化: 自定义页面标题 + 欢迎引导卡片 + 操作步骤提示
+  - 消息区域美化: 用户消息蓝底高亮, AI 消息白底卡片, 统一圆角阴影
+  - 空状态优化: 引导用户上传文档的三步指引卡片
+面试可能问: Streamlit 怎么自定义样式? 答: st.markdown() 注入 CSS, 用 unsafe_allow_html=True
+面试可能问: 为什么不用前端框架? 答: Streamlit 优势在于快速构建数据应用, 自定义 CSS 足以达到专业效果
