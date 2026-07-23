@@ -19,6 +19,9 @@ RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTr
 # 澶嶅埗搴旂敤浠ｇ爜
 COPY . .
 
+# 预编译 Python 文件加速首次加载
+RUN python -m compileall -f -q app/ 2>/dev/null || true
+
 # 鍒涘缓杩愯鏃剁洰褰?RUN mkdir -p memory_db model_cache data
 
 # Streamlit 绔彛
