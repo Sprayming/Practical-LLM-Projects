@@ -49,7 +49,7 @@ if "tenant_id" not in st.session_state:
     st.session_state.tenant_id = "default"
 
 # 页面设置
-st.set_page_config(page_title="Legal Document RAG", layout="wide")
+st.set_page_config(page_title="法律文档 RAG", layout="wide")
 
 # 自定义 CSS - 专业法律文档风格
 st.markdown("""
@@ -308,29 +308,29 @@ if APP_PASSWORD:
 
 # 侧边栏
 with st.sidebar:
-    st.markdown('<div class="sidebar-brand"><div class="icon">\U0001f50d</div><h1>Legal RAG</h1><p>Intelligent Document Q&A</p></div>', unsafe_allow_html=True)
+    st.markdown('<div class="sidebar-brand"><div class="icon">\U0001f50d</div><h1>法律文档 RAG</h1><p>智能文档问答系统</p></div>', unsafe_allow_html=True)
     
-    st.markdown('<div class="sidebar-card"><div class="label">Upload Document</div></div>', unsafe_allow_html=True)
-    tenant_id = st.text_input("Tenant ID", value=st.session_state.tenant_id, key="tenant_input", label_visibility="collapsed", placeholder="Tenant ID")
+    st.markdown('<div class="sidebar-card"><div class="label">上传文档</div></div>', unsafe_allow_html=True)
+    tenant_id = st.text_input("租户 ID", value=st.session_state.tenant_id, key="tenant_input", label_visibility="collapsed", placeholder="Tenant ID")
     if tenant_id != st.session_state.tenant_id:
         st.session_state.tenant_id = tenant_id
         st.session_state.messages = []
         st.session_state.summary = ""
         st.session_state.total_tokens = 0
         st.rerun()
-    uploaded_file = st.file_uploader("Upload PDF", type="pdf", label_visibility="collapsed")
+    uploaded_file = st.file_uploader("上传 PDF", type="pdf", label_visibility="collapsed")
     st.divider()
     
     rounds = len(st.session_state.messages) // 2
-    st.markdown(f'<div class="sidebar-card"><div class="label">Session Stats</div><div class="value">{st.session_state.get("last_tokens", 0)} <small>current</small></div><div class="value">{st.session_state.total_tokens} <small>total</small></div><div style="margin-top:6px;font-size:0.8rem;color:rgba(255,255,255,0.6)">{rounds} rounds</div></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="sidebar-card"><div class="label">会话统计</div><div class="value">{st.session_state.get("last_tokens", 0)} <small>当前</small></div><div class="value">{st.session_state.total_tokens} <small>总计</small></div><div style="margin-top:6px;font-size:0.8rem;color:rgba(255,255,255,0.6)">{rounds} 轮次</div></div>', unsafe_allow_html=True)
     
-    if st.button("\U0001f5d1 Clear History", use_container_width=True):
+    if st.button("\U0001f5d1 清除历史", use_container_width=True):
         st.session_state.messages = []
         st.session_state.summary = ""
         st.session_state.total_tokens = 0
         st.rerun()
     
-    st.markdown('<div style="position:fixed;bottom:1rem;left:1rem;right:1rem;font-size:0.65rem;color:rgba(255,255,255,0.3);text-align:center">v2.0 \u2022 Legal Document RAG</div>', unsafe_allow_html=True)
+    st.markdown('<div style="position:fixed;bottom:1rem;left:1rem;right:1rem;font-size:0.65rem;color:rgba(255,255,255,0.3);text-align:center">v2.0 \u2022 法律文档 RAG</div>', unsafe_allow_html=True)
 
 # Token 计数
 
@@ -371,7 +371,7 @@ def summarize_history(messages: list) -> str:
         return ""
 # Shadow LLM: for background async tasks (entity extraction, memory consolidation, etc.)
 def memory_llm(prompt: str) -> str:
-        placeholder.markdown("Thinking...")
+        placeholder.markdown("思考中...")
         # 流式输出: 逐字显示 LLM 回答
         resp = requests.post(
             f"{DEEPSEEK_BASE_URL}/chat/completions",
@@ -422,11 +422,11 @@ def memory_llm(prompt: str) -> str:
             except Exception:
                 pass
         else:
-            placeholder.error(f"API error: {resp.status_code}")
+            placeholder.error(f"API 错误: {resp.status_code}")
         return ""
 
 
-st.markdown('<div class="main-title"><h1>Legal Document Q&A</h1><span class="badge">v2.0</span></div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title"><h1>法律文档问答</h1><span class="badge">v2.0</span></div>', unsafe_allow_html=True)
 
 # 对话历史
 for msg in st.session_state.messages:
@@ -466,7 +466,7 @@ if "vector_store" not in st.session_state:
             multimodal_chunks = pipeline.process(tmp_path)
             os.unlink(tmp_path)
             if not multimodal_chunks:
-                st.error("No text could be extracted")
+                st.error("无法提取文本")
                 st.stop()
             chunks = [mc.text for mc in multimodal_chunks]
         with st.spinner("Building vector store..."):
@@ -482,13 +482,13 @@ if "vector_store" not in st.session_state:
                 k=3,
                 use_reranker=False,
             )
-        st.markdown('<div style="background:#e8f5e9;border:1px solid #c8e6c9;border-radius:8px;padding:0.8rem 1rem;color:#2e7d32;font-size:0.9rem;text-align:center;max-width:400px;margin:1rem auto">\u2705 Document ready. Ask your question below.</div>', unsafe_allow_html=True)
+        st.markdown('<div style="background:#e8f5e9;border:1px solid #c8e6c9;border-radius:8px;padding:0.8rem 1rem;color:#2e7d32;font-size:0.9rem;text-align:center;max-width:400px;margin:1rem auto">\u2705 文档已就绪，请在下方提问。</div>', unsafe_allow_html=True)
 
 # 用户输入
-if prompt := st.chat_input("Ask a legal question:"):
+if prompt := st.chat_input("输入法律问题..."):
     # 输入长度限制
     if len(prompt) > 2000:
-        st.error("Input too long (max 2000 chars)")
+        st.error("输入过长（最多2000字符）")
         st.stop()
     st.session_state.messages.append({"role": "user", "content": prompt})
     st.session_state.memory.add("user", prompt)
@@ -633,6 +633,6 @@ Requirements: Cite relevant clauses using [source:N] notation. If the text doesn
             else:
                 placeholder.error(f"API error: {resp.status_code}")
         except Exception as e:
-            placeholder.error(f"Error: {e}")
+            placeholder.error(f"错误: {e}")
     # 刷新页面
     st.rerun()
