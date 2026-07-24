@@ -888,3 +888,14 @@ docker compose down    # 停止
   - TraceContext、get_trace_store → 仅在处理查询时 import
   - 保留 module 级的 import: streamlit、requests、StructuredLogger、ConversationStore、QueryCache
 效果: 首次页面加载从 10-20 秒降至 1-2 秒，重型包在需要时才加载
+
+### 31. 前端对比度修复 (streamlit_app.py)
+改动: 修复 CSS 中字体颜色与背景色过于接近导致文字看不清的问题
+原因: 侧边栏暗色背景上部分文字透明度设置过低（50%），欢迎卡片正文颜色太浅（#5f6368），导致可读性差
+改动内容:
+  - 侧边栏卡片标签透明度从 50% 提升至 70%
+  - 侧边栏输入框文字改为深色（#1a237e）+ 浅色背景确保可读
+  - 文件上传器提示文字改为 70% 透明
+  - 页脚版本号从 30% 改为 40% 透明
+  - 欢迎卡片正文从 #5f6368 改为 #3c4043 (更深)
+  - 侧边栏所有文本元素统一设置为 85% 透明白色
