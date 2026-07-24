@@ -18,12 +18,7 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 import requests, streamlit as st
-from langchain_community.vectorstores import Chroma
-from langchain_huggingface import HuggingFaceEmbeddings
-from app.retrieval.hybrid_retriever import HybridRetriever
-from app.retrieval.citation import CitationTracker
-from app.retrieval.query_rewriter import QueryRewriter
-from app.observability.tracker import TraceContext, get_trace_store
+# Heavy packages loaded lazily below
 from app.observability.structured_logger import StructuredLogger
 from app.memory.conversation_store import ConversationStore
 from app.retrieval.cache import QueryCache
@@ -436,6 +431,7 @@ for msg in st.session_state.messages:
 
 if uploaded_file:
     if "embedder" not in st.session_state:
+        from langchain_huggingface import HuggingFaceEmbeddings
         st.session_state.embedder = HuggingFaceEmbeddings(
             model_name="shibing624/text2vec-base-chinese",
             cache_folder="./model_cache"
@@ -471,12 +467,15 @@ if "vector_store" not in st.session_state:
                 st.stop()
             chunks = [mc.text for mc in multimodal_chunks]
         with st.spinner("Building vector store..."):
+            from langchain_community.vectorstores import Chroma
+            from langchain_huggingface import HuggingFaceEmbeddings
             embed = HuggingFaceEmbeddings(model_name="shibing624/text2vec-base-chinese", cache_folder="./model_cache")
             st.session_state.vector_store = Chroma.from_texts(
                 texts=chunks, embedding=embed,
                 metadatas=[{"source": f"{uploaded_file.name} - chunk {i+1}"} for i in range(len(chunks))],
             )
             st.session_state.chunks = chunks
+            from app.retrieval.hybrid_retriever import HybridRetriever
             st.session_state.retriever = HybridRetriever(
                 dense_store=st.session_state.vector_store,
                 texts=chunks,
