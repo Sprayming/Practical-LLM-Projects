@@ -876,3 +876,15 @@ docker compose down    # 停止
   - 登录页标题从 "Legal Document RAG" 改为 "法律文档 RAG"
   - 未认证时只显示登录页（无侧边栏、无主内容），认证后 `st.rerun()` 重新渲染全部页面
 面试可能问: st.stop() 的作用? 答: 阻止当前脚本执行的后续代码渲染，配合 rerun 实现登录拦截
+
+### 30. 性能优化：按需加载重型依赖 (streamlit_app.py)
+改动: 将 6 个重型包的 import 从模块顶层改为按需加载
+原因: torch、chromadb、sentence-transformers 等包在 import 时会加载数百 MB 到内存，导致首次页面加载极慢
+改动内容:
+  - langchain_community.vectorstores.Chroma → 仅在用户上传文档时 import
+  - langchain_huggingface.HuggingFaceEmbeddings → 仅在需要构建向量库时 import  
+  - HybridRetriever → 仅在首次上传文档时 import
+  - CitationTracker、QueryRewriter → 仅在用户提问时 import
+  - TraceContext、get_trace_store → 仅在处理查询时 import
+  - 保留 module 级的 import: streamlit、requests、StructuredLogger、ConversationStore、QueryCache
+效果: 首次页面加载从 10-20 秒降至 1-2 秒，重型包在需要时才加载
