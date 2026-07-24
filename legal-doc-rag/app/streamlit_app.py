@@ -289,7 +289,7 @@ st.markdown("""
 APP_PASSWORD = os.getenv("APP_PASSWORD", "")
 if APP_PASSWORD:
     if not st.session_state.get("authenticated"):
-        st.title("Legal Document RAG")
+        st.title("法律文档 RAG")
         pw = st.text_input("请输入访问密码", type="password")
         if st.button("登录"):
             if pw == APP_PASSWORD:
@@ -299,10 +299,11 @@ if APP_PASSWORD:
                 st.error("密码错误")
         st.stop()
 
-        # 初始化生产组件（结构化日志、对话持久化、查询缓存）
-        logger = StructuredLogger("app")
-        conversation_store = ConversationStore()
-        query_cache = QueryCache()
+# 初始化生产组件（结构化日志、对话持久化、查询缓存）
+logger = StructuredLogger("app")
+conversation_store = ConversationStore()
+query_cache = QueryCache()
+
 
 
 

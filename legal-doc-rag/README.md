@@ -866,3 +866,13 @@ docker compose down    # 停止
   - scripts/sync-silent.ps1: 静默同步（给计划任务用）
   - scripts/sync-runner.vbs: VBS 包装器（彻底隐藏窗口）
 面试可能问: 为什么不用 CI/CD? 答: 同步脚本是开发环境的工具，CI/CD 是生产环境的部署策略
+
+### 29. 登录页面修复 (streamlit_app.py)
+改动: 将登录检查从文件末尾移到 st.set_page_config() 之后，CSS/侧边栏渲染之前
+原因: 原代码中登录检查在第 288 行，但侧边栏和 CSS 在第 54 行就开始渲染，导致未认证时侧边栏先显示出来，登录页和侧边栏同时出现
+改动内容:
+  - 将 APP_PASSWORD 认证块移到 st.set_page_config() 之后，CSS 注入之前
+  - 将 logger、conversation_store、query_cache 初始化提升到模块级别（不再依赖 APP_PASSWORD 变量）
+  - 登录页标题从 "Legal Document RAG" 改为 "法律文档 RAG"
+  - 未认证时只显示登录页（无侧边栏、无主内容），认证后 `st.rerun()` 重新渲染全部页面
+面试可能问: st.stop() 的作用? 答: 阻止当前脚本执行的后续代码渲染，配合 rerun 实现登录拦截
