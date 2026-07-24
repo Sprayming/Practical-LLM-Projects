@@ -66,7 +66,7 @@ st.markdown("""
         background: transparent;
     }
     section[data-testid="stSidebar"] p {
-        color: rgba(255,255,255,0.85);
+        color: rgba(255,255,255,0.9);
     }
     section[data-testid="stSidebar"] .st-emotion-cache-16txtl3 h1,
     section[data-testid="stSidebar"] h2,
@@ -112,7 +112,7 @@ st.markdown("""
         font-size: 0.7rem;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        color: rgba(255,255,255,0.5) !important;
+        color: rgba(255,255,255,0.7) !important;
         margin-bottom: 4px;
     }
     .sidebar-card .value {
@@ -123,7 +123,7 @@ st.markdown("""
     .sidebar-card .value small {
         font-size: 0.7rem;
         font-weight: 400;
-        color: rgba(255,255,255,0.5) !important;
+        color: rgba(255,255,255,0.7) !important;
     }
     
     /* 侧边栏分隔线 */
@@ -190,7 +190,7 @@ st.markdown("""
         margin: 0 0 0.5rem 0;
     }
     .welcome-card p {
-        color: #5f6368;
+        color: #3c4043;
         font-size: 0.9rem;
         margin: 0;
         line-height: 1.5;
@@ -326,7 +326,7 @@ with st.sidebar:
         st.session_state.total_tokens = 0
         st.rerun()
     
-    st.markdown('<div style="position:fixed;bottom:1rem;left:1rem;right:1rem;font-size:0.65rem;color:rgba(255,255,255,0.3);text-align:center">v2.0 \u2022 法律文档 RAG</div>', unsafe_allow_html=True)
+    st.markdown('<div style="position:fixed;bottom:1rem;left:1rem;right:1rem;font-size:0.65rem;color:rgba(255,255,255,0.4);text-align:center">v2.0 \u2022 法律文档 RAG</div>', unsafe_allow_html=True)
 
 # Token 计数
 
