@@ -438,6 +438,7 @@ if uploaded_file:
     if "embedder" not in st.session_state:
         from openai import OpenAI
         st.session_state.embedder = create_embedder()
+        st.session_state.memory = MemorySystem(
             st.session_state.embedder, "./memory_db", tenant_id=st.session_state.tenant_id
         )
 if "vector_store" not in st.session_state:
