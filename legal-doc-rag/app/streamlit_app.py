@@ -461,6 +461,7 @@ if "vector_store" not in st.session_state:
             with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
                 tmp.write(uploaded_file.read())
                 tmp_path = tmp.name
+            from app.processing.multimodal_pipeline import MultimodalPipeline
             pipeline = MultimodalPipeline()
             multimodal_chunks = pipeline.process(tmp_path)
             os.unlink(tmp_path)
