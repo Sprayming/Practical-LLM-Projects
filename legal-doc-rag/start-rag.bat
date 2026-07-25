@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 set PATH=%PATH%;C:\Program Files\Docker\Docker\resources\bin
 
 echo Checking Docker...
@@ -28,6 +28,7 @@ docker start legal-doc-rag-app-1 >nul 2>&1 || docker run -d --name legal-doc-rag
   -e EMBEDDING_API_KEY="df9c9b2d-35d9-4df6-b49d-f489708e1eab" ^
   -e EMBEDDING_BASE_URL="https://ark.cn-beijing.volces.com/api/v3" ^
   -e EMBEDDING_MODEL="ep-m-20251117205847-trwgz" ^
+  -e EMBEDDER_TYPE="openai" ^
   legal-doc-rag_app:latest
 
 echo Opening http://localhost:8501 ...

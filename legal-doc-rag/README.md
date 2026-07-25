@@ -953,3 +953,35 @@ docker compose down    # 停止
   - 页脚版本号从 30% 改为 40% 透明
   - 欢迎卡片正文从 #5f6368 改为 #3c4043 (更深)
   - 侧边栏所有文本元素统一设置为 85% 透明白色
+
+
+## Embedder Factory：可插拔嵌入层
+
+### 设计意图
+
+代码中没有硬编码 Embedder 实现，而是通过工厂模式动态创建。改 .env 一个字段就能切换，不动 Python 代码。
+
+### 配置方式
+
+| 环境变量 | 默认值 | 说明 |
+|---------|--------|------|
+| EMBEDDER_TYPE | openai | 可选 openai / huggingface |
+| EMBEDDING_API_KEY | 豆包 key | API 模式的密钥 |
+| EMBEDDING_BASE_URL | 豆包端点 | API 模式的地址 |
+| EMBEDDING_MODEL | 豆包 endpoint ID | API 模式的模型名 |
+| HF_MODEL_NAME | shibing624/text2vec-base-chinese | 本地 HuggingFace 模型 |
+| HF_CACHE_DIR | ./model_cache | 本地模型缓存路径 |
+
+### 两种模式对比
+
+| 模式 | 配置 | 优缺点 |
+|------|------|--------|
+| **openai**（生产推荐） | EMBEDDER_TYPE=openai | ✅ Docker 镜像小（<1GB）、零 GPU、冷启动快；❌ 有微量 API 费用 |
+| **huggingface**（本地开发） | EMBEDDER_TYPE=huggingface | ✅ 零 API 成本，离线可用；❌ 镜像大（~12GB），首次需下载 400MB 模型 |
+
+### 面试价值
+
+> 问到"为什么不用本地模型"或"成本怎么控制"时，这个就是你的回答锚点：
+> - **策略模式落地**：Embedder 用工厂统一创建，切换一行配置
+> - **生产优先**：API 嵌入 100 页 PDF < 0.1 元，LLM 才是大头
+> - **开发友好**：本地切 HuggingFace，不依赖外网

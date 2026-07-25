@@ -22,7 +22,7 @@ import requests, streamlit as st
 from app.observability.structured_logger import StructuredLogger
 from app.memory.conversation_store import ConversationStore
 from app.retrieval.cache import QueryCache
-from langchain_openai import OpenAIEmbeddings
+from app.retrieval.embedder_factory import create_embedder
 
 # 加载环境变量
 env_path = Path(__file__).resolve().parent.parent / ".env"
@@ -437,11 +437,7 @@ for msg in st.session_state.messages:
 if uploaded_file:
     if "embedder" not in st.session_state:
         from openai import OpenAI
-        st.session_state.embedder = OpenAIEmbeddings(
-            model=EMBEDDING_MODEL,
-            openai_api_key=EMBEDDING_API_KEY,
-            openai_api_base=EMBEDDING_BASE_URL,
-        )
+        st.session_state.embedder = create_embedder()
             st.session_state.embedder, "./memory_db", tenant_id=st.session_state.tenant_id
         )
 if "vector_store" not in st.session_state:
@@ -474,11 +470,7 @@ if "vector_store" not in st.session_state:
         with st.spinner("Building vector store..."):
             from langchain_community.vectorstores import Chroma
             from openai import OpenAI
-            embed = OpenAIEmbeddings(
-                model=EMBEDDING_MODEL,
-                openai_api_key=EMBEDDING_API_KEY,
-                openai_api_base=EMBEDDING_BASE_URL,
-            )
+            embed = create_embedder()
             st.session_state.vector_store = Chroma.from_texts(
                 texts=chunks, embedding=embed,
                 metadatas=[{"source": f"{uploaded_file.name} - chunk {i+1}"} for i in range(len(chunks))],
