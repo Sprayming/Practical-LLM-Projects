@@ -1,33 +1,29 @@
-﻿FROM python:3.12-slim
+﻿FROM docker.m.daocloud.io/library/python:3.12-slim
 
 WORKDIR /app
+ENV PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple/
 
-# 绯荤粺渚濊禆
+# 系统依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libgl1 \
     libglib2.0-0t64 \
     && rm -rf /var/lib/apt/lists/*
 
-# 瀹夎 Python 渚濊禆锛堝埄鐢?Docker 缂撳瓨灞傦級
-COPY requirements.txt .
+# 安装 Python 依赖
+COPY requirements-docker.txt requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 棰勪笅杞藉祵鍏ユā鍨嬶紙閬垮厤棣栨鍚姩鏃朵笅杞斤級
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('shibing624/text2vec-base-chinese')" 2>/dev/null || true
-
-# 澶嶅埗搴旂敤浠ｇ爜
+# 复制应用代码
 COPY . .
 
-# 预编译 Python 文件加速首次加载
-RUN python -m compileall -f -q app/ 2>/dev/null || true
+# 创建运行时目录
+RUN mkdir -p memory_db model_cache data
 
-# 鍒涘缓杩愯鏃剁洰褰?RUN mkdir -p memory_db model_cache data
-
-# Streamlit 绔彛
+# Streamlit 端口
 EXPOSE 8501
 
-# 鍚姩鍛戒护
+# 启动命令
 CMD streamlit run app/streamlit_app.py \
     --server.port=8501 \
     --server.address=0.0.0.0 \

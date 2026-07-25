@@ -22,6 +22,7 @@ import requests, streamlit as st
 from app.observability.structured_logger import StructuredLogger
 from app.memory.conversation_store import ConversationStore
 from app.retrieval.cache import QueryCache
+from langchain_openai import OpenAIEmbeddings
 
 # 加载环境变量
 env_path = Path(__file__).resolve().parent.parent / ".env"
@@ -31,6 +32,10 @@ if env_path.exists():
 # 全局配置
 DEEPSEEK_API_KEY = os.getenv("LLM_API_KEY", "")
 DEEPSEEK_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1")
+# Embedding 配置（豆包 API，兼容 OpenAI 格式）
+EMBEDDING_API_KEY = os.getenv("EMBEDDING_API_KEY", "df9c9b2d-35d9-4df6-b49d-f489708e1eab")
+EMBEDDING_BASE_URL = os.getenv("EMBEDDING_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "ep-m-20251117205847-trwgz")
 TOKENIZER = tiktoken.get_encoding("cl100k_base")
 
 # 会话状态
@@ -431,12 +436,12 @@ for msg in st.session_state.messages:
 
 if uploaded_file:
     if "embedder" not in st.session_state:
-        from langchain_huggingface import HuggingFaceEmbeddings
-        st.session_state.embedder = HuggingFaceEmbeddings(
-            model_name="shibing624/text2vec-base-chinese",
-            cache_folder="./model_cache"
+        from openai import OpenAI
+        st.session_state.embedder = OpenAIEmbeddings(
+            model=EMBEDDING_MODEL,
+            openai_api_key=EMBEDDING_API_KEY,
+            openai_api_base=EMBEDDING_BASE_URL,
         )
-        st.session_state.memory = MemorySystem(
             st.session_state.embedder, "./memory_db", tenant_id=st.session_state.tenant_id
         )
 if "vector_store" not in st.session_state:
@@ -468,8 +473,12 @@ if "vector_store" not in st.session_state:
             chunks = [mc.text for mc in multimodal_chunks]
         with st.spinner("Building vector store..."):
             from langchain_community.vectorstores import Chroma
-            from langchain_huggingface import HuggingFaceEmbeddings
-            embed = HuggingFaceEmbeddings(model_name="shibing624/text2vec-base-chinese", cache_folder="./model_cache")
+            from openai import OpenAI
+            embed = OpenAIEmbeddings(
+                model=EMBEDDING_MODEL,
+                openai_api_key=EMBEDDING_API_KEY,
+                openai_api_base=EMBEDDING_BASE_URL,
+            )
             st.session_state.vector_store = Chroma.from_texts(
                 texts=chunks, embedding=embed,
                 metadatas=[{"source": f"{uploaded_file.name} - chunk {i+1}"} for i in range(len(chunks))],
