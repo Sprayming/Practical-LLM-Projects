@@ -153,6 +153,33 @@ streamlit run app/streamlit_app.py
 
 ## 更新日志
 
+### 2026-07-25: Docker Compose 部署 + DNS 配置优化
+- Docker Desktop 完整安装流程（winget + WSL2 + Ubuntu）
+- DNS 调整为 114.114.114.114 解决 Docker Hub IPv6 连接失败问题
+- 配置 Daocloud 镜像代理 registry-mirrors 加速镜像拉取
+- 创建 requirements-docker.txt（精简版，去掉 torch/paddlepaddle 等重型包）
+- 修改 Dockerfile：从 Daocloud 拉取 python:3.12-slim 基础镜像 + Tsinghua PyPI 镜像
+- Docker Compose + docker run 双模式可运行
+
+**启动方式：**
+`ash
+# Docker Compose（推荐）
+cd legal-doc-rag
+cp .env.example .env
+# 编辑 .env 填入 LLM_API_KEY
+docker compose up -d
+
+# 或 docker run（无需 Compose）
+docker run -d --name redis alpine:3.18 sleep infinity
+docker run -d --name rag-app -p 8501:8501 --link redis:redis --env-file .env legal-doc-rag_app
+`
+
+**注意事项：**
+- 如果 Docker Hub 连不上（IPv6 超时），修改 DNS 为 114.114.114.114
+- 或配置 registry-mirrors: https://docker.m.daocloud.io
+- pip install 太慢时使用精简版 requirements-docker.txt
+- 首次构建约需 8-10 分钟（pip 下载依赖）
+
 ### 2026-07-19: RAGAS 评测跑通 + ProfileStore + 多租户
 - RAGAS 评测跑通真实分数 (豆包 API + 豆包 embedding)
 - 新增 ProfileStore: 用户画像独立存储 (置信度加权合并)
@@ -567,6 +594,33 @@ streamlit run app/streamlit_app.py
   - ContextPrecision: 1.0 / ContextRecall: 1.0
 
 ## 更新日志
+
+### 2026-07-25: Docker Compose 部署 + DNS 配置优化
+- Docker Desktop 完整安装流程（winget + WSL2 + Ubuntu）
+- DNS 调整为 114.114.114.114 解决 Docker Hub IPv6 连接失败问题
+- 配置 Daocloud 镜像代理 registry-mirrors 加速镜像拉取
+- 创建 requirements-docker.txt（精简版，去掉 torch/paddlepaddle 等重型包）
+- 修改 Dockerfile：从 Daocloud 拉取 python:3.12-slim 基础镜像 + Tsinghua PyPI 镜像
+- Docker Compose + docker run 双模式可运行
+
+**启动方式：**
+`ash
+# Docker Compose（推荐）
+cd legal-doc-rag
+cp .env.example .env
+# 编辑 .env 填入 LLM_API_KEY
+docker compose up -d
+
+# 或 docker run（无需 Compose）
+docker run -d --name redis alpine:3.18 sleep infinity
+docker run -d --name rag-app -p 8501:8501 --link redis:redis --env-file .env legal-doc-rag_app
+`
+
+**注意事项：**
+- 如果 Docker Hub 连不上（IPv6 超时），修改 DNS 为 114.114.114.114
+- 或配置 registry-mirrors: https://docker.m.daocloud.io
+- pip install 太慢时使用精简版 requirements-docker.txt
+- 首次构建约需 8-10 分钟（pip 下载依赖）
 
 ### 2026-07-19: RAGAS 评测跑通 + ProfileStore + 多租户
 - RAGAS 评测跑通真实分数 (豆包 API + 豆包 embedding)
