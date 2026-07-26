@@ -63,6 +63,7 @@ a { color: #1a237e; }
 section[data-testid="stSidebar"] {
     background: linear-gradient(180deg, #1a237e 0%, #0d1b4a 100%);
     padding-top: 1rem;
+    padding-bottom: 5rem;
 }
 section[data-testid="stSidebar"] .st-emotion-cache-1v0mbdj { background: transparent; }
 section[data-testid="stSidebar"] p { color: rgba(255,255,255,0.9); }

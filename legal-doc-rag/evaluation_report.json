@@ -1,0 +1,9 @@
+{
+  "metrics": {
+    "faithfulness": 0.3796296296296296,
+    "answer_relevancy": 0.9613722394562298,
+    "context_precision": 0.9999999999,
+    "context_recall": 1.0
+  },
+  "total": 6
+}
