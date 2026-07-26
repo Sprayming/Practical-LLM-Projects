@@ -23,6 +23,9 @@ from app.observability.structured_logger import StructuredLogger
 from app.memory.conversation_store import ConversationStore
 from app.retrieval.cache import QueryCache
 from app.retrieval.embedder_factory import create_embedder
+from app.observability.tracker import TraceContext, get_trace_store
+from app.retrieval.query_rewriter import QueryRewriter
+from app.retrieval.citation import CitationTracker
 
 # 加载环境变量
 env_path = Path(__file__).resolve().parent.parent / ".env"
@@ -358,7 +361,7 @@ def summarize_history(messages: list) -> str:
         resp = requests.post(
             f"{DEEPSEEK_BASE_URL}/chat/completions",
             headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
-            json={"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}], "temperature": 0.1},
+            json={"model": os.getenv("LLM_MODEL", "deepseek-v4-pro"), "messages": [{"role": "user", "content": prompt}], "temperature": 0.1},
             timeout=15, verify=False,
         )
     # 解析返回
@@ -378,7 +381,7 @@ def memory_llm(prompt: str) -> str:
             f"{DEEPSEEK_BASE_URL}/chat/completions",
             headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
             json={
-                "model": "deepseek-chat",
+                "model": os.getenv("LLM_MODEL", "deepseek-v4-pro"),
                 "messages": [{"role": "user", "content": full_prompt}],
                 "temperature": 0.1,
                 "stream": True,
@@ -415,7 +418,7 @@ def memory_llm(prompt: str) -> str:
                         try:
                             r = requests.post(f"{DEEPSEEK_BASE_URL}/chat/completions",
                                 headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
-                                json={"model": "deepseek-chat", "messages": [{"role": "user", "content": p}], "temperature": 0.1},
+                                json={"model": os.getenv("LLM_MODEL", "deepseek-v4-pro"), "messages": [{"role": "user", "content": p}], "temperature": 0.1},
                                 timeout=15, verify=False)
                             return r.json()["choices"][0]["message"]["content"] if r.status_code == 200 else ""
                         except: return ""
@@ -587,7 +590,7 @@ Requirements: Cite relevant clauses using [source:N] notation. If the text doesn
                 f"{DEEPSEEK_BASE_URL}/chat/completions",
                 headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
     # 构建 Prompt
-                json={"model": "deepseek-chat", "messages": [{"role": "user", "content": full_prompt}], "temperature": 0.1},
+                json={"model": os.getenv("LLM_MODEL", "deepseek-v4-pro"), "messages": [{"role": "user", "content": full_prompt}], "temperature": 0.1},
                 timeout=60, verify=False,
             )
     # 解析返回
