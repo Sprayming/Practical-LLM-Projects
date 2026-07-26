@@ -47,6 +47,7 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "total_tokens" not in st.session_state:
     st.session_state.total_tokens = 0
+        st.rerun()
 if "summary" not in st.session_state:
     st.session_state.summary = ""
 # 页面设置
@@ -303,7 +304,7 @@ if "user" not in st.session_state:
                         ok, msg = register(ru, rp)
                         if ok:
                             st.success(msg)
-                            st.rerun()
+                        st.rerun()
                         else:
                             st.error(msg)
         else:
@@ -319,7 +320,7 @@ if "user" not in st.session_state:
                         if ok:
                             st.session_state.user = result
                             st.session_state.tenant_id = result['tenant_id']
-                            st.rerun()
+                        st.rerun()
                         else:
                             st.error(result.get("error", "登录失败"))
     st.stop()
@@ -340,7 +341,6 @@ with st.sidebar:
     u = st.session_state.user
     st.markdown(f"<div style='padding:0.3rem 0;font-size:0.85rem;color:rgba(255,255,255,0.9)'>用户: <strong>{u['username']}</strong></div>", unsafe_allow_html=True)
     st.markdown(f"<div style='padding:0.3rem 0;font-size:0.75rem;color:rgba(255,255,255,0.5)'>租户: {u['tenant_id']}</div>", unsafe_allow_html=True)
-        st.rerun()
     uploaded_file = st.file_uploader("上传 PDF", type="pdf", label_visibility="collapsed")
     st.divider()
     
@@ -353,6 +353,10 @@ with st.sidebar:
         st.session_state.total_tokens = 0
         st.rerun()
     
+    if st.button(“退出登录”, use_container_width=True):
+        for k in ["user","tenant_id","messages","summary","total_tokens"]:
+            st.session_state.pop(k, None)
+        st.rerun()
     st.markdown('<div style="position:fixed;bottom:1rem;left:1rem;right:1rem;font-size:0.65rem;color:rgba(255,255,255,0.4);text-align:center">v2.0 \u2022 法律文档 RAG</div>', unsafe_allow_html=True)
 
 # Token 计数
@@ -660,4 +664,3 @@ Requirements: Cite relevant clauses using [source:N] notation. If the text doesn
         except Exception as e:
             placeholder.error(f"错误: {e}")
     # 刷新页面
-    st.rerun()
