@@ -30,7 +30,7 @@ def chat(req: ChatRequest, user: dict = Depends(_require_user)):
     persist_dir = os.path.join(cfg.CHROMA_PERSIST_DIR, tenant_id)
 
     if not os.path.exists(persist_dir):
-        return {"answer": "??????", "citations": [], "token_usage": 0}
+        return {"answer": "请先上传文档", "citations": [], "token_usage": 0}
 
     embedder = create_embedder()
     try:
@@ -40,7 +40,7 @@ def chat(req: ChatRequest, user: dict = Depends(_require_user)):
         )
         docs = vector_store.similarity_search(req.message, k=3)
     except Exception:
-        return {"answer": "???????????????", "citations": [], "token_usage": 0}
+        return {"answer": "向量库加载失败，请重新上传文档", "citations": [], "token_usage": 0}
 
     context = "\n\n".join([f"[chunk {d.metadata.get('chunk', 0)+1}] {d.page_content}" for d in docs])
 
@@ -74,13 +74,13 @@ Requirements: Cite relevant chunks using [chunk N] notation. If the text doesn't
             verify=False,
         )
         if resp.status_code != 200:
-            return {"answer": f"API??: {resp.status_code}", "citations": [], "token_usage": 0}
+            return {"answer": f"API错误: {resp.status_code}", "citations": [], "token_usage": 0}
         data = resp.json()
         answer = data["choices"][0]["message"]["content"]
         usage = data.get("usage", {})
         token_usage = usage.get("total_tokens", 0)
     except Exception as e:
-        return {"answer": f"LLM????: {str(e)}", "citations": [], "token_usage": 0}
+        return {"answer": f"LLM调用??: {str(e)}", "citations": [], "token_usage": 0}
 
     citations = [
         {"source": d.metadata.get("source", ""), "content": d.page_content[:200]}

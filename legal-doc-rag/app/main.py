@@ -3,13 +3,14 @@ os.environ['TRANSFORMERS_OFFLINE'] = '1'
 os.environ['HF_HUB_DISABLE_SYMLINKS_WARNING'] = '1'
 os.environ['CURL_CA_BUNDLE'] = ''
 os.environ['REQUESTS_CA_BUNDLE'] = ''
-os.environ['HF_ENDPOINT'] = ''
+# os.environ['HF_ENDPOINT'] = ''
 import os
 from pathlib import Path
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
 import uvicorn
 
 env_path = Path(__file__).resolve().parent.parent / ".env"
@@ -39,6 +40,13 @@ def health():
     return {"status": "ok", "version": "1.0.0"}
 
 frontend_dir = Path(__file__).resolve().parent / "frontend"
+
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    html = frontend_dir / "index.html"
+    if html.exists():
+        return HTMLResponse(content=html.read_bytes(), media_type="text/html; charset=utf-8")
+    return Response(content="<h1>Frontend not found</h1>", media_type="text/html")
 frontend_dir.mkdir(exist_ok=True)
 app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")
 
