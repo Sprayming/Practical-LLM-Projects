@@ -492,3 +492,84 @@ Q5: 和企业级 RAG 差在哪？
 | EMBEDDING_MODEL | endpoint ID | Embedding 模型 ID |
 | REDIS_URL | redis://localhost:6379/0 | Redis 连接 |
 | APP_PASSWORD | - | 可选访问密码 |
+
+
+---
+
+## FastAPI 后端（2026-07-26）
+
+### 架构变更
+
+从 Streamlit 单进程架构切换到 FastAPI REST API + 静态前端。
+
+### 文件结构
+
+`
+app/
+├── main.py               # FastAPI 入口，CORS + 路由挂载
+├── api/
+│   ├── auth.py            # POST /api/auth/register, /api/auth/login
+│   ├── chat.py            # POST /api/chat (RAG 问答)
+│   └── documents.py       # POST /api/documents/upload (PDF 上传 + 向量化)
+├── core/
+│   └── config.py          # 环境变量配置
+├── frontend/
+│   └── index.html         # 纯 HTML + JS 前端（登录/注册/聊天/上传）
+├── retrieval/             # 复用原有模块
+├── processing/            # 复用原有模块
+├── memory/                # 复用原有模块
+└── tenant/                # 复用原有模块
+`
+
+### API 端点
+
+| 方法 | 端点 | 说明 | 认证 |
+|------|------|------|------|
+| POST | /api/auth/register | 注册新用户 + 创建租户 | 无 |
+| POST | /api/auth/login | 登录获取 token | 无 |
+| POST | /api/documents/upload | 上传 PDF，自动分块 + 向量化 | Bearer Token |
+| GET | /api/documents | 列出已上传文档 | Bearer Token |
+| POST | /api/chat | RAG 问答（检索 + LLM 生成） | Bearer Token |
+| GET | /api/health | 健康检查 | 无 |
+| GET | / | 前端页面 | 无 |
+
+### Token 认证机制
+
+登录成功后返回 token（secrets.token_urlsafe(32)），存储在内存字典中。
+前端保存在 localStorage，每次请求通过 Authorization header 传递。
+Token 无过期时间（生产环境可扩展为 JWT + 过期机制）。
+
+### 多租户隔离
+
+- 注册时自动创建租户（8字符 UUID）
+- 文档按 tenant_id 隔离存储（uploads/{tenant_id}/）
+- ChromaDB 按 tenant_id 分目录（chroma_db/{tenant_id}/）
+- 记忆系统按 tenant_id 隔离
+
+### 前端界面
+
+单页 HTML 应用，包含：
+- 登录/注册表单（切换显示）
+- 左侧边栏：用户信息、PDF 上传、文档列表
+- 主区域：聊天消息、引用标注、Token 统计
+- 底部输入框 + 发送按钮
+- 清除历史、退出登录按钮
+
+### 启动方式
+
+`ash
+# 本地开发
+pip install fastapi uvicorn python-multipart PyMuPDF
+cd D:\git\legal-doc-rag
+python -m uvicorn app.main:app --reload --port 8000
+
+# Docker
+docker build -t legal-doc-rag-fastapi:latest .
+docker run -d --name rag-app -p 8000:8000 legal-doc-rag-fastapi:latest
+`
+
+### 环境变量新增
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| JWT_SECRET | legal-rag-secret-key | Token 签名密钥（生产环境需修改） |
