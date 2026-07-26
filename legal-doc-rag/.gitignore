@@ -15,3 +15,5 @@ __pycache__/
 
 # Temp
 _fix_*.py
+evaluation_report.json
+tenant_data/
