@@ -573,3 +573,64 @@ docker run -d --name rag-app -p 8000:8000 legal-doc-rag-fastapi:latest
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | JWT_SECRET | legal-rag-secret-key | Token 签名密钥（生产环境需修改） |
+
+
+---
+
+## Docker ?? (2026-07-26)
+
+### ????
+- Docker Desktop ???
+- C ??????: Docker ?????? D:\DockerData
+
+### ????
+```bash
+cd D:\git\legal-doc-rag
+docker build --no-cache -t legal-doc-rag-fastapi:latest -f Dockerfile .
+```
+
+### ????
+?? `start-rag.bat` (??????)?????:
+1. ?? Docker Desktop (?????????)
+2. ?? Redis (`rag-redis:6379`)
+3. ?? App (`rag-app:8000`)
+4. ?? http://localhost:8000
+
+### ????
+```bash
+docker run -d --name rag-redis -p 6379:6379 alpine:3.18 sh -c "apk add --no-cache redis; redis-server --bind 0.0.0.0"
+docker run -d --name rag-app -p 8000:8000 --link rag-redis:redis legal-doc-rag-fastapi:latest
+```
+
+### ??
+```bash
+curl http://localhost:8000/api/health
+# {"status":"ok","version":"1.0.0"}
+```
+
+### ??????
+`C:\Users\11195\.docker\daemon.json`:
+```json
+{
+  "registry-mirrors": ["https://docker.m.daocloud.io", "https://docker.1panel.live"],
+  "dns": ["114.114.114.114", "8.8.8.8"]
+}
+```
+
+### API ??
+| ?? | ?? | ?? | ?? |
+|------|------|------|------|
+| POST | /api/auth/register | ?? | ? |
+| POST | /api/auth/login | ?? | ? |
+| POST | /api/documents/upload | ?? PDF | Bearer Token |
+| GET | /api/documents | ???? | Bearer Token |
+| POST | /api/chat | RAG ?? | Bearer Token |
+| GET | /api/health | ???? | ? |
+| GET | / | ?? | ? |
+
+### ???? (?? Docker)
+```bash
+pip install fastapi uvicorn python-multipart PyMuPDF
+cd D:\git\legal-doc-rag
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
