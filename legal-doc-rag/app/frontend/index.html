@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>???? RAG</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:#f5f6fa; height:100vh; }
+#login-page { display:flex; justify-content:center; align-items:center; height:100vh; background:#f5f6fa; } 
+.login-card { background:#fff; border-radius:12px; padding:2.5rem; width:380px; box-shadow:0 2px 12px rgba(0,0,0,0.06); text-align:center; }
+.login-card h1 { font-size:1.5rem; color:#1a237e; margin-bottom:0.3rem; }
+.login-card p { color:#666; font-size:0.85rem; margin-bottom:1.5rem; }
+.login-card input { width:100%; padding:0.7rem 0.8rem; margin-bottom:0.8rem; border:1px solid #dadce0; border-radius:8px; font-size:0.9rem; }
+.login-card input:focus { outline:none; border-color:#1a237e; }
+.login-card button { width:100%; padding:0.7rem; background:#1a237e; color:#fff; border:none; border-radius:8px; font-size:0.95rem; font-weight:500; cursor:pointer; }
+.login-card button:hover { background:#283593; }
+.switch-form { margin-top:1rem; font-size:0.85rem; }
+.switch-form a { color:#1a237e; text-decoration:none; }
+.alert { padding:0.6rem; border-radius:6px; margin-bottom:0.8rem; font-size:0.85rem; }
+.alert-error { background:#fce8e6; color:#c5221f; }
+.alert-success { background:#e6f4ea; color:#137333; }
+
+#chat-page { display:none; height:100vh; }
+#sidebar { width:280px; background:linear-gradient(180deg,#1a237e 0%,#0d1b4a 100%); color:#fff; display:flex; flex-direction:column; padding:1.2rem 1rem; position:fixed; left:0; top:0; bottom:0; overflow-y:auto; z-index:10; }
+.brand { font-size:1.1rem; font-weight:700; margin-bottom:0.8rem; text-align:center; padding-bottom:0.8rem; border-bottom:1px solid rgba(255,255,255,0.1); }
+.user-info { margin-bottom:1rem; font-size:0.8rem; text-align:center; }
+.user-info div { padding:2px 0; opacity:0.7; }
+.upload-section { background:rgba(255,255,255,0.05); border:1px dashed rgba(255,255,255,0.2); border-radius:8px; padding:1rem; margin-bottom:1rem; }
+.upload-section h3 { font-size:0.75rem; text-transform:uppercase; opacity:0.6; margin-bottom:0.5rem; }
+.upload-section input[type=file] { font-size:0.75rem; margin-bottom:0.5rem; width:100%; color:#fff; }
+.upload-section button { width:100%; padding:0.4rem; background:rgba(255,255,255,0.1); color:#fff; border:1px solid rgba(255,255,255,0.2); border-radius:6px; cursor:pointer; font-size:0.8rem; }
+.upload-section button:hover { background:rgba(255,255,255,0.2); }
+#upload-status { font-size:0.75rem; margin-top:0.4rem; }
+.doc-list { flex:1; overflow-y:auto; margin-bottom:1rem; }
+.doc-list h3 { font-size:0.75rem; text-transform:uppercase; opacity:0.6; margin-bottom:0.5rem; }
+.doc-list ul { list-style:none; }
+.doc-list li { padding:0.4rem 0.6rem; font-size:0.8rem; border-radius:4px; cursor:pointer; }
+.doc-list li:hover { background:rgba(255,255,255,0.08); }
+.sidebar-btn { width:100%; padding:0.5rem; margin-bottom:0.4rem; background:rgba(255,255,255,0.06); color:rgba(255,255,255,0.85); border:1px solid rgba(255,255,255,0.1); border-radius:6px; cursor:pointer; font-size:0.8rem; }
+.sidebar-btn:hover { background:rgba(255,255,255,0.12); }
+
+#chat-main { margin-left:280px; display:flex; flex-direction:column; height:100vh; }
+.chat-header { padding:1rem 1.5rem; border-bottom:1px solid #e8eaed; background:#fff; font-size:1.15rem; font-weight:600; color:#1a237e; }
+#chat-messages { flex:1; overflow-y:auto; padding:1.5rem; }
+.message { max-width:75%; margin-bottom:1rem; padding:0.8rem 1rem; border-radius:12px; font-size:0.9rem; line-height:1.5; }
+.message.user { background:#e8f0fe; margin-left:auto; border-bottom-right-radius:4px; }
+.message.assistant { background:#fff; border:1px solid #e8eaed; border-bottom-left-radius:4px; box-shadow:0 1px 2px rgba(0,0,0,0.03); }
+.citation { background:#f8f9fa; border-left:3px solid #1a237e; border-radius:4px; padding:0.4rem 0.7rem; margin:0.3rem 0; font-size:0.82rem; }
+.citation .source { color:#1a237e; font-weight:600; font-size:0.75rem; }
+.token-info { font-size:0.7rem; color:#9aa0a6; margin-top:0.3rem; }
+.empty-state { text-align:center; color:#9aa0a6; margin-top:4rem; }
+.empty-state .icon { font-size:3rem; margin-bottom:0.5rem; }
+.empty-state h3 { color:#1a237e; font-size:1.1rem; margin-bottom:0.3rem; }
+.empty-state p { font-size:0.85rem; color:#666; }
+
+.input-area { display:flex; padding:1rem 1.5rem; background:#fff; border-top:1px solid #e8eaed; }
+.input-area input { flex:1; padding:0.7rem 1rem; border:1px solid #dadce0; border-radius:8px; font-size:0.9rem; margin-right:0.5rem; }
+.input-area input:focus { outline:none; border-color:#1a237e; }
+.input-area button { padding:0.7rem 1.5rem; background:#1a237e; color:#fff; border:none; border-radius:8px; font-size:0.9rem; cursor:pointer; }
+.input-area button:hover { background:#283593; }
+.input-area button:disabled { opacity:0.5; cursor:not-allowed; }
+
+@media (max-width:768px) {
+  #sidebar { width:100%; position:relative; height:auto; }
+  #chat-main { margin-left:0; }
+}
+</style>
+</head>
+<body>
+
+<div id="login-page">
+  <div class="login-card" id="login-card">
+    <h1>???? RAG</h1>
+    <p>???????????</p>
+    <div id="login-alert"></div>
+    <form id="login-form" onsubmit="return doLogin()">
+      <input type="text" id="login-user" placeholder="???" required>
+      <input type="password" id="login-pass" placeholder="??" required>
+      <button type="submit">??</button>
+    </form>
+    <p class="switch-form"><a href="#" onclick="showRegister()">????</a></p>
+  </div>
+  <div class="login-card" id="register-card" style="display:none">
+    <h2>???????</h2>
+    <div id="register-alert"></div>
+    <form id="register-form" onsubmit="return doRegister()">
+      <input type="text" id="reg-user" placeholder="???" required>
+      <input type="password" id="reg-pass" placeholder="??" required>
+      <button type="submit">??</button>
+    </form>
+    <p class="switch-form"><a href="#" onclick="showLogin()">???????</a></p>
+  </div>
+</div>
+
+<div id="chat-page">
+  <aside id="sidebar">
+    <div class="brand">???? RAG</div>
+    <div class="user-info">
+      <div id="username-display"></div>
+      <div id="tenant-display"></div>
+    </div>
+    <div class="upload-section">
+      <h3>????</h3>
+      <input type="file" id="file-input" accept=".pdf">
+      <button id="upload-btn" onclick="doUpload()">?? PDF</button>
+      <div id="upload-status"></div>
+    </div>
+    <div class="doc-list">
+      <h3>?????</h3>
+      <ul id="doc-list"></ul>
+    </div>
+    <button class="sidebar-btn" onclick="clearHistory()">????</button>
+    <button class="sidebar-btn" onclick="doLogout()">????</button>
+  </aside>
+  <div id="chat-main">
+    <div class="chat-header">??????</div>
+    <div id="chat-messages">
+      <div class="empty-state" id="empty-state">
+        <div class="icon">&#x1f4dc;</div>
+        <h3>????</h3>
+        <p>???????????</p>
+      </div>
+    </div>
+    <div class="input-area">
+      <input type="text" id="chat-input" placeholder="??????..." onkeydown="if(event.key==='Enter')sendMessage()">
+      <button id="send-btn" onclick="sendMessage()">??</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let API = window.location.origin;
+let token = localStorage.getItem("token");
+let user = null;
+let messages = [];
+
+function showAlert(id, msg, type) {
+  document.getElementById(id).innerHTML = '<div class="alert alert-' + type + '">' + msg + '</div>';
+}
+
+function showRegister() { document.getElementById("login-card").style.display="none"; document.getElementById("register-card").style.display="block"; }
+function showLogin() { document.getElementById("register-card").style.display="none"; document.getElementById("login-card").style.display="block"; }
+
+async function doRegister() {
+  let u = document.getElementById("reg-user").value;
+  let p = document.getElementById("reg-pass").value;
+  if (!u || !p) { showAlert("register-alert","?????????","error"); return false; }
+  try {
+    let r = await fetch(API + "/api/auth/register", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({username:u,password:p}) });
+    let d = await r.json();
+    if (r.ok) { showAlert("register-alert",d.message,"success"); setTimeout(showLogin,1500); }
+    else { showAlert("register-alert",d.detail || "????","error"); }
+  } catch(e) { showAlert("register-alert","????: "+e.message,"error"); }
+  return false;
+}
+
+async function doLogin() {
+  let u = document.getElementById("login-user").value;
+  let p = document.getElementById("login-pass").value;
+  if (!u || !p) { showAlert("login-alert","?????????","error"); return false; }
+  try {
+    let r = await fetch(API + "/api/auth/login", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({username:u,password:p}) });
+    let d = await r.json();
+    if (r.ok) {
+      token = d.token; user = d.user;
+      localStorage.setItem("token", token);
+      document.getElementById("login-page").style.display = "none";
+      document.getElementById("chat-page").style.display = "block";
+      document.getElementById("username-display").textContent = "??: " + user.username;
+      document.getElementById("tenant-display").textContent = "??: " + user.tenant_id;
+      loadDocuments();
+    } else { showAlert("login-alert",d.detail || "????","error"); }
+  } catch(e) { showAlert("login-alert","????: "+e.message,"error"); }
+  return false;
+}
+
+function doLogout() {
+  localStorage.removeItem("token"); token = null; user = null;
+  document.getElementById("chat-page").style.display = "none";
+  document.getElementById("login-page").style.display = "flex";
+  document.getElementById("chat-messages").innerHTML = '<div class="empty-state" id="empty-state"><div class="icon">&#x1f4dc;</div><h3>????</h3><p>???????????</p></div>';
+  messages = [];
+}
+
+async function doUpload() {
+  let fileInput = document.getElementById("file-input");
+  if (!fileInput.files[0]) { document.getElementById("upload-status").textContent = "???PDF??"; return; }
+  let status = document.getElementById("upload-status");
+  status.textContent = "???...";
+  let formData = new FormData();
+  formData.append("file", fileInput.files[0]);
+  try {
+    let r = await fetch(API + "/api/documents/upload", { method:"POST", headers:{"Authorization":"Bearer " + token}, body:formData });
+    let d = await r.json();
+    if (r.ok) { status.textContent = "???: " + d.filename + " (" + d.chunks + " ??)"; loadDocuments(); }
+    else { status.textContent = "????"; }
+  } catch(e) { status.textContent = "??: " + e.message; }
+}
+
+async function loadDocuments() {
+  try {
+    let r = await fetch(API + "/api/documents", { headers:{"Authorization":"Bearer " + token} });
+    let d = await r.json();
+    let list = document.getElementById("doc-list");
+    list.innerHTML = "";
+    if (d.documents && d.documents.length) { d.documents.forEach(function(f) { var li = document.createElement("li"); li.textContent = f; list.appendChild(li); }); }
+    else { list.innerHTML = "<li style='opacity:0.5'>????</li>"; }
+  } catch(e) {}
+}
+
+function addMessage(role, content, citations, tokens) {
+  var container = document.getElementById("chat-messages");
+  var empty = document.getElementById("empty-state");
+  if (empty) empty.style.display = "none";
+  var div = document.createElement("div");
+  div.className = "message " + role;
+  div.textContent = content;
+  container.appendChild(div);
+  if (citations && citations.length) {
+    citations.forEach(function(c) {
+      var cite = document.createElement("div");
+      cite.className = "citation";
+      cite.innerHTML = '<div class="source">' + c.source + '</div>' + c.content;
+      container.appendChild(cite);
+    });
+  }
+  if (tokens) {
+    var info = document.createElement("div");
+    info.className = "token-info";
+    info.textContent = "Token: " + tokens;
+    container.appendChild(info);
+  }
+  container.scrollTop = container.scrollHeight;
+}
+
+async function sendMessage() {
+  var input = document.getElementById("chat-input");
+  var msg = input.value.trim();
+  if (!msg) return;
+  input.value = "";
+  addMessage("user", msg, null, null);
+  document.getElementById("send-btn").disabled = true;
+  try {
+    var r = await fetch(API + "/api/chat", { method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer " + token}, body:JSON.stringify({message:msg, history:messages}) });
+    var d = await r.json();
+    if (r.ok) {
+      addMessage("assistant", d.answer, d.citations, d.token_usage);
+      messages.push({role:"user",content:msg}, {role:"assistant",content:d.answer});
+    } else { addMessage("assistant", "??: " + (d.detail || "????"), null, null); }
+  } catch(e) { addMessage("assistant", "????: " + e.message, null, null); }
+  document.getElementById("send-btn").disabled = false;
+}
+
+function clearHistory() {
+  document.getElementById("chat-messages").innerHTML = '<div class="empty-state" id="empty-state"><div class="icon">&#x1f4dc;</div><h3>????</h3><p>???????????</p></div>';
+  messages = [];
+}
+
+// Auto-login if token exists
+if (token) { try { fetch(API + "/api/documents", {headers:{"Authorization":"Bearer "+token}}).then(function(r){if(r.ok){document.getElementById("login-page").style.display="none";document.getElementById("chat-page").style.display="block";loadDocuments();}}); } catch(e){} }
+</script>
+</body>
+</html>
