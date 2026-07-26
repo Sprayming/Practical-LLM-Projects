@@ -47,8 +47,6 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "total_tokens" not in st.session_state:
     st.session_state.total_tokens = 0
-        st.rerun()
-if "summary" not in st.session_state:
     st.session_state.summary = ""
 # 页面设置
 st.set_page_config(page_title="法律文档 RAG", layout="wide")
@@ -56,234 +54,152 @@ st.set_page_config(page_title="法律文档 RAG", layout="wide")
 # 自定义 CSS - 专业法律文档风格
 st.markdown("""
 <style>
-    /* 整体主题 */
-    .stApp {
-        background: #f8f9fa;
-    }
-    .main > div {
-        padding: 0 2rem 2rem 2rem;
-    }
-    
-    /* 侧边栏 */
-    section[data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #1a237e 0%, #283593 100%);
-        padding-top: 1rem;
-    }
-    section[data-testid="stSidebar"] .st-emotion-cache-1v0mbdj {
-        background: transparent;
-    }
-    section[data-testid="stSidebar"] p {
-        color: rgba(255,255,255,0.9);
-    }
-    section[data-testid="stSidebar"] .st-emotion-cache-16txtl3 h1,
-    section[data-testid="stSidebar"] h2,
-    section[data-testid="stSidebar"] h3 {
-        color: #ffffff !important;
-    }
-    
-    /* 侧边栏品牌区域 */
-    .sidebar-brand {
-        background: rgba(255,255,255,0.08);
-        border-radius: 12px;
-        padding: 1.5rem 1rem;
-        margin-bottom: 1.5rem;
-        text-align: center;
-        backdrop-filter: blur(10px);
-    }
-    .sidebar-brand h1 {
-        font-size: 1.3rem;
-        font-weight: 700;
-        color: #ffffff !important;
-        margin: 0;
-        letter-spacing: 0.5px;
-    }
-    .sidebar-brand p {
-        font-size: 0.75rem;
-        color: rgba(255,255,255,0.6) !important;
-        margin: 4px 0 0 0;
-    }
-    .sidebar-brand .icon {
-        font-size: 2rem;
-        margin-bottom: 0.5rem;
-    }
-    
-    /* 侧边栏分组卡片 */
-    .sidebar-card {
-        background: rgba(255,255,255,0.06);
-        border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 10px;
-        padding: 0.8rem 1rem;
-        margin-bottom: 0.8rem;
-    }
-    .sidebar-card .label {
-        font-size: 0.7rem;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        color: rgba(255,255,255,0.7) !important;
-        margin-bottom: 4px;
-    }
-    .sidebar-card .value {
-        font-size: 1.1rem;
-        font-weight: 600;
-        color: #ffffff !important;
-    }
-    .sidebar-card .value small {
-        font-size: 0.7rem;
-        font-weight: 400;
-        color: rgba(255,255,255,0.7) !important;
-    }
-    
-    /* 侧边栏分隔线 */
-    section[data-testid="stSidebar"] hr {
-        border-color: rgba(255,255,255,0.1);
-        margin: 1rem 0;
-    }
-    
-    /* 主区域标题 */
-    .main-title {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 1.2rem 0 0.5rem 0;
-        border-bottom: 2px solid #e8eaed;
-        margin-bottom: 1.5rem;
-    }
-    .main-title h1 {
-        font-size: 1.6rem;
-        font-weight: 700;
-        color: #1a237e;
-        margin: 0;
-    }
-    .main-title .badge {
-        background: #e8eaf6;
-        color: #283593;
-        font-size: 0.65rem;
-        font-weight: 600;
-        padding: 2px 8px;
-        border-radius: 4px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-    
-    /* 上传区域 */
-    .upload-area {
-        background: rgba(255,255,255,0.05);
-        border: 2px dashed rgba(255,255,255,0.2);
-        border-radius: 10px;
-        padding: 1.5rem 1rem;
-        text-align: center;
-        transition: all 0.2s;
-    }
-    
-    /* 欢迎提示 */
-    .welcome-card {
-        background: white;
-        border: 1px solid #e8eaed;
-        border-radius: 12px;
-        padding: 2.5rem 2rem;
-        text-align: center;
-        max-width: 500px;
-        margin: 2rem auto;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-    }
-    .welcome-card .icon {
-        font-size: 3rem;
-        margin-bottom: 1rem;
-    }
-    .welcome-card h2 {
-        color: #1a237e;
-        font-size: 1.3rem;
-        font-weight: 600;
-        margin: 0 0 0.5rem 0;
-    }
-    .welcome-card p {
-        color: #3c4043;
-        font-size: 0.9rem;
-        margin: 0;
-        line-height: 1.5;
-    }
-    .welcome-card .steps {
-        text-align: left;
-        margin: 1.2rem 0 0 0;
-        padding: 0;
-        list-style: none;
-    }
-    .welcome-card .steps li {
-        padding: 6px 0;
-        color: #5f6368;
-        font-size: 0.85rem;
-    }
-    .welcome-card .steps li:before {
-        content: "\2713";
-        color: #34a853;
-        font-weight: 700;
-        margin-right: 8px;
-    }
-    
-    /* 消息气泡 */
-    .stChatMessage {
-        border-radius: 12px !important;
-        border: none !important;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
-        margin-bottom: 0.8rem !important;
-    }
-    .stChatMessage[data-testid="chatMessage"]:has([data-testid="chatAvatarIcon-user"]) {
-        background: #e8f0fe !important;
-    }
-    .stChatMessage[data-testid="chatMessage"]:has([data-testid="chatAvatarIcon-assistant"]) {
-        background: #ffffff !important;
-    }
-    
-    /* Token 信息 */
-    .token-info {
-        font-size: 0.7rem;
-        color: #9aa0a6 !important;
-        padding: 4px 0;
-    }
-    
-    /* 反馈按钮 */
-    .feedback-buttons {
-        display: flex;
-        gap: 8px;
-        padding: 8px 0;
-    }
-    .feedback-buttons button {
-        background: transparent;
-        border: 1px solid #dadce0;
-        border-radius: 6px;
-        padding: 4px 12px;
-        font-size: 0.8rem;
-        cursor: pointer;
-        transition: all 0.15s;
-    }
-    .feedback-buttons button:hover {
-        background: #f1f3f4;
-        border-color: #9aa0a6;
-    }
-    
-    /* 成功提示 */
-    .element-container:has(.stAlert) {
-        max-width: 600px;
-        margin: 1rem auto;
-    }
-    
-    /* 输入框 */
-    .stChatFloatingInputContainer {
-        background: transparent !important;
-        padding: 0 2rem 1rem 2rem !important;
-        border-top: 1px solid #e8eaed !important;
-    }
-    
-    /* 登陆页 */
-    .login-box {
-        max-width: 360px;
-        margin: 4rem auto;
-        padding: 2rem;
-        background: white;
-        border-radius: 12px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-        text-align: center;
-    }
+/* Global */
+.stApp { background: #f5f6fa; }
+.main > div { padding: 0 2rem 2rem 2rem; }
+a { color: #1a237e; }
+
+/* Sidebar - dark theme */
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #1a237e 0%, #0d1b4a 100%);
+    padding-top: 1rem;
+}
+section[data-testid="stSidebar"] .st-emotion-cache-1v0mbdj { background: transparent; }
+section[data-testid="stSidebar"] p { color: rgba(255,255,255,0.9); }
+section[data-testid="stSidebar"] h1, section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] h3 { color: #ffffff !important; }
+
+.sidebar-brand {
+    background: rgba(255,255,255,0.08);
+    border-radius: 12px; padding: 1.2rem 1rem; margin-bottom: 1.2rem;
+    text-align: center; backdrop-filter: blur(10px);
+}
+.sidebar-brand h1 { font-size: 1.15rem; font-weight: 700; color: #ffffff !important; margin: 0; }
+.sidebar-brand p { font-size: 0.7rem; color: rgba(255,255,255,0.5) !important; margin: 3px 0 0 0; }
+.sidebar-brand .icon { font-size: 1.8rem; margin-bottom: 0.4rem; }
+
+.sidebar-card {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px; padding: 0.6rem 0.8rem; margin-bottom: 0.6rem;
+}
+.sidebar-card .label {
+    font-size: 0.65rem; text-transform: uppercase;
+    letter-spacing: 0.5px; color: rgba(255,255,255,0.6) !important; margin-bottom: 2px;
+}
+.sidebar-card .value { font-size: 1rem; font-weight: 600; color: #ffffff !important; }
+.sidebar-card .value small { font-size: 0.65rem; font-weight: 400; color: rgba(255,255,255,0.6) !important; }
+
+section[data-testid="stSidebar"] hr { border-color: rgba(255,255,255,0.08); margin: 0.8rem 0; }
+section[data-testid="stSidebar"] .stButton button {
+    background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.85);
+    border: 1px solid rgba(255,255,255,0.12); border-radius: 6px;
+    font-size: 0.8rem; padding: 0.35rem 0.8rem; transition: all 0.15s;
+}
+section[data-testid="stSidebar"] .stButton button:hover {
+    background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.25);
+}
+
+/* Main title */
+.main-title {
+    display: flex; align-items: center; gap: 10px;
+    padding: 1rem 0 0.4rem 0; border-bottom: 2px solid #e8eaed; margin-bottom: 1.2rem;
+}
+.main-title h1 { font-size: 1.4rem; font-weight: 700; color: #1a237e; margin: 0; }
+.main-title .badge {
+    background: #e8eaf6; color: #283593; font-size: 0.6rem; font-weight: 600;
+    padding: 2px 7px; border-radius: 4px; letter-spacing: 0.5px;
+}
+
+/* Welcome card */
+.welcome-card {
+    background: white; border: 1px solid #e8eaed; border-radius: 12px;
+    padding: 2.5rem 2rem; text-align: center; max-width: 480px;
+    margin: 3rem auto; box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+.welcome-card .icon { font-size: 2.8rem; margin-bottom: 0.8rem; }
+.welcome-card h2 { color: #1a237e; font-size: 1.2rem; font-weight: 600; margin: 0 0 0.4rem 0; }
+.welcome-card p { color: #5f6368; font-size: 0.85rem; margin: 0; line-height: 1.5; }
+.welcome-card .steps { text-align: left; margin: 1rem 0 0 0; padding: 0; list-style: none; }
+.welcome-card .steps li {
+    padding: 5px 0; color: #5f6368; font-size: 0.82rem;
+}
+.welcome-card .steps li:before {
+    content: "\2713"; color: #34a853; font-weight: 700; margin-right: 8px;
+}
+
+/* Login page */
+.login-container {
+    max-width: 380px; margin: 5rem auto; padding: 2rem;
+    background: white; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+}
+.login-container h1 {
+    font-size: 1.4rem; color: #1a237e; text-align: center; margin-bottom: 0.3rem;
+}
+.login-container p { text-align: center; color: #666; font-size: 0.85rem; margin-bottom: 1.5rem; }
+.login-container .stTextInput input {
+    border: 1px solid #dadce0; border-radius: 8px; padding: 0.6rem 0.8rem; font-size: 0.9rem;
+}
+.login-container .stButton button {
+    background: #1a237e; color: white; border: none; border-radius: 8px;
+    padding: 0.5rem 1rem; font-size: 0.9rem; font-weight: 500; width: 100%;
+}
+.login-container .stButton button:hover { background: #283593; }
+
+/* Chat messages */
+.stChatMessage {
+    border-radius: 12px !important; border: none !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important; margin-bottom: 0.6rem !important;
+    padding: 0.8rem 1rem !important;
+}
+.stChatMessage[data-testid="chatMessage"]:has([data-testid="chatAvatarIcon-user"]) {
+    background: #e8f0fe !important;
+}
+.stChatMessage[data-testid="chatMessage"]:has([data-testid="chatAvatarIcon-assistant"]) {
+    background: #ffffff !important;
+}
+
+/* Citation */
+.citation-box {
+    background: #f8f9fa; border-left: 3px solid #1a237e;
+    border-radius: 4px; padding: 0.5rem 0.8rem; margin: 0.4rem 0;
+    font-size: 0.82rem; color: #3c4043;
+}
+.citation-box .source { color: #1a237e; font-weight: 600; font-size: 0.75rem; }
+
+/* Token info */
+.token-info { font-size: 0.68rem; color: #9aa0a6 !important; padding: 3px 0; }
+
+/* Feedback buttons */
+.feedback-buttons { display: flex; gap: 6px; padding: 6px 0; }
+.feedback-buttons button {
+    background: transparent; border: 1px solid #dadce0; border-radius: 6px;
+    padding: 3px 10px; font-size: 0.78rem; cursor: pointer; transition: all 0.15s;
+}
+.feedback-buttons button:hover { background: #f1f3f4; border-color: #9aa0a6; }
+
+/* Chat input */
+.stChatFloatingInputContainer {
+    background: transparent !important;
+    padding: 0 2rem 0.8rem 2rem !important;
+    border-top: 1px solid #e8eaed !important;
+}
+
+/* Upload area */
+.upload-area {
+    background: rgba(255,255,255,0.04);
+    border: 2px dashed rgba(255,255,255,0.18);
+    border-radius: 8px; padding: 1rem; text-align: center;
+}
+
+/* Alerts */
+.element-container:has(.stAlert) { max-width: 600px; margin: 0.5rem auto; }
+
+/* Fixed footer */
+.sidebar-footer {
+    position: fixed; bottom: 0.8rem; left: 1rem; right: 1rem;
+    font-size: 0.62rem; color: rgba(255,255,255,0.35); text-align: center;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -304,7 +220,7 @@ if "user" not in st.session_state:
                         ok, msg = register(ru, rp)
                         if ok:
                             st.success(msg)
-                        st.rerun()
+                            st.rerun()
                         else:
                             st.error(msg)
         else:
@@ -320,7 +236,7 @@ if "user" not in st.session_state:
                         if ok:
                             st.session_state.user = result
                             st.session_state.tenant_id = result['tenant_id']
-                        st.rerun()
+                            st.rerun()
                         else:
                             st.error(result.get("error", "登录失败"))
     st.stop()
@@ -353,7 +269,7 @@ with st.sidebar:
         st.session_state.total_tokens = 0
         st.rerun()
     
-    if st.button(“退出登录”, use_container_width=True):
+    if st.button("退出登录", use_container_width=True):
         for k in ["user","tenant_id","messages","summary","total_tokens"]:
             st.session_state.pop(k, None)
         st.rerun()
