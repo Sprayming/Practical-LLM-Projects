@@ -23,6 +23,7 @@ from app.observability.structured_logger import StructuredLogger
 from app.memory.conversation_store import ConversationStore
 from app.retrieval.cache import QueryCache
 from app.retrieval.embedder_factory import create_embedder
+from app.tenant import login, register, has_users
 from app.observability.tracker import TraceContext, get_trace_store
 from app.retrieval.query_rewriter import QueryRewriter
 from app.retrieval.citation import CitationTracker
@@ -48,9 +49,6 @@ if "total_tokens" not in st.session_state:
     st.session_state.total_tokens = 0
 if "summary" not in st.session_state:
     st.session_state.summary = ""
-if "tenant_id" not in st.session_state:
-    st.session_state.tenant_id = "default"
-
 # 页面设置
 st.set_page_config(page_title="法律文档 RAG", layout="wide")
 
@@ -288,19 +286,43 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 生产环境认证（可选, 通过 APP_PASSWORD 环境变量开启）
-APP_PASSWORD = os.getenv("APP_PASSWORD", "")
-if APP_PASSWORD:
-    if not st.session_state.get("authenticated"):
-        st.title("法律文档 RAG")
-        pw = st.text_input("请输入访问密码", type="password")
-        if st.button("登录"):
-            if pw == APP_PASSWORD:
-                st.session_state.authenticated = True
-                st.rerun()
-            else:
-                st.error("密码错误")
-        st.stop()
+# 认证 + 多租户
+if "user" not in st.session_state:
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown('''<div style='text-align:center;padding:4rem 0 1rem 0'><h1 style='color:#1a237e;font-size:1.6rem'>法律文档 RAG</h1><p style='color:#666'>多租户智能文档问答系统</p></div>''', unsafe_allow_html=True)
+        if not has_users():
+            with st.form("register_form", clear_on_submit=True):
+                st.markdown("### 创建管理员账户")
+                ru = st.text_input("用户名")
+                rp = st.text_input("密码", type="password")
+                if st.form_submit_button("注册", use_container_width=True, type="primary"):
+                    if not ru or not rp:
+                        st.error("请填写用户名和密码")
+                    else:
+                        ok, msg = register(ru, rp)
+                        if ok:
+                            st.success(msg)
+                            st.rerun()
+                        else:
+                            st.error(msg)
+        else:
+            with st.form("login_form", clear_on_submit=True):
+                st.markdown("### 登录")
+                lu = st.text_input("用户名")
+                lp = st.text_input("密码", type="password")
+                if st.form_submit_button("登录", use_container_width=True, type="primary"):
+                    if not lu or not lp:
+                        st.error("请填写用户名和密码")
+                    else:
+                        ok, result = login(lu, lp)
+                        if ok:
+                            st.session_state.user = result
+                            st.session_state.tenant_id = result['tenant_id']
+                            st.rerun()
+                        else:
+                            st.error(result.get("error", "登录失败"))
+    st.stop()
 
 # 初始化生产组件（结构化日志、对话持久化、查询缓存）
 logger = StructuredLogger("app")
@@ -315,12 +337,9 @@ with st.sidebar:
     st.markdown('<div class="sidebar-brand"><div class="icon">\U0001f50d</div><h1>法律文档 RAG</h1><p>智能文档问答系统</p></div>', unsafe_allow_html=True)
     
     st.markdown('<div class="sidebar-card"><div class="label">上传文档</div></div>', unsafe_allow_html=True)
-    tenant_id = st.text_input("租户 ID", value=st.session_state.tenant_id, key="tenant_input", label_visibility="collapsed", placeholder="Tenant ID")
-    if tenant_id != st.session_state.tenant_id:
-        st.session_state.tenant_id = tenant_id
-        st.session_state.messages = []
-        st.session_state.summary = ""
-        st.session_state.total_tokens = 0
+    u = st.session_state.user
+    st.markdown(f"<div style='padding:0.3rem 0;font-size:0.85rem;color:rgba(255,255,255,0.9)'>用户: <strong>{u['username']}</strong></div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='padding:0.3rem 0;font-size:0.75rem;color:rgba(255,255,255,0.5)'>租户: {u['tenant_id']}</div>", unsafe_allow_html=True)
         st.rerun()
     uploaded_file = st.file_uploader("上传 PDF", type="pdf", label_visibility="collapsed")
     st.divider()

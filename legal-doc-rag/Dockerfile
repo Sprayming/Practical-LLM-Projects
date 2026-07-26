@@ -1,4 +1,4 @@
-﻿FROM docker.m.daocloud.io/library/python:3.12-slim
+FROM docker.m.daocloud.io/library/python:3.12-slim
 
 WORKDIR /app
 ENV PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple/
@@ -18,7 +18,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # 创建运行时目录
-RUN mkdir -p memory_db model_cache data
+RUN mkdir -p memory_db model_cache data tenant_data
 
 # Streamlit 端口
 EXPOSE 8501
