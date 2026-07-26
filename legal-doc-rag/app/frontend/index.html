@@ -87,7 +87,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif
     <form id="register-form" onsubmit="doRegister();return false">
       <input type="text" id="reg-user" placeholder="用户名" required>
       <input type="password" id="reg-pass" placeholder="密码" required>
-      <button type="submit">登录</button>
+      <button type="submit">注册</button>
     </form>
     <p class="switch-form"><a href="#" onclick="showLogin()">已有账户？登录</a></p>
   </div>
@@ -150,7 +150,7 @@ async function doRegister() {
     let r = await fetch(API + "/api/auth/register", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({username:u,password:p}) });
     let d = await r.json();
     if (r.ok) { showAlert("register-alert",d.message,"success"); setTimeout(showLogin,1500); }
-    else { showAlert("register-alert",d.detail || "注册失败","error"); }
+    else { showAlert("register-alert",d.detail || "上传失败","error"); }
   } catch(e) { showAlert("register-alert","网络错误： "+e.message,"error"); }
   return false;
 }
@@ -168,9 +168,9 @@ async function doLogin() {
       document.getElementById("login-page").style.display = "none";
       document.getElementById("chat-page").style.display = "block";
       document.getElementById("username-display").textContent = "用户: " + user.username;
-      document.getElementById("tenant-display").textContent = "用户: " + user.tenant_id;
+      document.getElementById("tenant-display").textContent = "租户ID：" + user.tenant_id;
       loadDocuments();
-    } else { showAlert("login-alert",d.detail || "注册失败","error"); }
+    } else { showAlert("login-alert",d.detail || "上传失败","error"); }
   } catch(e) { showAlert("login-alert","网络错误： "+e.message,"error"); }
   return false;
 }
@@ -185,7 +185,7 @@ function doLogout() {
 
 async function doUpload() {
   let fileInput = document.getElementById("file-input");
-  if (!fileInput.files[0]) { document.getElementById("upload-status").textContent = "è¯·éæ©PDFæä»¶"; return; }
+  if (!fileInput.files[0]) { document.getElementById("upload-status").textContent = "请选择PDF文件"; return; }
   let status = document.getElementById("upload-status");
   status.textContent = "上传中...";
   let formData = new FormData();
@@ -193,9 +193,9 @@ async function doUpload() {
   try {
     let r = await fetch(API + "/api/documents/upload", { method:"POST", headers:{"Authorization":"Bearer " + token}, body:formData });
     let d = await r.json();
-    if (r.ok) { status.textContent = "网络错误: " + d.filename + " (" + d.chunks + " 已上传)"; loadDocuments(); }
-    else { status.textContent = "注册失败"; }
-  } catch(e) { status.textContent = "用户: " + e.message; }
+    if (r.ok) { status.textContent = "上传成功：" + d.filename + " (" + d.chunks + " 段已索引)"; loadDocuments(); }
+    else { status.textContent = "上传失败"; }
+  } catch(e) { status.textContent = "网络错误：" + e.message; }
 }
 
 async function loadDocuments() {
@@ -247,7 +247,7 @@ async function sendMessage() {
     if (r.ok) {
       addMessage("assistant", d.answer, d.citations, d.token_usage);
       messages.push({role:"user",content:msg}, {role:"assistant",content:d.answer});
-    } else { addMessage("assistant", "用户: " + (d.detail || "注册失败"), null, null); }
+    } else { addMessage("assistant", "API错误：" + (d.detail || "请求失败"), null, null); }
   } catch(e) { addMessage("assistant", "网络错误： " + e.message, null, null); }
   document.getElementById("send-btn").disabled = false;
 }

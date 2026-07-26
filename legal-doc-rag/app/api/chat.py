@@ -80,7 +80,7 @@ Requirements: Cite relevant chunks using [chunk N] notation. If the text doesn't
         usage = data.get("usage", {})
         token_usage = usage.get("total_tokens", 0)
     except Exception as e:
-        return {"answer": f"LLM调用??: {str(e)}", "citations": [], "token_usage": 0}
+        return {"answer": f"LLM调用异常: {str(e)}", "citations": [], "token_usage": 0}
 
     citations = [
         {"source": d.metadata.get("source", ""), "content": d.page_content[:200]}
