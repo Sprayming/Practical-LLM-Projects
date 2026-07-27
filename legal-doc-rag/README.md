@@ -634,3 +634,20 @@ pip install fastapi uvicorn python-multipart PyMuPDF
 cd D:\git\legal-doc-rag
 python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+### 25. FastAPI 后端架构 (app/api/ + app/main.py + app/core/)
+改动: 将 Streamlit 单文件应用重构为 FastAPI 分层架构
+原因: 支持 REST API 对接外部系统，前后端分离，代码职责清晰
+新增文件:
+  - app/main.py: FastAPI 应用入口，可 uvicorn 独立运行
+  - app/api/auth.py: 登录认证 API（POST /api/auth/login）
+  - app/api/chat.py: 问答 API（POST /api/chat/query）
+  - app/api/documents.py: 文档上传 API（POST /api/documents/upload）
+  - app/core/config.py: 集中配置管理（API key、模型名称等）
+  - app/retrieval/embedder_factory.py: Embedding 模型工厂
+  - app/tenant/auth.py: 多租户认证逻辑
+  - app/frontend/index.html: HTML 前端页面
+效果:
+  - 旧版本：800+ 行 Streamlit 单文件，UI 和业务逻辑耦合
+  - 新版本：Streamlit 只负责 UI 渲染，业务逻辑通过 FastAPI 模块暴露
+  - 外部系统现在可以调用 REST API 直接使用 RAG 能力
