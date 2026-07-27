@@ -135,17 +135,19 @@ section[data-testid="stSidebar"] .stButton button:hover {
     background: white; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.06);
 }
 .login-container h1 {
-    font-size: 1.4rem; color: #1a237e; text-align: center; margin-bottom: 0.3rem;
+    font-size: 1.4rem; color: #0d1b5e; text-align: center; margin-bottom: 0.3rem;
 }
 .login-container p { text-align: center; color: #666; font-size: 0.85rem; margin-bottom: 1.5rem; }
 .login-container .stTextInput input {
-    border: 1px solid #dadce0; border-radius: 8px; padding: 0.6rem 0.8rem; font-size: 0.9rem;
+    border: 2px solid #b0b8c5; border-radius: 8px; padding: 0.6rem 0.8rem; font-size: 0.9rem;
 }
 .login-container .stButton button {
     background: #1a237e; color: white; border: none; border-radius: 8px;
     padding: 0.5rem 1rem; font-size: 0.9rem; font-weight: 500; width: 100%;
 }
 .login-container .stButton button:hover { background: #283593; }
+.login-container .stTextInput input:focus { border-color: #1a237e; outline: none; box-shadow: 0 0 0 2px rgba(26,35,126,0.15); }
+.login-container .stTextInput input { background: #f8f9fa; }
 
 /* Chat messages */
 .stChatMessage {
