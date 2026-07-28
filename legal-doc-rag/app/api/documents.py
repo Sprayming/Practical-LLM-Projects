@@ -65,3 +65,42 @@ def list_documents(user: dict = Depends(_require_user)):
         return {"documents": []}
     files = [f for f in os.listdir(upload_dir) if f.endswith(".pdf")]
     return {"documents": files}
+
+@router.delete("/{filename}")
+def delete_document(filename: str, user: dict = Depends(_require_user)):
+    """????????"""
+    tenant_id = user["tenant_id"]
+    role = user.get("role", "user")
+
+    if role != "super_admin":
+        raise HTTPException(403, "????????")
+
+    # ????
+    upload_dir = os.path.join(cfg.UPLOAD_DIR, tenant_id)
+    file_path = os.path.join(upload_dir, filename)
+    deleted = False
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        deleted = True
+
+    # ? ChromaDB ??
+    persist_dir = os.path.join(cfg.CHROMA_PERSIST_DIR, tenant_id)
+    if os.path.exists(persist_dir):
+        try:
+            vector_store = Chroma(
+                embedding_function=create_embedder(),
+                persist_directory=persist_dir,
+            )
+            results = vector_store.get(where={"source": filename})
+            ids = results.get("ids", [])
+            if ids:
+                vector_store.delete(ids=ids)
+                vector_store.persist()
+        except Exception:
+            pass
+
+    if not deleted:
+        raise HTTPException(404, "?????")
+
+    return {"success": True, "message": f"{filename} ???"}
+
