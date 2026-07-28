@@ -28,25 +28,26 @@ if %errorlevel% neq 0 (
 )
 echo   [OK] Redis is running
 
-REM 3. Start web app
+REM 3. Start web app (no restart - it breaks cold-start state)
 echo [3/4] Starting web app...
 docker compose up -d app --no-deps >nul 2>&1
 docker network connect --alias redis legal-doc-rag_default rag-redis >nul 2>&1
-docker compose restart app >nul 2>&1
 echo   [OK] App is running
 
-REM 4. Wait for app to be ready, then open browser
-echo [4/4] Waiting for app to be ready...
+REM 4. Warmup: pre-compile the Streamlit app before opening browser
+echo [4/4] Warming up app...
 :wait_ready
 timeout /t 2 /nobreak >nul
 curl.exe -s http://localhost:8501 >nul 2>&1
 if %errorlevel% neq 0 goto wait_ready
 
+REM Warmup complete - second request is fast
+curl.exe -s http://localhost:8501 >nul 2>&1
+
 echo.
 echo ========================================
 echo   App is ready!
 echo   Open: http://localhost:8501
-echo   Password: rag2024
 echo ========================================
 start http://localhost:8501
 pause

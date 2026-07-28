@@ -2440,3 +2440,12 @@ App 容器通过 `depends_on: redis` 依赖这个 Redis 服务，启动后尝试
 但 Docker Desktop on Windows 的 IPv6 端口映射不走通，连接等待 30-60s 超时后才 fallback 到 IPv4。
 修复: 端口映射 8501:8501 -> 127.0.0.1:8501:8501，只绑定 IPv4，移除 IPv6 映射。
 效果: 浏览器直接走 IPv4 秒开，不再等 IPv6 超时。
+
+### 43. 修复快捷方式启动慢 (2026-07-28)
+改动: start-rag.bat
+根因: start-rag.bat 在 docker compose up -d 启动容器后又执行 docker compose restart app，强制重启容器。
+每次点快捷方式都触发冷启动（Streamlit 重编译 + 健康检查等待），导致页面打开要等 30s+。
+修复:
+  - 移除多余的 docker compose restart app
+  - 预热步骤发送两次请求（第一次触发编译，第二次秒开），再打开浏览器
+效果: 点快捷方式后等待几秒即正常打开，不再冷启动
