@@ -246,7 +246,7 @@ with st.sidebar:
     uploaded_files = st.file_uploader("上传 PDF（可多选）", type="pdf", label_visibility="collapsed", accept_multiple_files=True)
     st.divider()
     # Admin: File management (only for admin users)
-    if st.session_state.user.get("role") == "admin":
+    if st.session_state.user.get("role") == "super_admin":
         st.markdown("### 管理已上传文件")
         uploads_dir = "./uploads"
         if os.path.exists(uploads_dir):

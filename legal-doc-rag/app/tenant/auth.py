@@ -35,6 +35,11 @@ def _init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+        # 迁移: 将现有 admin 升级为 super_admin
+    try:
+        conn.execute("UPDATE users SET role = 'super_admin' WHERE role = 'admin'")
+    except Exception:
+        pass
     conn.commit()
     conn.close()
 
@@ -68,9 +73,12 @@ def register(username: str, password: str) -> Tuple[bool, str]:
             (tenant_id, f"{username}_tenant"),
         )
         # 创建用户
+        cur = conn.execute("SELECT COUNT(*) FROM users")
+        user_count = cur.fetchone()[0]
+        role = "super_admin" if user_count == 0 else "user"
         conn.execute(
             "INSERT INTO users (username, password_hash, tenant_id, role) VALUES (?, ?, ?, ?)",
-            (username, _hash_password(password), tenant_id, "admin"),
+            (username, _hash_password(password), tenant_id, role),
         )
         conn.commit()
         return True, f"注册成功，租户ID: {tenant_id}"
