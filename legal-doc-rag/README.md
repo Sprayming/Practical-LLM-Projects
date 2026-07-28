@@ -691,3 +691,14 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 权限层级:
   - super_admin: 可上传、提问、删除文件
   - user: 只可上传和提问，看不到删除按钮
+### 36. 修复 healthcheck 导致页面慢的问题 (2026-07-28)
+改动: healthcheck.py, docker-compose.yml
+根因: healthcheck.py 里 exit(0) 在 try 块内被执行，exit() 抛出 SystemExit 异常，被 except:（裸捕获）接住 → 执行了 exit(1)，导致健康检查永远失败。
+健康检查一直失败 → Docker 显示 "health: starting" → 没有预热请求 → 用户首次打开页面是冷启动 → 加载慢
+修复:
+  - healthcheck.py: 使用 sys.exit(0) 代替 exit(0) 放在 try-except 外部
+  - healthcheck.py: except: 改为 except Exception: 避免捕获 SystemExit
+  - healthcheck.py: 添加 5 次重试（每次间隔 2s），让 Streamlit 有足够时间启动
+  - docker-compose.yml: healthcheck interval 30s -> 15s，timeout 5s -> 15s
+效果: 容器启动后约 20-30s 健康检查通过，页面打开速度恢复正常
+经验: Python 中 except:（裸捕获）会捕获 SystemExit、KeyboardInterrupt 等 BaseException，永远不要用裸 except
