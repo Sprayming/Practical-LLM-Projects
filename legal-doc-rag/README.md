@@ -673,3 +673,17 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
   - ? 一次上传多个 PDF
   - ? 上传的 PDF 保存在容器内 /app/uploads/，不会丢失
   - ? 向量数据持久化在 /app/chroma_db/，重启容器不丢失
+
+### 34. PDF 删除权限管理 (2026-07-28)
+改动: pp/streamlit_app.py
+原因: 用户需要删除已上传的 PDF，但不是所有用户都有这个权限
+变更:
+  - metadata 新增 "file" 字段，记录每个 chunk 的来源文件名
+  - 侧边栏新增"管理已上传文件"区域，只对 admin 角色可见
+  - 管理员可逐一删除 PDF 文件，同时从 ChromaDB 中清除对应向量
+  - 删除通过 ChromaDB Collection.get(where=...) 获取 chunk IDs，再 delete(ids=...)
+  - 删除后自动清除 session_state 中的 chunks/retriever/vector_store，触发重建
+权限规则:
+  - 第一个注册的用户自动获得 admin 角色
+  - 只有 admin 用户能看到删除按钮
+  - 普通用户只能上传和提问，无法删除

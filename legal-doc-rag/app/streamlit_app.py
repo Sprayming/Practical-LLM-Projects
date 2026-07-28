@@ -245,6 +245,43 @@ with st.sidebar:
     st.markdown(f"<div style='padding:0.3rem 0;font-size:0.75rem;color:rgba(255,255,255,0.5)'>租户: {u['tenant_id']}</div>", unsafe_allow_html=True)
     uploaded_files = st.file_uploader("上传 PDF（可多选）", type="pdf", label_visibility="collapsed", accept_multiple_files=True)
     st.divider()
+    # Admin: File management (only for admin users)
+    if st.session_state.user.get("role") == "admin":
+        st.markdown("### 管理已上传文件")
+        uploads_dir = "./uploads"
+        if os.path.exists(uploads_dir):
+            pdf_files = [f for f in os.listdir(uploads_dir) if f.endswith(".pdf")]
+            if pdf_files:
+                for fname in sorted(pdf_files):
+                    c1, c2 = st.columns([3, 1])
+                    with c1:
+                        st.caption(f"📄 {fname}")
+                    with c2:
+                        if st.button("删除", key=f"del_{fname}"):
+                            file_path = os.path.join(uploads_dir, fname)
+                            if os.path.exists(file_path):
+                                os.remove(file_path)
+                            if "vector_store" in st.session_state:
+                                try:
+                                    col = st.session_state.vector_store._collection
+                                    results = col.get(where={"file": fname})
+                                    if results["ids"]:
+                                        col.delete(ids=results["ids"])
+                                except Exception as e:
+                                    st.error(f"删除向量索引失败: {e}")
+                            if "chunks" in st.session_state:
+                                del st.session_state.chunks
+                            if "retriever" in st.session_state:
+                                del st.session_state.retriever
+                            if "vector_store" in st.session_state:
+                                del st.session_state.vector_store
+                            st.rerun()
+            else:
+                st.caption("暂无上传的文件")
+        else:
+            st.caption("暂无上传的文件")
+        st.divider()
+
     
     rounds = len(st.session_state.messages) // 2
     st.markdown(f'<div class="sidebar-card"><div class="label">会话统计</div><div class="value">{st.session_state.get("last_tokens", 0)} <small>当前</small></div><div class="value">{st.session_state.total_tokens} <small>总计</small></div><div style="margin-top:6px;font-size:0.8rem;color:rgba(255,255,255,0.6)">{rounds} 轮次</div></div>', unsafe_allow_html=True)
@@ -404,7 +441,7 @@ if "vector_store" not in st.session_state:
                     continue
                 chunks = [mc.text for mc in multimodal_chunks]
                 all_chunks.extend(chunks)
-                all_metadatas.extend([{"source": f"{uploaded_file.name} - chunk {i+1}"} for i in range(len(chunks))])
+                all_metadatas.extend([{"source": f"{uploaded_file.name} - chunk {i+1}", "file": uploaded_file.name} for i in range(len(chunks))])
             if not all_chunks:
                 st.error("无法提取文本")
                 st.stop()
