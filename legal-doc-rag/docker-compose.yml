@@ -33,6 +33,7 @@ services:
       - cache:/app/cache
       - uploads:/app/uploads
       - chroma_db:/app/chroma_db
+      - ./app:/app/app
     depends_on:
       - redis
     restart: unless-stopped
