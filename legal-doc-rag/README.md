@@ -651,3 +651,11 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
   - 旧版本：800+ 行 Streamlit 单文件，UI 和业务逻辑耦合
   - 新版本：Streamlit 只负责 UI 渲染，业务逻辑通过 FastAPI 模块暴露
   - 外部系统现在可以调用 REST API 直接使用 RAG 能力
+
+### 32. 文件修改生效规则说明
+问题: 修改不同文件后，有的立即生效，有的需要重建容器，容易混淆
+规则:
+  - 本地脚本 (.bat): 改完立即生效（如 start-rag.bat、stop-rag.bat）
+  - 容器配置 (.env, docker-compose.yml): 改完需要 docker compose up -d --force-recreate
+  - 镜像内代码 (.py): 改完需要 docker compose build --no-cache app 或用 docker cp 直接拷入容器
+  - 容器内配置文件 (healthcheck.py): 改完后用 docker cp 拷入 + docker restart 即可

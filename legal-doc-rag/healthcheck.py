@@ -1,3 +1,6 @@
-import socket, sys
-addr = ('localhost', 8501)
-sys.exit(socket.socket().connect_ex(addr))
+import urllib.request
+try:
+    r = urllib.request.urlopen("http://localhost:8501", timeout=5)
+    exit(0)
+except:
+    exit(1)

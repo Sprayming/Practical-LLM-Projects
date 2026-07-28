@@ -39,7 +39,7 @@ REM 4. Wait for app to be ready, then open browser
 echo [4/4] Waiting for app to be ready...
 :wait_ready
 timeout /t 2 /nobreak >nul
-curl -s http://localhost:8501 >nul 2>&1
+curl.exe -s http://localhost:8501 >nul 2>&1
 if %errorlevel% neq 0 goto wait_ready
 
 echo.
