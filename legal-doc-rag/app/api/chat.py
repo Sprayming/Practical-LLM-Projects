@@ -11,11 +11,14 @@ from app.retrieval.citation import CitationTracker
 from app.retrieval.cache import QueryCache
 from app.memory.memory_manager import MemorySystem
 from app.worker.shadow_worker import get_worker
+from app.observability.tracker import TraceContext
+from app.observability.structured_logger import StructuredLogger
 from langchain_community.vectorstores import Chroma
 import app.core.config as cfg
 from app.api.auth import get_user_from_token
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+_log = StructuredLogger("chat")
 
 class ChatRequest(BaseModel):
     message: str
@@ -74,6 +77,9 @@ async def chat_stream(req: ChatRequest, user: dict = Depends(_require_user)):
     embedder, vector_store, qr, cache, ct = _build_pipeline(user["tenant_id"])
     llm_func = _make_llm_func()
     mem = _get_memory(user["tenant_id"], embedder) if embedder else None
+    trace = TraceContext()
+    trace.begin_span("total")
+    trace.set_input(req.message)
     if vector_store is None:
         return StreamingResponse(
             iter([f"data: {json.dumps({'type': 'error', 'content': '请先上传文档'})}\n\n"]),
@@ -154,6 +160,9 @@ def chat(req: ChatRequest, user: dict = Depends(_require_user)):
     embedder, vector_store, qr, cache, ct = _build_pipeline(user["tenant_id"])
     llm_func = _make_llm_func()
     mem = _get_memory(user["tenant_id"], embedder) if embedder else None
+    trace = TraceContext()
+    trace.begin_span("total")
+    trace.set_input(req.message)
     if vector_store is None:
         return {"answer": "请先上传文档", "citations": [], "token_usage": 0}
     queries = qr.rewrite(req.message, num_variants=1) if qr else [req.message]
@@ -178,6 +187,7 @@ def chat(req: ChatRequest, user: dict = Depends(_require_user)):
     for m in (req.history or [])[-4:]:
         history_text += f"{m.get('role', 'user')}: {m.get('content', '')[:200]} " + chr(10)
     prompt = "You are a legal expert assistant. Answer based on the provided text.\n\nReference text:\n" + context + "\n\nMemory context:\n" + mem_ctx + "\n\nConversation history:\n" + history_text + "\n\nQuestion: " + query + "\n\nRequirements: Cite relevant chunks using [N] notation. If the text doesn't contain the answer, state that clearly."
+    trace.begin_span("llm")
     token_usage = 0
     try:
         resp = requests.post(
@@ -202,4 +212,9 @@ def chat(req: ChatRequest, user: dict = Depends(_require_user)):
     if cache:
         try: cache.set(query, answer)
         except: pass
+    trace.end_span()
+    trace.set_output(str(answer)[:500])
+    trace.set_tokens(token_usage)
+    trace.print_summary()
+    _log.query(req.message, len(answer), token_usage, trace.total_duration_ms(), False)
     return {"answer": answer, "citations": citations, "token_usage": token_usage}
