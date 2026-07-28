@@ -405,6 +405,21 @@ if uploaded_files:
         st.session_state.memory = MemorySystem(
             st.session_state.embedder, "./memory_db", tenant_id=st.session_state.tenant_id
         )
+    # Track processed files for incremental uploads
+    if "processed_files" not in st.session_state:
+        st.session_state.processed_files = set()
+    if "all_chunks" not in st.session_state:
+        st.session_state.all_chunks = []
+    if "all_metadatas" not in st.session_state:
+        st.session_state.all_metadatas = []
+
+    # If new files uploaded, clear vector_store to force rebuild
+    new_files = [f for f in uploaded_files if f.name not in st.session_state.processed_files]
+    if new_files:
+        st.session_state.processed_files.update(f.name for f in new_files)
+        for _k in ["vector_store", "chunks", "retriever"]:
+            if _k in st.session_state:
+                del st.session_state[_k]
 if "vector_store" not in st.session_state:
         if not uploaded_files:
             st.markdown('''
@@ -422,7 +437,7 @@ if "vector_store" not in st.session_state:
             st.stop()
         with st.spinner("Processing PDFs with multimodal pipeline..."):
             import tempfile
-            all_chunks = []
+            # all_chunks = []  # now using st.session_state.all_chunks (accumulated across uploads)
             all_metadatas = []
             os.makedirs("./uploads", exist_ok=True)
             for uploaded_file in uploaded_files:
@@ -440,25 +455,25 @@ if "vector_store" not in st.session_state:
                 if not multimodal_chunks:
                     continue
                 chunks = [mc.text for mc in multimodal_chunks]
-                all_chunks.extend(chunks)
-                all_metadatas.extend([{"source": f"{uploaded_file.name} - chunk {i+1}", "file": uploaded_file.name} for i in range(len(chunks))])
-            if not all_chunks:
+                st.session_state.all_chunks.extend(chunks)
+                st.session_state.all_metadatas.extend([{"source": f"{uploaded_file.name} - chunk {i+1}", "file": uploaded_file.name} for i in range(len(chunks))])
+            if not st.session_state.all_chunks:
                 st.error("无法提取文本")
                 st.stop()
         with st.spinner("Building vector store..."):
             from langchain_community.vectorstores import Chroma
             embed = create_embedder()
             st.session_state.vector_store = Chroma.from_texts(
-                texts=all_chunks, embedding=embed,
-                metadatas=all_metadatas,
+                texts=st.session_state.all_chunks, embedding=embed,
+                metadatas=st.session_state.all_metadatas,
                 persist_directory="./chroma_db",
             )
             st.session_state.vector_store.persist()
-            st.session_state.chunks = all_chunks
+            st.session_state.chunks = st.session_state.all_chunks.copy()
             from app.retrieval.hybrid_retriever import HybridRetriever
             st.session_state.retriever = HybridRetriever(
                 dense_store=st.session_state.vector_store,
-                texts=all_chunks,
+                texts=st.session_state.all_chunks,
                 k=3,
                 use_reranker=False,
             )
