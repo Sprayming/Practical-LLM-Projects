@@ -173,6 +173,12 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 **原因**：Compose Specification v2 不再需要 `version: "3.x"` 声明。\
 **解决**：移除 `version: "3.9"` 行。
 
+
+### 13. MemorySystem 初始化参数名拼写错误
+**现象**：chat 接口 500，反回 "Internal Server Error"，浏览器报 "Unexpected token I, is not valid JSON"。\
+**原因**：`_get_memory` 函数中调用 `MemorySystem(embedder=embedder, ...)`，但构造函数参数名为 `embedding_model`，不是 `embedder`，导致 `TypeError: unexpected keyword argument`。\
+**解决**：`embedder=embedder` 改为 `embedding_model=embedder`。
+
 ## 更新日志
 
 ### 2026-07-28: FastAPI + 角色系统 + Docker 迁移 D 盘
