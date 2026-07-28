@@ -1,4 +1,4 @@
-
+﻿
 """
 多模态处理管线 - PDF 图文提取 + OCR + 向量化
 """
@@ -52,8 +52,26 @@ class MultimodalPipeline:
                 if ocr_result:
                     ocr_texts.append(ocr_result)
 
+            # AI 图片描述 (VisionCaption)
+            caption_texts = []
+            try:
+                from app.ingestion.vision_caption import VisionCaptioner
+                import app.core.config as cfg
+                captioner = VisionCaptioner(api_key=cfg.LLM_API_KEY, base_url=cfg.LLM_BASE_URL)
+                for img in page_images:
+                    try:
+                        caption = captioner.caption(img["bytes"], img.get("ext", "png"))
+                        if caption:
+                            caption_texts.append("[图片描述] " + caption)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
             # 页面文本 + OCR 文字合并
             combined = page_text
+            if caption_texts:
+                combined += "\n" + "\n".join(caption_texts)
             if ocr_texts:
                 combined += "\n[图片文字]\n" + "\n".join(ocr_texts)
 
