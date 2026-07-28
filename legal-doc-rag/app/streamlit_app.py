@@ -194,9 +194,25 @@ if "user" not in st.session_state:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown('''<div style='text-align:center;padding:4rem 0 1rem 0'><h1 style='color:#1a237e;font-size:1.6rem'>法律文档 RAG</h1><p style='color:#666'>多租户智能文档问答系统</p></div>''', unsafe_allow_html=True)
-        if not has_users():
+        # Login/Register toggle
+        if "auth_page" not in st.session_state:
+            st.session_state.auth_page = "login" if has_users() else "register"
+
+        # Toggle buttons
+        tabs = st.columns(2)
+        with tabs[0]:
+            if st.button("登录", use_container_width=True, type="primary" if st.session_state.auth_page == "login" else "secondary"):
+                st.session_state.auth_page = "login"
+                st.rerun()
+        with tabs[1]:
+            if st.button("注册", use_container_width=True, type="primary" if st.session_state.auth_page == "register" else "secondary"):
+                st.session_state.auth_page = "register"
+                st.rerun()
+
+        if st.session_state.auth_page == "register":
             with st.form("register_form", clear_on_submit=True):
-                st.markdown("### 创建管理员账户")
+                title = "创建管理员账户" if not has_users() else "注册新账户"
+                st.markdown(f"### {title}")
                 ru = st.text_input("用户名")
                 rp = st.text_input("密码", type="password")
                 if st.form_submit_button("注册", use_container_width=True, type="primary"):
@@ -209,9 +225,9 @@ if "user" not in st.session_state:
                             st.rerun()
                         else:
                             st.error(msg)
-        else:
+        elif st.session_state.auth_page == "login":
             with st.form("login_form", clear_on_submit=True):
-                st.markdown("### 登录")
+                st.markdown("### \xe7\x99\xbb\xe5\xbd\x95")
                 lu = st.text_input("用户名")
                 lp = st.text_input("密码", type="password")
                 if st.form_submit_button("登录", use_container_width=True, type="primary"):
