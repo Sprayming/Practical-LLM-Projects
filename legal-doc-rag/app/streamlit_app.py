@@ -204,6 +204,7 @@ section[data-testid="stSidebar"] .stButton button:hover {
     position: fixed; bottom: 0.8rem; left: 1rem; right: 1rem;
     font-size: 0.62rem; color: rgba(255,255,255,0.35); text-align: center;
 }
+.stTextInput label{color:#1565c0!important;font-weight:600!important;font-size:0.9rem!important}
 </style>
 """, unsafe_allow_html=True)
 
