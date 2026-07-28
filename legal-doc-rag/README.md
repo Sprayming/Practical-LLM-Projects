@@ -2433,3 +2433,10 @@ App 容器通过 `depends_on: redis` 依赖这个 Redis 服务，启动后尝试
   - healthcheck.py: 改为请求 /_stcore/health（纯 HTTP 端点，不触发脚本重编译）
   - docker-compose.yml: interval 15s -> 120s，减少健康检查频率
 效果: CPU 103% -> 0.5%，页面恢复秒开
+
+### 42. 修复浏览器 1 分钟打不开页面 (2026-07-28)
+改动: docker-compose.yml
+根因: localhost 同时解析为 ::1 (IPv6) 和 127.0.0.1 (IPv4)。浏览器优先尝试 IPv6 连接 [::1]:8501，
+但 Docker Desktop on Windows 的 IPv6 端口映射不走通，连接等待 30-60s 超时后才 fallback 到 IPv4。
+修复: 端口映射 8501:8501 -> 127.0.0.1:8501:8501，只绑定 IPv4，移除 IPv6 映射。
+效果: 浏览器直接走 IPv4 秒开，不再等 IPv6 超时。
