@@ -243,7 +243,7 @@ with st.sidebar:
     u = st.session_state.user
     st.markdown(f"<div style='padding:0.3rem 0;font-size:0.85rem;color:rgba(255,255,255,0.9)'>用户: <strong>{u['username']}</strong></div>", unsafe_allow_html=True)
     st.markdown(f"<div style='padding:0.3rem 0;font-size:0.75rem;color:rgba(255,255,255,0.5)'>租户: {u['tenant_id']}</div>", unsafe_allow_html=True)
-    uploaded_file = st.file_uploader("上传 PDF", type="pdf", label_visibility="collapsed")
+    uploaded_files = st.file_uploader("上传 PDF（可多选）", type="pdf", label_visibility="collapsed", accept_multiple_files=True)
     st.divider()
     
     rounds = len(st.session_state.messages) // 2
@@ -362,60 +362,70 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-if uploaded_file:
+if uploaded_files:
     if "embedder" not in st.session_state:
-        from openai import OpenAI
         st.session_state.embedder = create_embedder()
         st.session_state.memory = MemorySystem(
             st.session_state.embedder, "./memory_db", tenant_id=st.session_state.tenant_id
         )
 if "vector_store" not in st.session_state:
-        if uploaded_file is None:
+        if not uploaded_files:
             st.markdown('''
 <div class=welcome-card>
     <div class=icon>📄</div>
     <h2>Get Started</h2>
     <p>Upload a legal document to begin intelligent Q&A with AI-powered retrieval.</p>
     <ul class=steps>
-        <li>Upload a PDF document via the sidebar</li>
+        <li>Upload PDF documents via the sidebar</li>
         <li>Ask questions about the document content</li>
         <li>Get precise answers with source citations</li>
     </ul>
 </div>
 ''', unsafe_allow_html=True)
             st.stop()
-        with st.spinner("Parsing PDF with multimodal pipeline..."):
+        with st.spinner("Processing PDFs with multimodal pipeline..."):
             import tempfile
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-                tmp.write(uploaded_file.read())
-                tmp_path = tmp.name
-            from app.processing.multimodal_pipeline import MultimodalPipeline
-            pipeline = MultimodalPipeline()
-            multimodal_chunks = pipeline.process(tmp_path)
-            os.unlink(tmp_path)
-            if not multimodal_chunks:
+            all_chunks = []
+            all_metadatas = []
+            os.makedirs("./uploads", exist_ok=True)
+            for uploaded_file in uploaded_files:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                    tmp.write(uploaded_file.read())
+                    tmp_path = tmp.name
+                from app.processing.multimodal_pipeline import MultimodalPipeline
+                pipeline = MultimodalPipeline()
+                multimodal_chunks = pipeline.process(tmp_path)
+                os.unlink(tmp_path)
+                save_path = f"./uploads/{uploaded_file.name}"
+                uploaded_file.seek(0)
+                with open(save_path, "wb") as f:
+                    f.write(uploaded_file.getvalue())
+                if not multimodal_chunks:
+                    continue
+                chunks = [mc.text for mc in multimodal_chunks]
+                all_chunks.extend(chunks)
+                all_metadatas.extend([{"source": f"{uploaded_file.name} - chunk {i+1}"} for i in range(len(chunks))])
+            if not all_chunks:
                 st.error("无法提取文本")
                 st.stop()
-            chunks = [mc.text for mc in multimodal_chunks]
         with st.spinner("Building vector store..."):
             from langchain_community.vectorstores import Chroma
-            from openai import OpenAI
             embed = create_embedder()
             st.session_state.vector_store = Chroma.from_texts(
-                texts=chunks, embedding=embed,
-                metadatas=[{"source": f"{uploaded_file.name} - chunk {i+1}"} for i in range(len(chunks))],
+                texts=all_chunks, embedding=embed,
+                metadatas=all_metadatas,
+                persist_directory="./chroma_db",
             )
-            st.session_state.chunks = chunks
+            st.session_state.vector_store.persist()
+            st.session_state.chunks = all_chunks
             from app.retrieval.hybrid_retriever import HybridRetriever
             st.session_state.retriever = HybridRetriever(
                 dense_store=st.session_state.vector_store,
-                texts=chunks,
+                texts=all_chunks,
                 k=3,
                 use_reranker=False,
             )
-        st.markdown('<div style="background:#e8f5e9;border:1px solid #c8e6c9;border-radius:8px;padding:0.8rem 1rem;color:#2e7d32;font-size:0.9rem;text-align:center;max-width:400px;margin:1rem auto">\u2705 文档已就绪，请在下方提问。</div>', unsafe_allow_html=True)
-
-# 用户输入
+        st.markdown('<div style="background:#e8f5e9;border:1px solid #c8e6c9;border-radius:8px;padding:0.8rem 1rem;color:#2e7d32;font-size:0.9rem;text-align:center;max-width:400px;margin:1rem auto">✅ 文档已就绪，请在下方提问。</div>', unsafe_allow_html=True)# 用户输入
 if prompt := st.chat_input("输入法律问题..."):
     # 输入长度限制
     if len(prompt) > 2000:

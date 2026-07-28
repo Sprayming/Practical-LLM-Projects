@@ -33,6 +33,8 @@ services:
       - logs:/app/logs
       - conversations:/app/conversations
       - cache:/app/cache
+      - uploads:/app/uploads
+      - chroma_db:/app/chroma_db
     depends_on:
       - redis
     restart: unless-stopped
@@ -51,4 +53,7 @@ volumes:
   data_files:
   logs:
   conversations:
+
+  uploads:
+  chroma_db:
   cache:
