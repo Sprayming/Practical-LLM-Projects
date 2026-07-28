@@ -105,6 +105,70 @@ PyMuPDF 提取文字 + 图片坐标 -> pdf2image 转图 -> PaddleOCR 识别 -> �
 ### Q8: 角色系统？
 SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 
+## 踩过的坑
+
+以下是开发过程中遇到的关键问题、原因和解决方案。
+
+### 1. Healthcheck bare except 吞掉 SystemExit
+**现象**：容器健康检查永不失败，即使 Uvicorn 已崩溃。\
+**原因**：healthcheck.py 用了 bare `except:`（没有指定异常类型），捕获了 `SystemExit`（正常退出信号）。\
+**解决**：改为 `except Exception`，避免捕获 `SystemExit`、`KeyboardInterrupt`。
+
+### 2. 浏览器 IPv6 超时导致 1 分钟空白
+**现象**：打开 http://localhost:8000 要等 1 分钟才能看到页面。\
+**原因**：localhost 在某些浏览器中解析为 IPv6 地址 `::1`，Docker 未监听 IPv6，连接超时后才回退到 IPv4。\
+**解决**：明确绑定 `--host 0.0.0.0`，同时 `docker-compose.yml` 中 ports 改为 `127.0.0.1:8000:8000`。
+
+### 3. 容器无限重启
+**现象**：容器启动失败后，docker compose 不停重建容器，日志刷屏。\
+**原因**：`restart: unless-stopped` 配合短间隔健康检查，启动阶段未就绪就被强行重启。\
+**解决**：加 `start_period: 30s` 和 `retries: 3`，给应用充分的初始化时间。
+
+### 4. CPU 100% 导致页面缓慢
+**现象**：页面操作卡顿，CPU 持续满载。\
+**原因**：健康检查每 15 秒触发一次完整 Streamlit 脚本重新加载（热重载机制），每次重载都是 CPU 密集型操作。\
+**解决**：健康检查间隔从 15s 改为 120s，并加入 `start_period` 避免启动阶段频繁检查。
+
+### 5. Redis Alpine 镜像中没有 redis-server
+**现象**：`alpine:3.18` 为基础镜像的容器启动失败，提示找不到 redis-server。\
+**原因**：`alpine:3.18` 是裸 Alpine 系统，不包含 Redis。之前用 Dockerfile 手动安装但镜像更新后缓存失效。\
+**解决**：改用官方 `redis:7-alpine` 镜像，开箱即用。
+
+### 6. 中文编码双重损坏
+**现象**：HTML 和 Python 文件中的中文字符显示为乱码，如 `ç™»å½•`。\
+**原因**：PowerShell `@'...'@ | python` 管道将 UTF-8 字节按系统代码页（GBK）解码成 Latin-1，Python 再按 UTF-8 读取，导致双重编码错误。\
+**解决**：避免使用 PowerShell 管道传递中文；用 `[System.IO.File]::WriteAllText` 直接写入文件。
+
+### 7. 浏览器缓存旧版中文乱码页面
+**现象**：修复中文后刷新页面还是乱码，但加 `?t=1` 就正常。\
+**原因**：`docker cp` 替换了文件但 `last-modified` 时间戳没变，浏览器认为文件未过期，使用缓存中的旧版本。\
+**解决**：更新文件后执行 `touch` 更新时间戳，并在 HTML 中添加 `Cache-Control: no-cache` 元标签。
+
+### 8. 删除 PDF 不同步清除 ChromaDB
+**现象**：PDF 已删除，但问答仍能检索到该文档的内容（幽灵结果）。\
+**原因**：`DELETE` 只删了文件系统的 PDF，未清理 ChromaDB 中的向量索引。\
+**解决**：删除端点先查 `Chroma.get(where={"source": filename})` 获取对应 chunk IDs，再调用 `Chroma.delete(ids=...)` 同步清除索引。
+
+### 9. Docker 磁盘爆满导致 Bus error
+**现象**：docker build 过程中出现 `Bus error (core dumped)`，pip install 失败。\
+**原因**：Docker 的 WSL2 VHDX 虚拟磁盘占满 C 盘（0 字节可用），无法写入新数据。\
+**解决**：将 Docker 数据从 C 盘迁移到 D 盘（robocopy + mklink /J），并紧缩 VHDX（37GB -> 19.5GB）。
+
+### 10. 超管权限仅前端校验
+**现象**：浏览器隐藏了删除按钮，但用 Postman 直接发 DELETE 请求也能成功。\
+**原因**：后端未校验用户角色，任何用户都可以绕过前端直接调用 API。\
+**解决**：后端 `DELETE` 端点添加 `role == "super_admin"` 校验，返回 403 拒绝越权请求。
+
+### 11. 快速启动脚本 Docker 未就绪
+**现象**：双击 start-rag.bat 后直接报错，提示无法连接 Docker daemon。\
+**原因**：Docker Desktop 启动需要时间，脚本在 daemon 就绪前就执行了 `docker run`。\
+**解决**：加入 `:wait_docker` 循环，每 3 秒检查一次 `docker info`，直到 daemon 响应。
+
+### 12. docker-compose.yml 中 version 声明废弃
+**现象**：每次启动都打印 `attribute version is obsolete` 警告。\
+**原因**：Compose Specification v2 不再需要 `version: "3.x"` 声明。\
+**解决**：移除 `version: "3.9"` 行。
+
 ## 更新日志
 
 ### 2026-07-28: FastAPI + 角色系统 + Docker 迁移 D 盘
