@@ -179,6 +179,12 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 **原因**：`_get_memory` 函数中调用 `MemorySystem(embedder=embedder, ...)`，但构造函数参数名为 `embedding_model`，不是 `embedder`，导致 `TypeError: unexpected keyword argument`。\
 **解决**：`embedder=embedder` 改为 `embedding_model=embedder`。
 
+
+### 14. MemorySystem 构造参数 `worker` 不存在
+**现象**：chat 接口 500，报 `TypeError: got an unexpected keyword argument "worker"`。\
+**原因**：`_get_memory` 中传了 `worker=get_worker()`，但 `MemorySystem.__init__` 只接受 `embedding_model, persist_dir, redis_url, tenant_id, max_short_term, forgetting_threshold`，没有 `worker` 参数。\
+**解决**：删除 `worker=get_worker()` 参数。ShadowWorker 通过 `get_worker()` 单例内部访问，无需传入构造函数。
+
 ## 更新日志
 
 ### 2026-07-28: FastAPI + 角色系统 + Docker 迁移 D 盘
