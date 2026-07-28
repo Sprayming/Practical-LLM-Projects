@@ -38,7 +38,7 @@ services:
     restart: unless-stopped
     healthcheck:
       test: python /app/healthcheck.py
-      start_period: 0s
+      start_period: 30s
       interval: 15s
       timeout: 15s
       retries: 8

@@ -2417,3 +2417,10 @@ App 容器通过 `depends_on: redis` 依赖这个 Redis 服务，启动后尝试
   - 新增两个 tab 按钮「登录」「注册」可切换
   - 第一个用户时默认注册页，已有用户时默认登录页
 效果: 用户可以自由切换登录/注册
+
+### 40. 修复容器无限重启 (2026-07-28)
+改动: docker-compose.yml
+根因: start_period: 0s 导致容器一启动 healthcheck 就开始跑，Streamlit 冷启动需 15-30s，
+期间健康检查全部失败。失败 8 次后 Docker 标记 unhealthy 并自动重启 → 无限循环。
+修复: start_period: 0s -> 30s，给 App 30s 缓冲时间再开始健康检查
+效果: 容器稳定运行，不再重启
