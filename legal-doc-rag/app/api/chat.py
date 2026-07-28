@@ -1,4 +1,4 @@
-import os, sys, json, requests, time
+﻿import os, sys, json, requests, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from fastapi import APIRouter, HTTPException, Depends, Header
 from fastapi.responses import StreamingResponse
@@ -51,7 +51,7 @@ def _get_memory(tenant_id, embedder):
     global _memory_cache
     if tenant_id not in _memory_cache:
         pd = os.path.join("memory_db", tenant_id)
-        _memory_cache[tenant_id] = MemorySystem(embedder=embedder, persist_dir=pd, tenant_id=tenant_id, worker=get_worker())
+        _memory_cache[tenant_id] = MemorySystem(embedding_model=embedder, persist_dir=pd, tenant_id=tenant_id, worker=get_worker())
     return _memory_cache[tenant_id]
 
 _reranker = None
