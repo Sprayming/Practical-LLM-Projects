@@ -185,6 +185,12 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 **原因**：`_get_memory` 中传了 `worker=get_worker()`，但 `MemorySystem.__init__` 只接受 `embedding_model, persist_dir, redis_url, tenant_id, max_short_term, forgetting_threshold`，没有 `worker` 参数。\
 **解决**：删除 `worker=get_worker()` 参数。ShadowWorker 通过 `get_worker()` 单例内部访问，无需传入构造函数。
 
+
+### 15. tenant_data/users.db 被打包进镜像导致角色混乱
+**现象**：重建容器后首个注册用户拿到的是 `user` 而不是 `super_admin`。\
+**原因**：`docker compose build` 时 `COPY . .` 把本地的 `tenant_data/users.db`（含历史测试用户）打包进镜像，新建容器时数据库非空，首个用户无法成为 `super_admin`。\
+**解决**：删掉本地 `tenant_data/`，并在 `.dockerignore` 中添加 `tenant_data/`，避免数据库文件进入镜像。
+
 ## 更新日志
 
 ### 2026-07-28: FastAPI + 角色系统 + Docker 迁移 D 盘
