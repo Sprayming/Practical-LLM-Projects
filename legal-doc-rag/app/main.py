@@ -1,4 +1,4 @@
-import os
+﻿import os
 os.environ['TRANSFORMERS_OFFLINE'] = '1'
 os.environ['HF_HUB_DISABLE_SYMLINKS_WARNING'] = '1'
 os.environ['CURL_CA_BUNDLE'] = ''
@@ -20,6 +20,7 @@ if env_path.exists():
 from app.api.auth import router as auth_router
 from app.api.chat import router as chat_router
 from app.api.documents import router as documents_router
+from app.api.feedback import router as feedback_router
 
 app = FastAPI(title="Legal Document RAG API", version="1.0.0")
 
@@ -34,6 +35,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(chat_router)
 app.include_router(documents_router)
+app.include_router(feedback_router)
 
 @app.get("/api/health")
 def health():

@@ -13,6 +13,8 @@
 - 混合检索 — BM25 + Dense + RRF + Cross-Encoder 重排序
 - 多模态 PDF — 文字（PyMuPDF）+ OCR（PaddleOCR）
 - Token 预算控制 — LLM 调用统计 + 上限
+- 流式输出 — SSE 实时流式响应
+- 用户反馈 — 👍/👎 收集问答满意度
 - 异步整理 — Shadow Worker 后台提取摘要 + 实体画像
 
 ## 角色系统

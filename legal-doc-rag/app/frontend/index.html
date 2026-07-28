@@ -250,13 +250,40 @@ function addMessage(role, content, citations, tokens) {
   div.className = "message " + role;
   div.textContent = content;
   container.appendChild(div);
-  if (citations && citations.length) {
+  if (citations && citations.length && role === "assistant") {
+    var toggle = document.createElement("div");
+    toggle.textContent = "\u5f15\u7528\u6765\u6e90 [" + citations.length + "\u6761]";
+    toggle.style.cssText = "font-size:0.8rem;color:#1a237e;cursor:pointer;margin:0.3rem 0;";
+    toggle.onclick = function() {
+      var ca = container.querySelector(".cite-area");
+      if (ca) ca.style.display = ca.style.display === "none" ? "block" : "none";
+    };
+    container.appendChild(toggle);
+    var ca = document.createElement("div");
+    ca.className = "cite-area";
+    ca.style.display = "none";
     citations.forEach(function(c) {
       var cite = document.createElement("div");
       cite.className = "citation";
-      cite.innerHTML = '<div class="source">' + c.source + '</div>' + c.content;
-      container.appendChild(cite);
+      cite.innerHTML = "<div class=\"source\">" + (c.source || "\u6765\u6e90") + "</div>" + c.content;
+      ca.appendChild(cite);
     });
+    container.appendChild(ca);
+    var fb = document.createElement("div");
+    fb.style.cssText = "margin:0.3rem 0;";
+    var up = document.createElement("span");
+    up.textContent = "\ud83d\udc4d";
+    up.style.cssText = "cursor:pointer;margin-right:0.5rem;font-size:1rem;";
+    up.title = "\u6709\u7528";
+    up.onclick = function() { submitFeedback(1); };
+    fb.appendChild(up);
+    var down = document.createElement("span");
+    down.textContent = "\ud83d\udc4e";
+    down.style.cssText = "cursor:pointer;font-size:1rem;";
+    down.title = "\u65e0\u7528";
+    down.onclick = function() { submitFeedback(-1); };
+    fb.appendChild(down);
+    container.appendChild(fb);
   }
   if (tokens) {
     var info = document.createElement("div");
@@ -275,26 +302,71 @@ async function sendMessage() {
   addMessage("user", msg, null, null);
   document.getElementById("send-btn").disabled = true;
   try {
-    var r = await fetch(API + "/api/chat", { method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer " + token}, body:JSON.stringify({message:msg, history:messages}) });
-    var d = await r.json();
-    if (r.ok) {
-      addMessage("assistant", d.answer, d.citations, d.token_usage);
-      messages.push({role:"user",content:msg}, {role:"assistant",content:d.answer});
-    } else { addMessage("assistant", "API错误：" + (d.detail || "请求失败"), null, null); }
-  } catch(e) { addMessage("assistant", "网络错误： " + e.message, null, null); }
+    var r = await fetch(API + "/api/chat/stream", {
+      method: "POST",
+      headers: {"Content-Type": "application/json", "Authorization": "Bearer " + token},
+      body: JSON.stringify({message: msg, history: messages})
+    });
+    if (!r.ok) {
+      var r2 = await fetch(API + "/api/chat", {
+        method: "POST",
+        headers: {"Content-Type": "application/json", "Authorization": "Bearer " + token},
+        body: JSON.stringify({message: msg, history: messages})
+      });
+      var d2 = await r2.json();
+      if (r2.ok) {
+        addMessage("assistant", d2.answer, d2.citations, d2.token_usage);
+        messages.push({role:"user",content:msg},{role:"assistant",content:d2.answer});
+        window._lastAnswer = d2.answer; window._lastQuery = msg;
+      } else { addMessage("assistant", "API\u9519\u8bef\uff1a" + (d2.detail || "\u8bf7\u6c42\u5931\u8d25"), null, null); }
+      document.getElementById("send-btn").disabled = false;
+      return;
+    }
+    var reader = r.body.getReader();
+    var decoder = new TextDecoder();
+    var buf = "";
+    var full = "";
+    var cites = []; var usage = 0;
+    var cont = document.getElementById("chat-messages");
+    var empty = document.getElementById("empty-state");
+    if (empty) empty.style.display = "none";
+    var md = document.createElement("div");
+    md.className = "message assistant";
+    md.id = "streaming-msg";
+    cont.appendChild(md);
+    while (true) {
+      var rd = await reader.read();
+      if (rd.done) break;
+      buf += decoder.decode(rd.value, {stream: true});
+      var lines = buf.split("\n");
+      buf = lines.pop() || "";
+      for (var ln of lines) {
+        if (ln.startsWith("data: ")) {
+          try {
+            var ev = JSON.parse(ln.slice(6));
+            if (ev.type === "token") { full += ev.content; md.textContent = full; }
+            else if (ev.type === "done") { cites = ev.citations || []; usage = ev.token_usage || 0; }
+            else if (ev.type === "error") { md.textContent = "\u9519\u8bef\uff1a" + ev.content; }
+          } catch(e) {}
+        }
+      }
+    }
+    md.remove();
+    addMessage("assistant", full, cites, usage);
+    messages.push({role:"user",content:msg},{role:"assistant",content:full});
+    window._lastAnswer = full; window._lastQuery = msg;
+  } catch(e) { addMessage("assistant", "\u7f51\u7edc\u9519\u8bef\uff1a" + e.message, null, null); }
   document.getElementById("send-btn").disabled = false;
 }
 
-async function doDeleteDocument(fname) {
-  if (!confirm("确定删除 " + fname + " ？此操作不可撤销。")) return;
+async function submitFeedback(rating) {
+  if (!window._lastAnswer) return;
   try {
-    var r = await fetch(API + "/api/documents/" + encodeURIComponent(fname), {
-      method: "DELETE", headers: {"Authorization": "Bearer " + token}
+    await fetch(API + "/api/feedback", { method: "POST",
+      headers: {"Content-Type": "application/json", "Authorization": "Bearer " + token},
+      body: JSON.stringify({answer: window._lastAnswer, rating: rating, query: window._lastQuery})
     });
-    var d = await r.json();
-    if (r.ok) { document.getElementById("upload-status").textContent = d.message; loadDocuments(); }
-    else { document.getElementById("upload-status").textContent = d.detail || "删除失败"; }
-  } catch(e) { document.getElementById("upload-status").textContent = "网络错误：" + e.message; }
+  } catch(e) {}
 }
 
 function clearHistory() {
