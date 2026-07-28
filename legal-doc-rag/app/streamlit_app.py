@@ -131,23 +131,24 @@ section[data-testid="stSidebar"] .stButton button:hover {
 
 /* Login page */
 .login-container {
-    max-width: 380px; margin: 5rem auto; padding: 2rem;
-    background: white; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    max-width: 380px; margin: 5rem auto; padding: 2.2rem;
+    background: white; border-radius: 14px; box-shadow: 0 4px 24px rgba(0,0,0,0.1);
 }
 .login-container h1 {
-    font-size: 1.4rem; color: #0d1b5e; text-align: center; margin-bottom: 0.3rem;
+    font-size: 1.5rem; color: #1a1a2e; text-align: center; margin-bottom: 0.3rem;
 }
-.login-container p { text-align: center; color: #666; font-size: 0.85rem; margin-bottom: 1.5rem; }
+.login-container p { text-align: center; color: #444; font-size: 0.85rem; margin-bottom: 1.5rem; }
 .login-container .stTextInput input {
-    border: 2px solid #b0b8c5; border-radius: 8px; padding: 0.6rem 0.8rem; font-size: 0.9rem;
+    border: 2px solid #9ea7b3; border-radius: 8px; padding: 0.6rem 0.8rem; font-size: 0.9rem;
+    background: #ffffff;
 }
 .login-container .stButton button {
-    background: #1a237e; color: white; border: none; border-radius: 8px;
-    padding: 0.5rem 1rem; font-size: 0.9rem; font-weight: 500; width: 100%;
+    background: #1976d2; color: white; border: none; border-radius: 8px;
+    padding: 0.5rem 1rem; font-size: 0.9rem; font-weight: 600; width: 100%;
+    cursor: pointer; transition: background 0.15s;
 }
-.login-container .stButton button:hover { background: #283593; }
-.login-container .stTextInput input:focus { border-color: #1a237e; outline: none; box-shadow: 0 0 0 2px rgba(26,35,126,0.15); }
-.login-container .stTextInput input { background: #f8f9fa; }
+.login-container .stButton button:hover { background: #1e88e5; }
+.login-container .stTextInput input:focus { border-color: #1976d2; outline: none; box-shadow: 0 0 0 3px rgba(25,118,210,0.2); }
 
 /* Chat messages */
 .stChatMessage {
