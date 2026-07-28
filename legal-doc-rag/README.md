@@ -2424,3 +2424,12 @@ App 容器通过 `depends_on: redis` 依赖这个 Redis 服务，启动后尝试
 期间健康检查全部失败。失败 8 次后 Docker 标记 unhealthy 并自动重启 → 无限循环。
 修复: start_period: 0s -> 30s，给 App 30s 缓冲时间再开始健康检查
 效果: 容器稳定运行，不再重启
+
+### 41. 修复 CPU 100% 导致页面慢 (2026-07-28)
+改动: healthcheck.py, docker-compose.yml
+根因: 健康检查每 15s 请求 http://localhost:8501/，Streamlit 收到 / 请求会完整重编译脚本。
+每 15s 跑一次完整 Python 脚本 → CPU 占用飙到 103% → 用户交互被阻塞 → 页面感觉慢。
+修复:
+  - healthcheck.py: 改为请求 /_stcore/health（纯 HTTP 端点，不触发脚本重编译）
+  - docker-compose.yml: interval 15s -> 120s，减少健康检查频率
+效果: CPU 103% -> 0.5%，页面恢复秒开
