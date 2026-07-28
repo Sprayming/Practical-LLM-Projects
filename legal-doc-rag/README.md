@@ -659,3 +659,17 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
   - å®¹å™¨é…ç½® (.env, docker-compose.yml): æ”¹å®Œéœ€è¦ docker compose up -d --force-recreate
   - é•œåƒå†…ä»£ç  (.py): æ”¹å®Œéœ€è¦ docker compose build --no-cache app æˆ–ç”¨ docker cp ç›´æ¥æ‹·å…¥å®¹å™¨
   - å®¹å™¨å†…é…ç½®æ–‡ä»¶ (healthcheck.py): æ”¹å®Œåç”¨ docker cp æ‹·å…¥ + docker restart å³å¯
+
+### 33. ¶àÎÄ¼şÉÏ´« + Êı¾İ³Ö¾Ã»¯ (2026-07-28)
+¸Ä¶¯: pp/streamlit_app.py, docker-compose.yml
+Ô­Òò: Ö®Ç°Ö»ÄÜÉÏ´«µ¥¸ö PDF£¬ÉÏ´«ºóÎÄ¼ş²»±£´æ£¬ÈİÆ÷ÖØÆôºóÏòÁ¿Êı¾İ¶ªÊ§
+±ä¸ü:
+  - st.file_uploader ¸ÄÎª accept_multiple_files=True£¬Ö§³ÖÒ»´ÎÑ¡Ôñ¶à¸ö PDF ÉÏ´«
+  - ´¦ÀíÂß¼­¸ÄÎªÑ­»·±éÀú uploaded_files£¬Öğ¸ö½âÎö²¢ºÏ²¢ÇĞ¿é
+  - ÉÏ´«µÄÔ­Ê¼ PDF ±£´æÖÁ ./uploads/ Ä¿Â¼£¬Í¨¹ı Docker volume ³Ö¾Ã»¯
+  - ChromaDB ´´½¨Ê±Ö¸¶¨ persist_directory="./chroma_db"£¬µ÷ÓÃ .persist()
+  - docker-compose.yml ĞÂÔö uploads ºÍ chroma_db Á½¸ö named volume
+Ğ§¹û:
+  - ? Ò»´ÎÉÏ´«¶à¸ö PDF
+  - ? ÉÏ´«µÄ PDF ±£´æÔÚÈİÆ÷ÄÚ /app/uploads/£¬²»»á¶ªÊ§
+  - ? ÏòÁ¿Êı¾İ³Ö¾Ã»¯ÔÚ /app/chroma_db/£¬ÖØÆôÈİÆ÷²»¶ªÊ§
