@@ -51,7 +51,7 @@ def _get_memory(tenant_id, embedder):
     global _memory_cache
     if tenant_id not in _memory_cache:
         pd = os.path.join("memory_db", tenant_id)
-        _memory_cache[tenant_id] = MemorySystem(embedding_model=embedder, persist_dir=pd, tenant_id=tenant_id, worker=get_worker())
+        _memory_cache[tenant_id] = MemorySystem(embedding_model=embedder, persist_dir=pd, tenant_id=tenant_id)
     return _memory_cache[tenant_id]
 
 _reranker = None
