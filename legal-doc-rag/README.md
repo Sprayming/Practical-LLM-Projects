@@ -2395,3 +2395,16 @@ App 容器通过 `depends_on: redis` 依赖这个 Redis 服务，启动后尝试
 效果: Redis 容器稳定运行，App 不再等待 Redis 连接，页面秒开
 
 经验: docker-compose 里配 `depends_on` 只保证启动顺序，不保证依赖的服务正常可用。
+### 38. 修复: 增量上传多个 PDF 触发重建 (2026-07-28)
+改动: app/streamlit_app.py
+根因: 上传第二个 PDF 时 vector_store 已存在，直接跳过处理。
+修复:
+  - 新增 st.session_state.processed_files 追踪已处理的文件名
+  - 新增 st.session_state.all_chunks / all_metadatas 跨上传累积所有切块
+  - 检测到新文件上传时，自动清空 vector_store 触发重建
+  - 重建时 Chroma.from_texts(texts=st.session_state.all_chunks, ...) 使用全部累积数据
+流程:
+  1. 上传 file1.pdf -> 处理 -> 创建向量库
+  2. 上传 file2.pdf -> 检测新文件 -> 清空旧库 -> 合并 file1+file2 切块 -> 重建
+  3. 上传 file3.pdf -> 同上 -> 合并所有切块 -> 重建
+效果: 支持连续上传多个 PDF 形成稳定的知识库
