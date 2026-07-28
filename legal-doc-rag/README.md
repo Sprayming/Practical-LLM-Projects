@@ -691,33 +691,122 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 权限层级:
   - super_admin: 可上传、提问、删除文件
   - user: 只可上传和提问，看不到删除按钮
-### 36. ⚠️ 经典坑: bare except: 吞掉 SystemExit 导致健康检查永远失败 (2026-07-28)
+### 36. 经典坑: bare except: 吞掉 SystemExit 导致健康检查永远失败 (2026-07-28)
 改动: healthcheck.py, docker-compose.yml
-**根因（经典 Python 面试题级别的坑）:**
-`python
+
+**根因（经典到可以当面试题的水平）:**
+
+原始 healthcheck.py:
+```python
 try:
     r = urllib.request.urlopen("http://localhost:8501", timeout=5)
-    exit(0)          # ← exit() 本质是 raise SystemExit(0)
-except:              # ← 裸 except 连 SystemExit 一起捕获！
-    exit(1)          # ← exit(0) → 被吞 → 执行了 exit(1)
-`
-健康检查永远 exit(1) → Docker 永远 "health: starting" → 没有预热请求 → 用户首次打开冷启动 → 页面慢
-**修复:**
-  - sys.exit(0) 放在 try-except 外部（不在 try 里 exit）
-  - except: → except Exception:（不捕获 SystemExit / KeyboardInterrupt）
-  - 添加 5 次重试（每次 2s），给 Streamlit 启动时间
-  - docker-compose.yml: interval 30s → 15s, timeout 5s → 15s
-**效果:** 容器启动后 ~28s 健康检查通过，页面恢复秒开
-**记住这条规则:**
-> Python 中 except:（裸捕获）会捕获 SystemExit、KeyboardInterrupt、GeneratorExit 等所有 BaseException。
-> **永远不要用裸 except:**，至少写 except Exception:。
-> 同理，exit() 不要放在 try 块内部，会被 except 吞掉。
+    exit(0)          # 页面正常 -> 退出码 0
+except:              # 裸 except -> 出错了退出码 1
+    exit(1)
+```
 
-### 37. 不��� Redis 容器导致页面完全打不开 (2026-07-28)
+看起来没问题对吧？页面正常就 exit(0)，异常就走 exit(1)。但健康检查永远返回 1。
+
+**关键知识点：Python 的 exit() 不是函数，是异常**
+
+Python 中 `exit()`、`sys.exit()`、`quit()` 的实现机制完全一样：
+```python
+# Python 内部大致是这样实现的
+def exit(code=0):
+    raise SystemExit(code)   # <- 抛出一个异常！
+```
+
+没错，`exit(0)` 的本质是 `raise SystemExit(0)`。这是一个 **异常对象**，沿着调用栈一路往上冒泡。解释器看到 `SystemExit` 没有被捕获时，才真正退出进程。
+
+**为什么 Python 要这样设计？**
+
+1. 保证清理代码执行：`try-finally` 和 `with` 语句在异常冒泡过程中会执行清理
+2. 可以被拦截：调试时可以用 `except SystemExit` 抓住它，打印调用栈再决定是否退出
+3. 统一异常机制：不需要为"退出"单独设计一套控制流
+
+**但正是这个好设计，撞上了 Python 最危险的语法：bare except**
+
+```python
+try:
+    exit(0)              # 抛出 SystemExit(0)
+except:                  # <- BARE except = except BaseException:
+    exit(1)              # 连 SystemExit 也抓到了！
+```
+
+真实运行时发生了什么：
+
+| 步骤 | 代码 | 发生了什么 |
+|------|------|-----------|
+| 1 | `exit(0)` | Python 抛出 `SystemExit(0)` 异常 |
+| 2 | `except:` | 裸 except 捕获了 `SystemExit` |
+| 3 | `exit(1)` | 又抛出一个 `SystemExit(1)` |
+| 4 | 程序退出 | 退出码 = 1（失败） |
+
+所以健康检查永远返回 exit(1)，Docker 永远 "health: starting"。
+
+**Python 中三种"退出"方式的区别：**
+
+| 函数 | 实现方式 | 能被 except 捕获？ | 执行 finally？ | 推荐使用？ |
+|------|---------|-------------------|---------------|-----------|
+| `exit(0)` | `raise SystemExit(0)` | 会被 `except:` 捕获；不会被 `except Exception:` 捕获 | 执行 | 交互式环境 |
+| `sys.exit(0)` | `raise SystemExit(0)` | 同上 | 执行 | 脚本内推荐 |
+| `os._exit(0)` | 直接系统调用 `_exit()` | 不可捕获 | **不**执行 | 仅子进程 fork 后 |
+
+**修复方案：**
+
+修复前：
+```python
+try:
+    r = urllib.request.urlopen("http://localhost:8501", timeout=5)
+    exit(0)          # <- 在 try 里 exit，会被 except 吞掉
+except:              # <- 裸 except
+    exit(1)
+```
+
+修复后：
+```python
+for i in range(5):
+    try:
+        r = urllib.request.urlopen("http://localhost:8501", timeout=5)
+        if r.status == 200:
+            sys.exit(0)  # <- 放 try 外面！用 except Exception
+    except Exception:    # <- 只捕获 Exception，不碰 SystemExit
+        if i < 4:
+            time.sleep(2)
+        continue
+sys.exit(1)
+```
+
+关键改动：
+  - `exit()` -> `sys.exit()`：功能一样，但 `sys.exit()` 语义更清晰
+  - `except:` -> `except Exception:`：不捕获 `SystemExit`、`KeyboardInterrupt`、`GeneratorExit`
+  - `sys.exit(0)` 移到了 try 外部：逻辑更清晰，放外面不会被任何 except 捕获
+  - 添加 5 次重试（每次 2s）：给 Streamlit 启动时间
+
+**额外修复：**
+  - docker-compose.yml: interval 30s -> 15s, timeout 5s -> 15s
+
+**效果:** 容器启动后 ~28s 健康检查通过，页面恢复秒开
+
+**面试官可能会问：**
+
+> Q: `except:` 和 `except Exception:` 有什么区别？
+> A: `except:` 等价于 `except BaseException:`，会捕获 SystemExit、KeyboardInterrupt、GeneratorExit。`except Exception:` 只捕获普通的程序异常。
+>
+> Q: 为什么 Python 不把 SystemExit 设计成继承 Exception？
+> A: 因为在 except 语句中，程序员的本意通常是处理程序逻辑错误。如果 SystemExit 继承 Exception，`except Exception` 就会意外拦住程序退出，导致程序关不掉。
+> BaseException -> Exception -> 普通异常（ValueError, KeyError 等）
+> BaseException -> SystemExit / KeyboardInterrupt / GeneratorExit（不应该被普通 except 捕获）
+
+**记住一句话：**
+> Python 中 `exit()` 的本质是 `raise SystemExit()`。它是一个异常，会被 `except:` 捕获。
+> **永远不要用裸 `except:`**，至少写 `except Exception:`。
+> **永远不要把 `exit()` / `sys.exit()` 放在 try 块里**，会被 except 吞掉。### 37. 不��� Redis 容器导致页面完全打不开 (2026-07-28)
 改动: docker-compose.yml
 根因: redis 服务的 image 写的是 lpine:3.18，但 alpine 基础镜像里没有 Redis 软件。
 容器启动后立即退出 → Docker 检测到退出就自动重启（restart: unless-stopped）→ 无限重启循环。
-App 容器通过 depends_on: redis 依赖这个 Redis 服务，启动后尝试连接 edis://redis:6379/0，
+App 容器通过 depends_on: redis 依赖这个 Redis 服务，启动后尝试连接 
+edis://redis:6379/0，
 但 hostname "redis" 解析到的是这个不断重启的容器，连接永远失败或超时。
 修复:
   - image: alpine:3.18 → image: redis:7-alpine（官方 Redis 镜像）
