@@ -129,27 +129,6 @@ section[data-testid="stSidebar"] .stButton button:hover {
     content: "\2713"; color: #34a853; font-weight: 700; margin-right: 8px;
 }
 
-/* Login page */
-.login-container {
-    max-width: 380px; margin: 5rem auto; padding: 2.2rem;
-    background: white; border-radius: 14px; box-shadow: 0 4px 24px rgba(0,0,0,0.1);
-}
-.login-container h1 {
-    font-size: 1.5rem; color: #1a1a2e; text-align: center; margin-bottom: 0.3rem;
-}
-.login-container p { text-align: center; color: #444; font-size: 0.85rem; margin-bottom: 1.5rem; }
-.login-container .stTextInput input {
-    border: 2px solid #9ea7b3; border-radius: 8px; padding: 0.6rem 0.8rem; font-size: 0.9rem;
-    background: #ffffff;
-}
-.login-container .stButton button {
-    background: #1976d2; color: white; border: none; border-radius: 8px;
-    padding: 0.5rem 1rem; font-size: 0.9rem; font-weight: 600; width: 100%;
-    cursor: pointer; transition: background 0.15s;
-}
-.login-container .stButton button:hover { background: #1e88e5; }
-.login-container .stTextInput input:focus { border-color: #1976d2; outline: none; box-shadow: 0 0 0 3px rgba(25,118,210,0.2); }
-
 /* Chat messages */
 .stChatMessage {
     border-radius: 12px !important; border: none !important;
