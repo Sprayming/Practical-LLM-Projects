@@ -712,3 +712,15 @@ except:              # ← 裸 except 连 SystemExit 一起捕获！
 > Python 中 except:（裸捕获）会捕获 SystemExit、KeyboardInterrupt、GeneratorExit 等所有 BaseException。
 > **永远不要用裸 except:**，至少写 except Exception:。
 > 同理，exit() 不要放在 try 块内部，会被 except 吞掉。
+
+### 37. 不��� Redis 容器导致页面完全打不开 (2026-07-28)
+改动: docker-compose.yml
+根因: redis 服务的 image 写的是 lpine:3.18，但 alpine 基础镜像里没有 Redis 软件。
+容器启动后立即退出 → Docker 检测到退出就自动重启（restart: unless-stopped）→ 无限重启循环。
+App 容器通过 depends_on: redis 依赖这个 Redis 服务，启动后尝试连接 edis://redis:6379/0，
+但 hostname "redis" 解析到的是这个不断重启的容器，连接永远失败或超时。
+修复:
+  - image: alpine:3.18 → image: redis:7-alpine（官方 Redis 镜像）
+  - 去掉 ports 映射（避免和 rag-project 的 Redis 容器端口冲突，App 走内部 Docker 网络连接）
+效果: Redis 容器稳定运行，App 不再等待 Redis 连接，页面秒开
+经验: docker-compose 里配 depends_on 只保证启动顺序，不保证依赖的服务正常可用。

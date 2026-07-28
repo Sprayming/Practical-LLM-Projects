@@ -2,9 +2,7 @@ version: "3.9"
 
 services:
   redis:
-    image: alpine:3.18
-    ports:
-      - "6379:6379"
+    image: redis:7-alpine
     volumes:
       - redis_data:/data
     restart: unless-stopped
@@ -57,3 +55,4 @@ volumes:
   uploads:
   chroma_db:
   cache:
+
