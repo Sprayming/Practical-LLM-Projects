@@ -21,3 +21,4 @@ tenant_data/
 # Runtime
 cache/
 logs/
+visuals/*.py

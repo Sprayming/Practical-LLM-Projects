@@ -5,80 +5,11 @@
 基于 FastAPI 的法律文书智能问答系统。上传 PDF、法规、法律文件，用自然语言提问，系统自动检索相关条款并生成带引用的回答。
 
 
-## 模块依赖关系
-
-```mermaid
-flowchart TB
-  subgraph ENTRY["入口"]
-    MAIN["main.py"]
-  end
-
-  subgraph API["api/ 接口层"]
-    AUTH_API["auth.py<br/>注册/登录"]
-    CHAT_API["chat.py<br/>问答/流式"]
-    DOC_API["documents.py<br/>上传/删除"]
-    FB["feedback.py"]
-  end
-
-  subgraph T["tenant/ 用户层"]
-    AUTH_T["auth.py<br/>SQLite"]
-  end
-
-  subgraph R["retrieval/ 检索层"]
-    EMBED["embedder_factory.py"]
-    HYBRID["hybrid_retriever.py"]
-    REWRITER["query_rewriter.py"]
-    CITATION["citation.py"]
-    CACHE["cache.py"]
-  end
-
-  subgraph M["memory/ 记忆层"]
-    MEM["memory_manager.py"]
-    REDIS_CLI["redis_client.py"]
-    FORGET["forgetting.py"]
-    PROFILE["profile_store.py"]
-  end
-
-  subgraph P["processing/ 文档处理"]
-    PIPE["multimodal_pipeline.py"]
-    PDF["pdf_extractor.py"]
-    OCR["ocr_engine.py"]
-    VISION["vision_caption.py"]
-  end
-
-  subgraph O["observability/ 可观测"]
-    TRACK["tracker.py"]
-    SLOG["structured_logger.py"]
-  end
-
-  subgraph W["worker/ 异步任务"]
-    SW["shadow_worker.py"]
-  end
-
-  subgraph C["core/ 配置"]
-    CFG["config.py"]
-  end
-
-  MAIN --> AUTH_API & CHAT_API & DOC_API & FB
-  AUTH_API --> AUTH_T & CFG
-  CHAT_API --> REWRITER & HYBRID & EMBED & CITATION & CACHE & CFG
-  CHAT_API --> MEM
-  CHAT_API --> TRACK & SLOG
-  CHAT_API --> SW
-  DOC_API --> EMBED & PIPE & AUTH_API & CFG
-  FB --> AUTH_API
-  HYBRID --> EMBED
-  MEM --> REDIS_CLI & FORGET & PROFILE & SW
-  PIPE --> PDF & OCR & VISION
-  VISION --> CFG
-  MEM --> SW
 
 
-  style MAIN fill:#1a237e,color:#fff
-  style AUTH_API fill:#e3f2fd
-  style CHAT_API fill:#e3f2fd
-  style DOC_API fill:#e3f2fd
-```
+## Module Dependencies
+
+![Module Dependencies](visuals/module_deps.svg)
 ## 核心特性
 
 - FastAPI 后端 — 异步高吞吐，RESTful API，Token 认证
