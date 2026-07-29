@@ -16,7 +16,7 @@ $pull = & "C:\Program Files\Git\bin\git.exe" pull 2>&1
 Write-Host "   $pull" -ForegroundColor Gray
 
 # 第2步：检查本地改动
-$status = & "C:\Program Files\Git\bin\git.exe" status --porcelain 2>&1
+$status = & "C:\Program Files\Git\bin\git.exe" status --porcelain . 2>&1
 if ($status) {
     # 有改动 → 自动提交并推送
     $count = ($status -split "`n").Count

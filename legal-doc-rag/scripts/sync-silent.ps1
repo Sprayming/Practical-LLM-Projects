@@ -11,7 +11,7 @@ $pull = & "C:\Program Files\Git\bin\git.exe" pull 2>&1
 $log += "`n[Pull] "+$pull
 
 # Step 2: Check changes
-$status = & "C:\Program Files\Git\bin\git.exe" status --porcelain 2>&1
+$status = & "C:\Program Files\Git\bin\git.exe" status --porcelain . 2>&1
 if ($status) {
     & "C:\Program Files\Git\bin\git.exe" add . 2>&1 | Out-Null
     $commitMsg = "Auto sync "+$time
