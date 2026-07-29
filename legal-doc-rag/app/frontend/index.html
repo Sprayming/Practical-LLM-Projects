@@ -376,6 +376,21 @@ function clearHistory() {
 
 // Auto-login if token exists
 if (token) { try { fetch(API + "/api/documents", {headers:{"Authorization":"Bearer "+token}}).then(function(r){if(r.ok){document.getElementById("login-page").style.display="none";document.getElementById("chat-page").style.display="block";loadDocuments();}}); } catch(e){} }
+  
+  async function doDeleteDocument(filename) {  
+    if (!confirm("确定删除 " + filename + " 吗？")) return;  
+    let r = await fetch(API + "/api/documents/" + filename, {  
+      method: "DELETE",  
+      headers: {"Authorization":"Bearer " + token},  
+    });  
+    if (r.ok) {  
+      loadDocuments();  
+    } else {  
+      let err = await r.text();  
+      alert("删除失败: " + err);  
+    }  
+  }  
+
 </script>
 </body>
 </html>
