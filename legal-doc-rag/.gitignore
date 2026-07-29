@@ -17,3 +17,7 @@ __pycache__/
 _fix_*.py
 evaluation_report.json
 tenant_data/
+
+# Runtime
+cache/
+logs/

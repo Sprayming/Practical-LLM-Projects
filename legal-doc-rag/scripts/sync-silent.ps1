@@ -2,7 +2,7 @@
 # Auto sync script
 # ============================================
 
-cd D:\git
+cd D:\git\legal-doc-rag
 $time = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 $log = ""
 

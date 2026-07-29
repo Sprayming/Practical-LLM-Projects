@@ -3,7 +3,7 @@
 # 双击运行，显示每一步的状态
 # ============================================
 
-cd D:\git
+cd D:\git\legal-doc-rag
 $time = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 
 Write-Host "`n╔══════════════════════════════════╗" -ForegroundColor Cyan
