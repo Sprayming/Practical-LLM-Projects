@@ -1,54 +1,84 @@
-# Legal Document RAG
+﻿# Legal Document RAG
 
 ## Overview
 
 基于 FastAPI 的法律文书智能问答系统。上传 PDF、法规、法律文件，用自然语言提问，系统自动检索相关条款并生成带引用的回答。
 
 
-
-## 架构图
+## 模块依赖关系
 
 ```mermaid
 flowchart TB
-    subgraph U["前端 (Frontend)"]
-        UI["index.html<br/>HTML + JS"]
-    end
-    subgraph B["后端 (FastAPI)"]
-        AU["auth.py<br/>注册 / 登录"]
-        CH["chat.py<br/>问答 + 流式"]
-        DO["documents.py<br/>上传 / 删除"]
-        FB["feedback.py"]
-    end
-    subgraph P["文档处理"]
-        MP["multimodal_pipeline<br/>PDF -> 文字 + OCR + 图片描述"]
-    end
-    subgraph R["检索管线"]
-        QR["query_rewriter.py"]
-        HR["hybrid_retriever<br/>BM25 + Dense + RRF"]
-        CR["Cross-Encoder<br/>重排序"]
-    end
-    subgraph M["记忆系统"]
-        MS["memory_manager.py<br/>短/中/长期"]
-    end
-    subgraph S["存储"]
-        CHR["ChromaDB<br/>向量库"]
-        SQL["SQLite<br/>用户数据"]
-        RD["Redis<br/>会话缓存"]
-    end
-    subgraph L["外部 API"]
-        DS["DeepSeek<br/>LLM"]
-        DB["豆包<br/>Embedding"]
-    end
-    UI --> AU & CH & DO & FB
-    CH --> QR --> HR --> CR --> DS
-    CH --> MS --> RD
-    DO --> MP --> HR
-    HR --> DB
-    AU --> SQL
-    DO --> CHR
-    MS --> CHR
-```
+  subgraph ENTRY["入口"]
+    MAIN["main.py"]
+  end
 
+  subgraph API["api/ 接口层"]
+    AUTH_API["auth.py<br/>注册/登录"]
+    CHAT_API["chat.py<br/>问答/流式"]
+    DOC_API["documents.py<br/>上传/删除"]
+    FB["feedback.py"]
+  end
+
+  subgraph T["tenant/ 用户层"]
+    AUTH_T["auth.py<br/>SQLite"]
+  end
+
+  subgraph R["retrieval/ 检索层"]
+    EMBED["embedder_factory.py"]
+    HYBRID["hybrid_retriever.py"]
+    REWRITER["query_rewriter.py"]
+    CITATION["citation.py"]
+    CACHE["cache.py"]
+  end
+
+  subgraph M["memory/ 记忆层"]
+    MEM["memory_manager.py"]
+    REDIS_CLI["redis_client.py"]
+    FORGET["forgetting.py"]
+    PROFILE["profile_store.py"]
+  end
+
+  subgraph P["processing/ 文档处理"]
+    PIPE["multimodal_pipeline.py"]
+    PDF["pdf_extractor.py"]
+    OCR["ocr_engine.py"]
+    VISION["vision_caption.py"]
+  end
+
+  subgraph O["observability/ 可观测"]
+    TRACK["tracker.py"]
+    SLOG["structured_logger.py"]
+  end
+
+  subgraph W["worker/ 异步任务"]
+    SW["shadow_worker.py"]
+  end
+
+  subgraph C["core/ 配置"]
+    CFG["config.py"]
+  end
+
+  MAIN --> AUTH_API & CHAT_API & DOC_API & FB
+  AUTH_API --> AUTH_T & CFG
+  CHAT_API --> REWRITER & HYBRID & EMBED & CITATION & CACHE & CFG
+  CHAT_API --> MEM
+  CHAT_API --> TRACK & SLOG
+  CHAT_API --> SW
+  DOC_API --> EMBED & PIPE & AUTH_API & CFG
+  FB --> AUTH_API
+  HYBRID --> EMBED
+  MEM --> REDIS_CLI & FORGET & PROFILE & SW
+  PIPE --> PDF & OCR & VISION
+  VISION --> CFG
+  MEM --> SW
+
+
+  style MAIN fill:#1a237e,color:#fff
+  style AUTH_API fill:#e3f2fd
+  style CHAT_API fill:#e3f2fd
+  style DOC_API fill:#e3f2fd
+```
 ## 核心特性
 
 - FastAPI 后端 — 异步高吞吐，RESTful API，Token 认证
@@ -236,13 +266,13 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 **原因**：`docker compose build` 时 `COPY . .` 把本地的 `tenant_data/users.db`（含历史测试用户）打包进镜像，新建容器时数据库非空，首个用户无法成为 `super_admin`。\
 **解决**：删掉本地 `tenant_data/`，并在 `.dockerignore` 中添加 `tenant_data/`，避免数据库文件进入镜像。
 
-### DirectEmbed 传错导致检索崩溃
+### 16. DirectEmbed 传错导致检索崩溃
 **现象**: 上传 PDF 后提问报 AttributeError: 'DirectEmbed' object has no attribute 'similarity_search_with_score'
 **根因**: HybridRetriever 的 dense_store 参数期望 ChromaDB（有搜索结果方法），代码传了 embedder（只做 embedding，无搜索能力）
 **修复**: HybridRetriever(embedder, ...) → HybridRetriever(vector_store, ...)
 **教训**: DirectEmbed 只负责"文字→向量"的转换，不负责存储和搜索。传参时确认对象有对应方法。
 
-### FastAPI 版文件 GBK 编码问题
+### 17. FastAPI 版文件 GBK 编码问题
 **现象**: 容器启动报 SyntaxError，中文显示为 Ã¥Â¸Âº 等乱码
 **根因**: 另一台电脑用 GBK（Windows 默认编码）写 Python 文件，Python 3 默认用 UTF-8 解析时报错。
 同时 .env 被 .gitignore 排除，容器内 load_dotenv() 读取不到，embedding 配置走默认值指向 DeepSeek 而非火山引擎
@@ -270,10 +300,7 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 ### 2026-07-19: RAGAS + 多租户
 - RAGAS 三维度离线评测
 - SQLite 用户管理 + 多租户隔离
-### 44. DirectEmbed 传错导致检索崩溃
-详情见「踩过的坑」章节
-### 45. FastAPI 版文件 GBK 编码问题
-详情见「踩过的坑」章节
+
 
 ---
 
