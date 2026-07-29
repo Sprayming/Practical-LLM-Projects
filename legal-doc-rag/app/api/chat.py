@@ -101,7 +101,7 @@ async def chat_stream(req: ChatRequest, user: dict = Depends(_require_user)):
         all_texts = all_data.get("documents", []) or []
     except Exception:
         pass
-    retriever = HybridRetriever(embedder, all_texts, k=10)
+    retriever = HybridRetriever(vector_store, all_texts, k=10)
     docs = retriever.retrieve(query)
     docs = _get_reranker().rerank(query, docs, top_k=5)
     ct.add_sources(docs)
@@ -178,7 +178,7 @@ def chat(req: ChatRequest, user: dict = Depends(_require_user)):
         all_texts = all_data.get("documents", []) or []
     except Exception:
         pass
-    retriever = HybridRetriever(embedder, all_texts, k=10)
+    retriever = HybridRetriever(vector_store, all_texts, k=10)
     docs = retriever.retrieve(query)
     docs = _get_reranker().rerank(query, docs, top_k=5)
     ct.add_sources(docs)
