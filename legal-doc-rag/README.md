@@ -229,3 +229,143 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 详情见「踩过的坑」章节
 ### 45. FastAPI 版文件 GBK 编码问题
 详情见「踩过的坑」章节
+
+---
+
+## 项目框架 (FastAPI 版)
+
+### 目录结构
+`
+legal-doc-rag/
+├── app/
+│   ├── main.py                    # FastAPI 入口，注册路由 + 加载 .env
+│   ├── streamlit_app.py           # (旧版) Streamlit 入口，已废弃
+│   ├── api/                       # HTTP API 层
+│   │   ├── auth.py                # POST /api/auth/login, /register
+│   │   ├── chat.py                # POST /api/chat (流式 SSE)
+│   │   ├── documents.py           # POST /api/documents/upload, GET list, DELETE
+│   │   ├── feedback.py            # POST /api/feedback
+│   │   └── __init__.py
+│   ├── frontend/
+│   │   └── index.html             # 单页前端 (原生 JS + CSS)
+│   ├── core/
+│   │   └── config.py              # 集中配置：API key、模型名、路径
+│   ├── retrieval/                 # 检索层
+│   │   ├── embedder_factory.py    # DirectEmbed 类 (调用火山引擎 Embedding API)
+│   │   ├── hybrid_retriever.py    # HybridRetriever: 稠密(BERT) + 稀疏(BM25) + RRF 融合 + BGE 重排
+│   │   ├── query_rewriter.py      # QueryRewriter: LLM 查询改写/扩展
+│   │   ├── citation.py            # CitationTracker: 来源引用追踪
+│   │   ├── cache.py               # QueryCache: Redis 查询缓存
+│   │   └── __init__.py
+│   ├── processing/                # 文档处理层
+│   │   ├── multimodal_pipeline.py # MultimodalPipeline: PDF 图文解析
+│   │   ├── pdf_extractor.py       # PyMuPDF 图文提取
+│   │   ├── ocr_engine.py          # OCR (PaddleOCR / Tesseract)
+│   │   └── __init__.py
+│   ├── memory/                    # 记忆层
+│   │   ├── memory_manager.py      # MemorySystem: 短期 + 长期记忆
+│   │   ├── conversation_store.py  # 对话持久化 (Redis)
+│   │   ├── redis_client.py        # Redis 连接池 + TTL
+│   │   ├── forgetting.py          # 艾宾浩斯遗忘曲线
+│   │   ├── profile_store.py       # 用户画像存储
+│   │   └── __init__.py
+│   ├── tenant/                    # 租户层
+│   │   ├── auth.py                # 用户注册/登录/密码哈希 (SQLite)
+│   │   ├── tenant_manager.py      # 租户创建/隔离
+│   │   └── __init__.py
+│   ├── worker/                    # 异步任务层
+│   │   ├── shadow_worker.py       # ShadowWorker: 后台异步线程池
+│   │   └── __init__.py
+│   ├── observability/             # 可观测层
+│   │   ├── tracker.py             # TraceContext: 全链路追踪 (耗时, Token)
+│   │   ├── structured_logger.py   # 结构化日志
+│   │   └── __init__.py
+│   ├── evaluation/                # 评估层 (离线)
+│   │   ├── evaluator.py           # RAGAS 三维度打分
+│   │   ├── runner.py              # 批量评测 + Golden Test Set
+│   │   └── __init__.py
+│   └── ingestion/                 # (预留) 多模态图文注释
+│       ├── vision_caption.py
+│       └── __init__.py
+├── requirements-docker.txt
+├── Dockerfile
+├── docker-compose.yml
+├── start-rag.bat                  # Docker 启动脚本
+├── start-local.bat                # 本地启动脚本 (uvicorn)
+├── healthcheck.py                 # Docker 健康检查
+├── .env                           # 环境变量 (API key 等)
+└── tenant_data/                   # SQLite 数据 (自动创建)
+`
+
+### 模块调用链
+
+`
+用户请求
+    │
+    ▼
+app/main.py (FastAPI 入口)
+    │  ├── app/api/auth.py          → app/tenant/auth.py (SQLite)
+    │  │                               └── app/core/config.py
+    │  │
+    │  ├── app/api/chat.py          → app/retrieval/embedder_factory.py → 火山引擎 Embedding API
+    │  │                               → app/retrieval/hybrid_retriever.py → BM25 + Dense + RRF
+    │  │                               → app/retrieval/query_rewriter.py → DeepSeek LLM
+    │  │                               → app/retrieval/citation.py
+    │  │                               → app/retrieval/cache.py → Redis
+    │  │                               → app/memory/memory_manager.py → Chroma + Redis
+    │  │                               → app/worker/shadow_worker.py (异步)
+    │  │                               → app/observability/tracker.py
+    │  │                               → app/observability/structured_logger.py
+    │  │
+    │  ├── app/api/documents.py     → app/retrieval/embedder_factory.py
+    │  │                               → app/processing/multimodal_pipeline.py
+    │  │                                   → app/processing/pdf_extractor.py
+    │  │                                   → app/processing/ocr_engine.py
+    │  │                               → langchain Chroma (向量持久化)
+    │  │
+    │  └── app/api/feedback.py      → app/memory/conversation_store.py
+    │
+    └── app/frontend/index.html (前端静态文件)
+`
+
+### 请求完整流程 (上传+提问)
+
+`
+1. 用户上传 PDF
+   POST /api/documents/upload
+   ├── app/api/documents.py: 接收文件 → 保存到 ./uploads/{tenant_id}/
+   ├── app/processing/multimodal_pipeline.py: 解析 PDF (PyMuPDF + OCR)
+   ├── app/retrieval/embedder_factory.py: 调用火山引擎 Embedding API 生成向量
+   ├── ChromaDB: 向量 + 元数据持久化到 ./chroma_db/{tenant_id}/
+   └── 返回上传结果
+
+2. 用户提问
+   POST /api/chat (SSE 流式)
+   ├── app/api/chat.py: 验证 Token → 加载 ChromaDB 向量库
+   ├── app/retrieval/query_rewriter.py: LLM 改写/扩展查询
+   ├── app/retrieval/hybrid_retriever.py:
+   │   ├── 稠密检索: ChromaDB.similarity_search_with_score()
+   │   ├── 稀疏检索: BM25Okapi.get_scores()
+   │   └── RRF 融合 + 可选 BGE 重排
+   ├── app/retrieval/citation.py: 记录来源引用
+   ├── app/memory/memory_manager.py: 加载短期/长期记忆
+   ├── 调用 DeepSeek LLM (stream=True) 生成回答
+   ├── app/observability/tracker.py: 记录耗时和 Token 用量
+   └── 返回 SSE 流给前端
+`
+
+### 数据流向
+
+`
+PDF文件
+  → processing/multimodal_pipeline (解析文本+图片)
+  → embedder_factory (转向量)
+  → ChromaDB (持久化到磁盘)
+
+用户问题
+  → query_rewriter (LLM 改写)
+  → hybrid_retriever (稠密 + 稀疏 + RRF)
+  → memory_manager (加载记忆上下文)
+  → [合并上下文 + 引用] → DeepSeek LLM
+  → 流式返回 → 前端渲染
+"
