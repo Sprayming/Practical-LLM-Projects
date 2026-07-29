@@ -208,3 +208,17 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 ### 2026-07-19: RAGAS + 多租户
 - RAGAS 三维度离线评测
 - SQLite 用户管理 + 多租户隔离
+### 44. 修复 DirectEmbed 传错导致检索崩溃 (2026-07-29)
+改动: app/api/chat.py
+根因: HybridRetriever 的 dense_store 参数期望 ChromaDB（有 similarity_search_with_score 方法），
+但代码传了 embedder（DirectEmbed 对象，只有 embed_query 方法），导致 AttributeError。
+修复: HybridRetriever(embedder, all_texts, k=10) → HybridRetriever(vector_store, all_texts, k=10)
+
+### 45. FastAPI 版文件 GBK 编码问题 (2026-07-29)
+改动: app/api/*.py
+根因: 另一台电脑用 GBK (Windows 默认编码) 写了 Python 文件，Python 3 默认用 UTF-8 解析时崩溃。
+同时 .env 文件被 .gitignore 排除，导致容器内 load_dotenv() 读取不到，embedding 配置全走默认值。
+修复:
+  - 将 GBK 编码的文件转为 UTF-8
+  - docker-compose.yml 补全 EMBEDDING_API_KEY / EMBEDDING_BASE_URL / EMBEDDING_MODEL 环境变量
+  - 修复 .env 缺失导致 embedding 指向 DeepSeek 而非火山引擎的问题
