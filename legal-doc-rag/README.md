@@ -191,6 +191,23 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 **原因**：`docker compose build` 时 `COPY . .` 把本地的 `tenant_data/users.db`（含历史测试用户）打包进镜像，新建容器时数据库非空，首个用户无法成为 `super_admin`。\
 **解决**：删掉本地 `tenant_data/`，并在 `.dockerignore` 中添加 `tenant_data/`，避免数据库文件进入镜像。
 
+### DirectEmbed 传错导致检索崩溃
+**现象**: 上传 PDF 后提问报 AttributeError: 'DirectEmbed' object has no attribute 'similarity_search_with_score'
+**根因**: HybridRetriever 的 dense_store 参数期望 ChromaDB（有搜索结果方法），代码传了 embedder（只做 embedding，无搜索能力）
+**修复**: HybridRetriever(embedder, ...) → HybridRetriever(vector_store, ...)
+**教训**: DirectEmbed 只负责"文字→向量"的转换，不负责存储和搜索。传参时确认对象有对应方法。
+
+### FastAPI 版文件 GBK 编码问题
+**现象**: 容器启动报 SyntaxError，中文显示为 Ã¥Â¸Âº 等乱码
+**根因**: 另一台电脑用 GBK（Windows 默认编码）写 Python 文件，Python 3 默认用 UTF-8 解析时报错。
+同时 .env 被 .gitignore 排除，容器内 load_dotenv() 读取不到，embedding 配置走默认值指向 DeepSeek 而非火山引擎
+**修复**:
+  - GBK 文件转为 UTF-8
+  - docker-compose.yml 补全 EMBEDDING_API_KEY / BASE_URL / MODEL
+  - .env 缺失导致 embedding 指向 DeepSeek 而非火山引擎
+**教训**: Windows 上 PowerShell 的 Add-Content / Out-File 默认用 GBK，Python 文件必须显式指定 UTF-8 编码。
+.env 文件不要放 .gitignore（或放 docker-compose 的 environment 里兜底）。
+
 ## 更新日志
 
 ### 2026-07-28: FastAPI + 角色系统 + Docker 迁移 D 盘
@@ -208,17 +225,7 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 ### 2026-07-19: RAGAS + 多租户
 - RAGAS 三维度离线评测
 - SQLite 用户管理 + 多租户隔离
-### 44. 修复 DirectEmbed 传错导致检索崩溃 (2026-07-29)
-改动: app/api/chat.py
-根因: HybridRetriever 的 dense_store 参数期望 ChromaDB（有 similarity_search_with_score 方法），
-但代码传了 embedder（DirectEmbed 对象，只有 embed_query 方法），导致 AttributeError。
-修复: HybridRetriever(embedder, all_texts, k=10) → HybridRetriever(vector_store, all_texts, k=10)
-
-### 45. FastAPI 版文件 GBK 编码问题 (2026-07-29)
-改动: app/api/*.py
-根因: 另一台电脑用 GBK (Windows 默认编码) 写了 Python 文件，Python 3 默认用 UTF-8 解析时崩溃。
-同时 .env 文件被 .gitignore 排除，导致容器内 load_dotenv() 读取不到，embedding 配置全走默认值。
-修复:
-  - 将 GBK 编码的文件转为 UTF-8
-  - docker-compose.yml 补全 EMBEDDING_API_KEY / EMBEDDING_BASE_URL / EMBEDDING_MODEL 环境变量
-  - 修复 .env 缺失导致 embedding 指向 DeepSeek 而非火山引擎的问题
+### 44. DirectEmbed 传错导致检索崩溃
+详情见「踩过的坑」章节
+### 45. FastAPI 版文件 GBK 编码问题
+详情见「踩过的坑」章节
