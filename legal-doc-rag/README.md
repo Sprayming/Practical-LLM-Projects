@@ -4,6 +4,51 @@
 
 基于 FastAPI 的法律文书智能问答系统。上传 PDF、法规、法律文件，用自然语言提问，系统自动检索相关条款并生成带引用的回答。
 
+
+
+## 架构图
+
+```mermaid
+flowchart TB
+    subgraph U["前端 (Frontend)"]
+        UI["index.html<br/>HTML + JS"]
+    end
+    subgraph B["后端 (FastAPI)"]
+        AU["auth.py<br/>注册 / 登录"]
+        CH["chat.py<br/>问答 + 流式"]
+        DO["documents.py<br/>上传 / 删除"]
+        FB["feedback.py"]
+    end
+    subgraph P["文档处理"]
+        MP["multimodal_pipeline<br/>PDF -> 文字 + OCR + 图片描述"]
+    end
+    subgraph R["检索管线"]
+        QR["query_rewriter.py"]
+        HR["hybrid_retriever<br/>BM25 + Dense + RRF"]
+        CR["Cross-Encoder<br/>重排序"]
+    end
+    subgraph M["记忆系统"]
+        MS["memory_manager.py<br/>短/中/长期"]
+    end
+    subgraph S["存储"]
+        CHR["ChromaDB<br/>向量库"]
+        SQL["SQLite<br/>用户数据"]
+        RD["Redis<br/>会话缓存"]
+    end
+    subgraph L["外部 API"]
+        DS["DeepSeek<br/>LLM"]
+        DB["豆包<br/>Embedding"]
+    end
+    UI --> AU & CH & DO & FB
+    CH --> QR --> HR --> CR --> DS
+    CH --> MS --> RD
+    DO --> MP --> HR
+    HR --> DB
+    AU --> SQL
+    DO --> CHR
+    MS --> CHR
+```
+
 ## 核心特性
 
 - FastAPI 后端 — 异步高吞吐，RESTful API，Token 认证
