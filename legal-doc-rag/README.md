@@ -1,4 +1,4 @@
-﻿# Legal Document RAG
+# Legal Document RAG
 
 ## Overview
 
@@ -211,13 +211,13 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 
 ## 更新日志
 
-### 2026-08-01: 统一异步化重构
+### 2025-08-01: 统一异步化重构
 - 消灭重复代码：RAG 检索、Prompt 拼接等公共逻辑，现在只需要写一次
 - 统一入口：前端只需要调用 POST /api/chat，通过 stream: true/false 控制行为
 - 彻底异步化：把遗留的同步 requests.post 全部换成 httpx.AsyncClient
 - 返回类型统一：异步函数中同时返回流和字典时用 JSONResponse 包裹，避免 FastAPI 序列化 Bug
 
-### 2026-07-28: FastAPI + 角色系统 + Docker 迁移 D 盘
+### 2025-07-28: FastAPI + 角色系统 + Docker 迁移 D 盘
 - 从 Streamlit 迁移到 FastAPI + 纯前端 HTML/JS
 - 新增 super_admin 角色 + PDF 删除权限
 - Docker 数据从 C 盘迁移到 D 盘（34GB -> 19.5GB）
@@ -225,11 +225,11 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 - docker-compose 改为启动 FastAPI
 - 重写 start-rag.bat 一键启动脚本
 
-### 2026-07-26: Docker 部署
+### 2025-07-26: Docker 部署
 - Dockerfile + docker-compose.yml
 - Redis 集成 + 健康检查
 
-### 2026-07-25: Docker Compose 部署 + DNS 配置优化
+### 2025-07-25: Docker Compose 部署 + DNS 配置优化
 - Docker Desktop 完整安装流程（winget + WSL2 + Ubuntu）
 - DNS 调整 114.114.114.114 解决 Docker Hub IPv6 连接失败问题
 - 配置 Daocloud 镜像代理 registry-mirrors 加速镜像拉取
@@ -252,13 +252,13 @@ docker compose up -d
 - pip install 太慢时使用精简 requirements-docker.txt
 - 首次构建约需 8-10 分钟（pip 下载依赖）
 
-### 2026-07-19: RAGAS 评测跑通 + ProfileStore + 多租户
+### 2025-07-19: RAGAS 评测跑通 + ProfileStore + 多租户
 - RAGAS 评测跑通真实分数（豆包 API + 豆包 embedding）
 - 新增 ProfileStore: 用户画像独立存储（置信度加权合并）
 - 多租户隔离: Sidebar Tenant ID, 隔离记忆/向量库/画像
 - 修复 EvaluationResult 访问方式 (r.scores 而非 dict)
 
-### 2026-07-19: 接通全部闲置模块
+### 2025-07-19: 接通全部闲置模块
 - MultimodalPipeline: 替换 PyPDF2 + splitter（图文+OCR）
 - HybridRetriever: 替换直接 Chroma retriever（BM25+Dense+RRF）
 - QueryRewriter: 检索前 LLM 改写查询
@@ -266,14 +266,14 @@ docker compose up -d
 - TraceContext: 全链路耗时 + Token 追踪
 - 移除 PyPDF2 RecursiveCharacterTextSplitter import
 
-### 2026-07-19: 5 项生产级改进 (memory_manager.py)
+### 2025-07-19: 5 项生产级改进 (memory_manager.py)
 1. clear_session: 修复 Redis 僵尸数据（先清数据再重置 session_id）
 2. 异步访问计数: 检索时反遗忘（ShadowWorker 批量更新）
 3. 实体提取: 实现 _do_extract_entity（原为 pass）
 4. 增量摘要合并: 旧摘要+新对话 -> LLM -> 合并
 5. Redis 容灾恢复: __init__ 末尾调用 _restore_from_redis()
 
-### 2026-07-18: 消除 Monkey Patching
+### 2025-07-18: 消除 Monkey Patching
 - 删除 original_xxx / patched_xxx / 模块末尾赋值
 - ForgettingMechanism ShadowWorker 直接内建在类方法
 - 修复 extract_entities stub, 添加 memory_llm 回调
