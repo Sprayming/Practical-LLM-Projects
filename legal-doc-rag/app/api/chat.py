@@ -13,6 +13,7 @@ from app.memory.memory_manager import MemorySystem
 from app.worker.shadow_worker import get_worker
 from app.observability.tracker import TraceContext
 from app.observability.structured_logger import StructuredLogger
+from app.observability.monitoring import record_query
 from langchain_community.vectorstores import Chroma
 import app.core.config as cfg  #从.evn中加载配置，便于后期维护
 from app.api.auth import get_user_from_token
@@ -272,6 +273,7 @@ async def chat(req: ChatRequest, user: dict = Depends(_require_user)):
         # 【流式响应分支】
         async def generate() -> AsyncGenerator[str, None]:
             full_answer = ""
+            start_time = time.time()  # Record start time for metrics
             last_yield_time = time.time() # 记录最后一次 yield 的时间
             try:
                 # 👉 使用 httpx 异步流式请求
@@ -359,7 +361,14 @@ async def chat(req: ChatRequest, user: dict = Depends(_require_user)):
                     # 记录完整的错误堆栈
                     _log.exception("记忆系统详细错误")
 
-                
+                # Record metrics for streaming response
+                record_query(
+                    duration_ms=(time.time() - start_time) * 1000,
+                    token_usage=0,  # Token usage not easily available in streaming
+                    success=True,
+                    source="api_stream"
+                )
+
             yield f"data: {json.dumps({'type': 'done', 'citations': citations, 'token_usage': 0})}\n\n"
             
         return StreamingResponse(generate(), media_type="text/event-stream")
@@ -414,6 +423,14 @@ async def chat(req: ChatRequest, user: dict = Depends(_require_user)):
         trace.set_tokens(token_usage)
         trace.print_summary()
         _log.query(req.message, len(answer), token_usage, trace.total_duration_ms(), False)
-        
+
+        # Record metrics for monitoring
+        record_query(
+            duration_ms=trace.total_duration_ms(),
+            token_usage=token_usage,
+            success=True,
+            source="api"
+        )
+
         # 👉 必须使用 JSONResponse 返回，保证与流式分支的返回类型兼容
         return JSONResponse(content={"answer": answer, "citations": citations, "token_usage": token_usage})

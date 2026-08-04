@@ -1,6 +1,6 @@
 import sys, secrets
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent.parent.parent))
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 from app.tenant.auth import login as _login, register as _register, has_users as _has_users
 import app.core.config as cfg
@@ -47,3 +47,16 @@ def get_user_from_token(token: str) -> dict:
     if not user:
         raise HTTPException(401, "Invalid or expired token")
     return user
+
+@router.get("/me")
+def get_current_user(authorization: str = Header(...)):
+    """Get current user info from token."""
+    token = authorization.replace("Bearer ", "").strip()
+    if not token:
+        raise HTTPException(401, "Missing token")
+    user = get_user_from_token(token)
+    return {
+        "username": user.get("username", ""),
+        "tenant_id": user.get("tenant_id", ""),
+        "role": user.get("role", "user"),
+    }

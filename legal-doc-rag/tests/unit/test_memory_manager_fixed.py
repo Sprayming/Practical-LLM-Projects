@@ -1,5 +1,5 @@
 """
-Unit tests for app.memory.memory_manager module.
+Fixed unit tests for app.memory.memory_manager module.
 """
 import pytest
 from unittest.mock import Mock, patch, MagicMock

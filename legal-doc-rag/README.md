@@ -211,6 +211,134 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 
 ## 更新日志
 
+### 2025-08-04: P2 高级功能（分组/对话/检索/A-B测试/Webhook）
+
+#### 1. 知识库分组
+- 新增文档分类管理：创建/删除分类、设置文档分类、按分类筛选文档
+- 新增分类 API：`/api/categories`（CRUD）、`/api/categories/assign`（设置分类）、`/api/categories/list`（按分类列出）
+- 前端侧边栏添加分类筛选下拉框和分类管理入口
+
+**有什么用：** 可以按"合同/法规/案例"等维度组织文档，检索时可以限定在特定分类内，提高检索精度。
+
+#### 2. 多轮对话管理
+- 新增对话管理 API：`/api/conversations`（创建/列出/获取/删除）
+- 支持对话标题、消息历史、继续对话
+- 前端侧边栏添加对话历史列表，点击可加载历史对话
+
+**有什么用：** 用户可以保存和恢复多个对话，方便回顾之前的问答内容。
+
+#### 3. 全文检索集成（Elasticsearch）
+- 新增 Elasticsearch 客户端：`app/retrieval/elasticsearch_client.py`
+- 支持中文分词（IK analyzer）、索引管理、全文检索
+- 集成到混合检索器作为兜底方案
+- 可选功能，通过环境变量 `ELASTICSEARCH_HOSTS` 启用
+
+**有什么用：** 当稠密向量和 BM25 检索效果不佳时，Elasticsearch 提供全文检索兜底，提升召回率。
+
+#### 4. A/B 测试框架
+- 新增实验管理 API：`/api/ab-testing/experiments`（创建/启动/停止/查看结果）
+- 支持多变体配置、流量分配、事件记录
+- 使用确定性哈希分配用户，保证一致性
+
+**有什么用：** 可以对比不同检索策略、Prompt 模板、模型版本的效果，用数据驱动优化。
+
+#### 5. Webhook 通知
+- 新增 Webhook 管理 API：`/api/webhooks`（创建/更新/删除/触发/日志）
+- 支持 8 种事件类型：文档上传/删除、对话完成、用户注册/删除、实验启动/停止、系统错误
+- 支持签名验证、异步发送、重试机制
+
+**有什么用：** 文档处理完成后自动通知外部系统，实现自动化工作流。
+
+---
+
+### 2025-08-04: P1 产品化功能（管理后台/预览/统计/错误处理/性能优化）
+
+#### 1. 管理员后台 Web 界面
+- 新增管理员 API：`/api/admin/users`（用户管理）、`/api/admin/stats`（系统统计）、`/api/admin/config`（配置查看）
+- 新增管理员后台界面：统计卡片、用户管理表格、系统配置显示
+- 仅管理员用户可以看到"管理后台"按钮
+- 新增 `/api/auth/me` 端点获取当前用户信息
+
+**有什么用：** 管理员可以方便地管理用户、查看系统状态，不需要直接操作数据库或配置文件。
+
+#### 2. 文档预览功能
+- 在文档列表中添加了预览按钮（👁图标）
+- 创建了 PDF 预览模态框，支持翻页、缩放、下载
+- 使用 PDF.js 库实现浏览器端 PDF 渲染
+- 新增 `/api/documents/preview/{filename}` 端点
+
+**有什么用：** 用户可以直接在浏览器中查看上传的 PDF 文档，无需下载到本地。
+
+#### 3. 使用统计功能
+- 集成指标记录到聊天 API（查询次数、Token 消耗、响应时间）
+- 支持流式和非流式响应的指标记录
+- 通过 `/metrics` 端点导出 Prometheus 格式指标
+
+**有什么用：** 了解系统使用情况，发现性能瓶颈，为优化提供数据支撑。
+
+#### 4. 完善错误处理机制
+- 创建了全局错误处理模块：`app/security/error_handlers.py`
+- 统一错误响应格式：`{error, status_code, message, detail, error_code}`
+- 定义了 20+ 种错误码（AUTH_001-006, DOC_001-006, CHAT_001-004, SYS_001-004）
+- 提供友好的中文错误提示（如"请先登录"、"登录已过期"、"仅支持PDF格式"）
+
+**有什么用：** 前端可以根据错误码显示友好的提示信息，用户体验更好，排查问题也更方便。
+
+#### 5. 性能优化
+- 缓存优化：LRU 内存缓存 + 文件缓存双层架构，线程安全，支持统计和清理
+- BM25 分词优化：添加中英文停用词过滤 + 中文 bigram 支持，提升检索质量
+
+**有什么用：** 相同查询不再重复调用 LLM，检索结果更精准，响应更快。
+
+---
+
+### 2025-08-04: P0 上线必备功能（测试/安全/备份/监控）
+
+#### 1. 完整测试套件
+- 配置了 pytest 测试框架（pytest.ini、setup.cfg、.coveragerc）
+- 创建了 `tests/conftest.py` 提供统一的测试 fixtures（mock Redis、ChromaDB、LLM 等外部依赖）
+- 编写了核心模块单元测试：config、hybrid_retriever、memory_manager、api_chat
+- 运行方式：`python -m pytest tests/unit/ -v`
+- 新增依赖：pytest、pytest-cov、pytest-mock、httpx（已加入 requirements.txt）
+
+**有什么用：** 保证每次代码改动不会悄悄破坏已有功能，CI/CD 可以自动跑测试，上线前有质量兜底。
+
+#### 2. 生产级安全加固
+- 新增 `app/security/middleware.py` 安全中间件模块
+- **SecurityHeadersMiddleware**：自动添加 X-Content-Type-Options、X-Frame-Options、CSP、Referrer-Policy 等安全响应头，防止 MIME 嗅探、点击劫持、XSS 攻击
+- **RequestSizeLimitMiddleware**：限制请求体大小（默认 100MB），防止 DoS 攻击
+- **路径遍历防护**：`sanitize_filename()` + `is_safe_path()` + `get_safe_upload_path()`，修复了文件上传的路径穿越漏洞（之前用户传 `../../etc/passwd` 就能写到任意位置）
+- **输入净化**：`sanitize_query_input()` + `is_query_safe()`，拦截脚本注入等危险输入
+- **CORS 收紧**：从 `allow_origins=["*"]` 改为可配置的 `ALLOWED_ORIGINS`，生产环境不再接受任意域名
+- **文件上传加固**：白名单限制仅允许 `.pdf`，增加文件大小校验
+- **文档端点保护**：生产环境（`ENV=production`）自动隐藏 Swagger/ReDoc
+
+**有什么用：** 堵住安全漏洞，防止恶意用户通过文件上传、路径穿越、XSS 等手段攻击系统，满足基本的安全上线要求。
+
+#### 3. 数据备份与恢复
+- 新增 `scripts/backup.py` CLI 备份恢复工具
+- 支持 4 种操作：
+  - `python scripts/backup.py backup` — 创建全量备份（chroma_db、uploads、memory_db、tenant_data）
+  - `python scripts/backup.py list` — 列出所有备份
+  - `python scripts/backup.py restore <backup_dir>` — 从备份恢复数据
+  - `python scripts/backup.py cleanup --keep 5` — 清理旧备份，保留最近 N 个
+- 自动记录 manifest.json（备份时间、源目录、校验和）
+
+**有什么用：** 数据库损坏、误删文件、服务器迁移时可以快速恢复，避免数据丢失。
+
+#### 4. 监控与告警
+- 新增 `app/observability/monitoring.py` 监控模块
+- 新增 3 个端点：
+  - `GET /metrics` — Prometheus 兼容格式指标导出，可接入 Grafana 等监控平台
+  - `GET /health` — 增强健康检查（自动检测 Redis 连通性、磁盘空间、内存使用）
+  - `GET /stats` — 应用运行统计（查询数、延迟、Token 消耗等）
+- 内置指标：查询总数/成功率/失败率、查询延迟 P50/P90/P99、Token 消耗、上传统计、系统 CPU/内存
+- 线程安全的 MetricsCollector，支持计数器、仪表盘、直方图
+
+**有什么用：** 服务挂了能第一时间知道，性能劣化能从指标看出来，方便运维和调优。
+
+---
+
 ### 2025-08-01: 统一异步化重构
 - 消灭重复代码：RAG 检索、Prompt 拼接等公共逻辑，现在只需要写一次
 - 统一入口：前端只需要调用 POST /api/chat，通过 stream: true/false 控制行为

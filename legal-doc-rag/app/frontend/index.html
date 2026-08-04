@@ -112,10 +112,24 @@ body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif
       <div id="upload-status"></div>
     </div>
     <div class="doc-list">
+      <h3>对话历史</h3>
+      <div id="conversation-list" style="max-height:150px; overflow-y:auto;">
+        <div style="padding:0.5rem; color:rgba(255,255,255,0.5); font-size:0.75rem;">暂无对话</div>
+      </div>
+      <button class="sidebar-btn" onclick="startNewConversation()" style="font-size:0.7rem; margin-top:0.5rem;">新建对话</button>
+    </div>
+    <div class="doc-list">
       <h3>已上传文档</h3>
+      <div style="margin-bottom:0.5rem;">
+        <select id="category-filter" style="width:100%; padding:0.3rem; font-size:0.75rem; background:rgba(255,255,255,0.1); color:#fff; border:1px solid rgba(255,255,255,0.2); border-radius:4px;">
+          <option value="">全部分类</option>
+        </select>
+      </div>
       <ul id="doc-list"></ul>
+      <button class="sidebar-btn" onclick="showCategoryManager()" style="font-size:0.7rem; margin-top:0.5rem;">管理分类</button>
     </div>
     <button class="sidebar-btn" onclick="clearHistory()">清除历史</button>
+    <button class="sidebar-btn" id="admin-btn" style="display:none" onclick="showAdminPanel()">管理后台</button>
     <button class="sidebar-btn" onclick="doLogout()">退出登录</button>
   </aside>
   <div id="chat-main">
@@ -130,6 +144,124 @@ body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif
     <div class="input-area">
       <input type="text" id="chat-input" placeholder="输入法律问题..." onkeydown="if(event.key==='Enter')sendMessage()">
       <button id="send-btn" onclick="sendMessage()">发送</button>
+    </div>
+  </div>
+</div>
+
+<!-- 分类管理模态框 -->
+<div id="category-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.8); z-index:1000; padding:2rem;">
+  <div style="background:#fff; border-radius:8px; width:500px; max-height:80vh; margin:10% auto; overflow:hidden; display:flex; flex-direction:column;">
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:1rem 1.5rem; border-bottom:1px solid #e8eaed;">
+      <h3 style="font-size:1rem; color:#1a237e; margin:0;">分类管理</h3>
+      <button onclick="closeCategoryManager()" style="padding:0.3rem 0.8rem; background:#fce8e6; color:#c5221f; border:none; border-radius:4px; cursor:pointer;">关闭</button>
+    </div>
+    <div style="padding:1.5rem; overflow-y:auto; flex:1;">
+      <div style="margin-bottom:1rem;">
+        <h4 style="font-size:0.9rem; color:#333; margin-bottom:0.5rem;">新建分类</h4>
+        <div style="display:flex; gap:0.5rem;">
+          <input type="text" id="new-category-name" placeholder="分类名称" style="flex:1; padding:0.5rem; border:1px solid #dadce0; border-radius:4px; font-size:0.85rem;">
+          <input type="text" id="new-category-desc" placeholder="描述（可选）" style="flex:1; padding:0.5rem; border:1px solid #dadce0; border-radius:4px; font-size:0.85rem;">
+          <button onclick="createCategory()" style="padding:0.5rem 1rem; background:#1a237e; color:#fff; border:none; border-radius:4px; cursor:pointer;">添加</button>
+        </div>
+      </div>
+      <div>
+        <h4 style="font-size:0.9rem; color:#333; margin-bottom:0.5rem;">现有分类</h4>
+        <div id="category-list" style="border:1px solid #e8eaed; border-radius:4px;">
+          <div style="padding:1rem; text-align:center; color:#999;">加载中...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PDF预览模态框 -->
+<div id="pdf-preview-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.8); z-index:1000; padding:2rem;">
+  <div style="background:#fff; border-radius:8px; width:90%; height:90%; margin:2.5% auto; display:flex; flex-direction:column; overflow:hidden;">
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:1rem 1.5rem; border-bottom:1px solid #e8eaed;">
+      <h3 id="pdf-preview-title" style="font-size:1rem; color:#1a237e; margin:0;">文档预览</h3>
+      <div style="display:flex; gap:0.5rem; align-items:center;">
+        <button onclick="pdfPrevPage()" style="padding:0.3rem 0.8rem; background:#f1f3f4; border:1px solid #dadce0; border-radius:4px; cursor:pointer;">上一页</button>
+        <span id="pdf-page-info" style="font-size:0.85rem; color:#666;">1 / 1</span>
+        <button onclick="pdfNextPage()" style="padding:0.3rem 0.8rem; background:#f1f3f4; border:1px solid #dadce0; border-radius:4px; cursor:pointer;">下一页</button>
+        <button onclick="pdfZoomIn()" style="padding:0.3rem 0.8rem; background:#f1f3f4; border:1px solid #dadce0; border-radius:4px; cursor:pointer;">+</button>
+        <button onclick="pdfZoomOut()" style="padding:0.3rem 0.8rem; background:#f1f3f4; border:1px solid #dadce0; border-radius:4px; cursor:pointer;">-</button>
+        <button onclick="pdfDownload()" style="padding:0.3rem 0.8rem; background:#1a237e; color:#fff; border:none; border-radius:4px; cursor:pointer;">下载</button>
+        <button onclick="closePdfPreview()" style="padding:0.3rem 0.8rem; background:#fce8e6; color:#c5221f; border:none; border-radius:4px; cursor:pointer; margin-left:0.5rem;">关闭</button>
+      </div>
+    </div>
+    <div id="pdf-preview-container" style="flex:1; overflow:auto; background:#525659; display:flex; justify-content:center; align-items:flex-start; padding:1rem;">
+      <canvas id="pdf-preview-canvas"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- 管理员后台面板 -->
+<div id="admin-panel" style="display:none; height:100vh; margin-left:280px; background:#f5f6fa; overflow-y:auto;">
+  <div style="padding:1.5rem; max-width:1200px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem;">
+      <h1 style="font-size:1.5rem; color:#1a237e;">管理后台</h1>
+      <button onclick="hideAdminPanel()" style="padding:0.5rem 1rem; background:#fff; border:1px solid #dadce0; border-radius:6px; cursor:pointer;">返回聊天</button>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div id="admin-stats" style="display:grid; grid-template-columns:repeat(4, 1fr); gap:1rem; margin-bottom:2rem;">
+      <div class="stat-card" style="background:#fff; border-radius:8px; padding:1.2rem; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+        <div style="font-size:0.8rem; color:#666; margin-bottom:0.5rem;">用户总数</div>
+        <div id="stat-users" style="font-size:1.8rem; font-weight:700; color:#1a237e;">-</div>
+      </div>
+      <div class="stat-card" style="background:#fff; border-radius:8px; padding:1.2rem; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+        <div style="font-size:0.8rem; color:#666; margin-bottom:0.5rem;">文档总数</div>
+        <div id="stat-docs" style="font-size:1.8rem; font-weight:700; color:#1a237e;">-</div>
+      </div>
+      <div class="stat-card" style="background:#fff; border-radius:8px; padding:1.2rem; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+        <div style="font-size:0.8rem; color:#666; margin-bottom:0.5rem;">向量总数</div>
+        <div id="stat-vectors" style="font-size:1.8rem; font-weight:700; color:#1a237e;">-</div>
+      </div>
+      <div class="stat-card" style="background:#fff; border-radius:8px; padding:1.2rem; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+        <div style="font-size:0.8rem; color:#666; margin-bottom:0.5rem;">查询总数</div>
+        <div id="stat-queries" style="font-size:1.8rem; font-weight:700; color:#1a237e;">-</div>
+      </div>
+    </div>
+
+    <!-- 用户管理 -->
+    <div style="background:#fff; border-radius:8px; padding:1.5rem; box-shadow:0 1px 3px rgba(0,0,0,0.08); margin-bottom:1.5rem;">
+      <h2 style="font-size:1.1rem; color:#1a237e; margin-bottom:1rem;">用户管理</h2>
+      <table style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr style="border-bottom:1px solid #e8eaed;">
+            <th style="text-align:left; padding:0.8rem; font-size:0.85rem; color:#666;">用户名</th>
+            <th style="text-align:left; padding:0.8rem; font-size:0.85rem; color:#666;">租户ID</th>
+            <th style="text-align:left; padding:0.8rem; font-size:0.85rem; color:#666;">角色</th>
+            <th style="text-align:right; padding:0.8rem; font-size:0.85rem; color:#666;">操作</th>
+          </tr>
+        </thead>
+        <tbody id="admin-users-list">
+          <tr><td colspan="4" style="padding:1rem; text-align:center; color:#999;">加载中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 系统配置 -->
+    <div style="background:#fff; border-radius:8px; padding:1.5rem; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+      <h2 style="font-size:1.1rem; color:#1a237e; margin-bottom:1rem;">系统配置</h2>
+      <div id="admin-config" style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+        <div style="padding:0.8rem; background:#f8f9fa; border-radius:6px;">
+          <div style="font-size:0.75rem; color:#666; margin-bottom:0.3rem;">LLM 模型</div>
+          <div id="config-llm-model" style="font-size:0.9rem; font-weight:500;">-</div>
+        </div>
+        <div style="padding:0.8rem; background:#f8f9fa; border-radius:6px;">
+          <div style="font-size:0.75rem; color:#666; margin-bottom:0.3rem;">Embedding 模型</div>
+          <div id="config-embed-model" style="font-size:0.9rem; font-weight:500;">-</div>
+        </div>
+        <div style="padding:0.8rem; background:#f8f9fa; border-radius:6px;">
+          <div style="font-size:0.75rem; color:#666; margin-bottom:0.3rem;">Redis 状态</div>
+          <div id="config-redis" style="font-size:0.9rem; font-weight:500;">-</div>
+        </div>
+        <div style="padding:0.8rem; background:#f8f9fa; border-radius:6px;">
+          <div style="font-size:0.75rem; color:#666; margin-bottom:0.3rem;">Embedding 类型</div>
+          <div id="config-embed-type" style="font-size:0.9rem; font-weight:500;">-</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -175,6 +307,7 @@ async function doLogin() {
       document.getElementById("username-display").textContent = "用户: " + user.username;
       document.getElementById("tenant-display").textContent = "租户ID：" + user.tenant_id
   document.getElementById("role-display").textContent = "角色：" + (user.role == "super_admin" ? "超级管理员" : "普通用户");
+      updateAdminButton(); // Show/hide admin button based on role
       loadDocuments();
     } else { showAlert("login-alert",d.detail || "上传失败","error"); }
   } catch(e) { showAlert("login-alert","网络错误： "+e.message,"error"); }
@@ -184,9 +317,436 @@ async function doLogin() {
 function doLogout() {
   localStorage.removeItem("token"); token = null; user = null;
   document.getElementById("chat-page").style.display = "none";
+  document.getElementById("admin-panel").style.display = "none";
   document.getElementById("login-page").style.display = "flex";
   document.getElementById("chat-messages").innerHTML = '<div class="empty-state" id="empty-state"><div class="icon">&#x1f4dc;</div><h3>开始问答</h3><p>多租户智能文档问答系统</p></div>';
   messages = [];
+}
+
+// ============================================================
+// Admin Panel Functions
+// ============================================================
+
+function showAdminPanel() {
+  document.getElementById("chat-page").style.display = "none";
+  document.getElementById("admin-panel").style.display = "block";
+  loadAdminData();
+}
+
+function hideAdminPanel() {
+  document.getElementById("admin-panel").style.display = "none";
+  document.getElementById("chat-page").style.display = "flex";
+}
+
+async function loadAdminData() {
+  try {
+    // Load stats
+    const statsR = await fetch(API + "/api/admin/stats", {
+      headers: {"Authorization": "Bearer " + token}
+    });
+    if (statsR.ok) {
+      const stats = await statsR.json();
+      document.getElementById("stat-users").textContent = stats.users.total || 0;
+      document.getElementById("stat-docs").textContent = stats.documents.total || 0;
+      document.getElementById("stat-vectors").textContent = stats.vectors.total || 0;
+      document.getElementById("stat-queries").textContent = stats.traces.total_queries || 0;
+    }
+
+    // Load users
+    const usersR = await fetch(API + "/api/admin/users", {
+      headers: {"Authorization": "Bearer " + token}
+    });
+    if (usersR.ok) {
+      const usersData = await usersR.json();
+      const tbody = document.getElementById("admin-users-list");
+      tbody.innerHTML = "";
+      if (usersData.users && usersData.users.length) {
+        usersData.users.forEach(u => {
+          const tr = document.createElement("tr");
+          tr.style.borderBottom = "1px solid #e8eaed";
+          tr.innerHTML = `
+            <td style="padding:0.8rem; font-size:0.85rem;">${u.username}</td>
+            <td style="padding:0.8rem; font-size:0.85rem;">${u.tenant_id}</td>
+            <td style="padding:0.8rem; font-size:0.85rem;">
+              <span style="padding:2px 8px; border-radius:4px; font-size:0.75rem; background:${u.role === 'super_admin' ? '#e8f0fe' : '#f1f3f4'}; color:${u.role === 'super_admin' ? '#1a237e' : '#666'};">
+                ${u.role === 'super_admin' ? '管理员' : '用户'}
+              </span>
+            </td>
+            <td style="padding:0.8rem; text-align:right;">
+              ${u.username !== user.username ? `<button onclick="deleteUser('${u.username}')" style="padding:4px 8px; background:#fce8e6; color:#c5221f; border:none; border-radius:4px; cursor:pointer; font-size:0.75rem;">删除</button>` : '<span style="font-size:0.75rem; color:#999;">当前用户</span>'}
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } else {
+        tbody.innerHTML = '<tr><td colspan="4" style="padding:1rem; text-align:center; color:#999;">暂无用户</td></tr>';
+      }
+    }
+
+    // Load config
+    const configR = await fetch(API + "/api/admin/config", {
+      headers: {"Authorization": "Bearer " + token}
+    });
+    if (configR.ok) {
+      const config = await configR.json();
+      document.getElementById("config-llm-model").textContent = config.llm_model || '-';
+      document.getElementById("config-embed-model").textContent = config.embedding_model || '-';
+      document.getElementById("config-embed-type").textContent = config.embedding_type || '-';
+      document.getElementById("config-redis").textContent = config.redis_url || '-';
+    }
+  } catch (e) {
+    console.error("Failed to load admin data:", e);
+  }
+}
+
+async function deleteUser(username) {
+  if (!confirm(`确定删除用户 "${username}" 吗？`)) return;
+  try {
+    const r = await fetch(API + "/api/admin/users/" + username, {
+      method: "DELETE",
+      headers: {"Authorization": "Bearer " + token}
+    });
+    if (r.ok) {
+      loadAdminData(); // Refresh list
+    } else {
+      const err = await r.json();
+      alert("删除失败: " + (err.detail || "未知错误"));
+    }
+  } catch (e) {
+    alert("网络错误: " + e.message);
+  }
+}
+
+// Show admin button for super_admin users
+function updateAdminButton() {
+  if (user && user.role === "super_admin") {
+    document.getElementById("admin-btn").style.display = "block";
+  } else {
+    document.getElementById("admin-btn").style.display = "none";
+  }
+}
+
+// ============================================================
+// PDF Preview Functions
+// ============================================================
+
+let pdfDoc = null;
+let pdfCurrentPage = 1;
+let pdfScale = 1.5;
+let pdfFileName = "";
+
+function previewDocument(filename) {
+  pdfFileName = filename;
+  document.getElementById("pdf-preview-title").textContent = filename;
+  document.getElementById("pdf-preview-modal").style.display = "block";
+  document.body.style.overflow = "hidden";
+
+  // Load PDF using PDF.js
+  const script = document.createElement("script");
+  script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+  script.onload = function() {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    loadPdf();
+  };
+  document.head.appendChild(script);
+}
+
+async function loadPdf() {
+  try {
+    const url = API + "/api/documents/preview/" + encodeURIComponent(pdfFileName);
+    const loadingTask = pdfjsLib.getDocument({url: url, httpHeaders: {"Authorization": "Bearer " + token}});
+    pdfDoc = await loadingTask.promise;
+    pdfCurrentPage = 1;
+    renderPdfPage();
+  } catch (e) {
+    console.error("Failed to load PDF:", e);
+    document.getElementById("pdf-preview-container").innerHTML =
+      '<div style="color:#fff; padding:2rem; text-align:center;">加载PDF失败: ' + e.message + '</div>';
+  }
+}
+
+async function renderPdfPage() {
+  if (!pdfDoc) return;
+
+  const page = await pdfDoc.getPage(pdfCurrentPage);
+  const viewport = page.getViewport({scale: pdfScale});
+
+  const canvas = document.getElementById("pdf-preview-canvas");
+  const context = canvas.getContext("2d");
+  canvas.height = viewport.height;
+  canvas.width = viewport.width;
+
+  const renderContext = {
+    canvasContext: context,
+    viewport: viewport
+  };
+
+  await page.render(renderContext).promise;
+
+  document.getElementById("pdf-page-info").textContent = pdfCurrentPage + " / " + pdfDoc.numPages;
+}
+
+function pdfPrevPage() {
+  if (pdfDoc && pdfCurrentPage > 1) {
+    pdfCurrentPage--;
+    renderPdfPage();
+  }
+}
+
+function pdfNextPage() {
+  if (pdfDoc && pdfCurrentPage < pdfDoc.numPages) {
+    pdfCurrentPage++;
+    renderPdfPage();
+  }
+}
+
+function pdfZoomIn() {
+  pdfScale = Math.min(pdfScale + 0.25, 3);
+  renderPdfPage();
+}
+
+function pdfZoomOut() {
+  pdfScale = Math.max(pdfScale - 0.25, 0.5);
+  renderPdfPage();
+}
+
+function pdfDownload() {
+  const url = API + "/api/documents/preview/" + encodeURIComponent(pdfFileName);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = pdfFileName;
+  a.target = "_blank";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+function closePdfPreview() {
+  document.getElementById("pdf-preview-modal").style.display = "none";
+  document.body.style.overflow = "";
+  pdfDoc = null;
+  pdfCurrentPage = 1;
+  pdfScale = 1.5;
+}
+
+// ============================================================
+// Category Management Functions
+// ============================================================
+
+function showCategoryManager() {
+  document.getElementById("category-modal").style.display = "block";
+  loadCategories();
+}
+
+function closeCategoryManager() {
+  document.getElementById("category-modal").style.display = "none";
+}
+
+async function loadCategories() {
+  try {
+    const r = await fetch(API + "/api/categories", {
+      headers: {"Authorization": "Bearer " + token}
+    });
+    if (r.ok) {
+      const data = await r.json();
+      const list = document.getElementById("category-list");
+      const filter = document.getElementById("category-filter");
+
+      // Update filter dropdown
+      filter.innerHTML = '<option value="">全部分类</option>';
+      if (data.categories && data.categories.length) {
+        data.categories.forEach(c => {
+          filter.innerHTML += '<option value="' + c.id + '">' + c.name + '</option>';
+        });
+      }
+
+      // Update category list in modal
+      list.innerHTML = "";
+      if (data.categories && data.categories.length) {
+        data.categories.forEach(c => {
+          const div = document.createElement("div");
+          div.style.cssText = "display:flex; justify-content:space-between; align-items:center; padding:0.8rem; border-bottom:1px solid #e8eaed;";
+          div.innerHTML = `
+            <div>
+              <div style="font-weight:500; font-size:0.9rem;">${c.name}</div>
+              ${c.description ? '<div style="font-size:0.75rem; color:#666;">' + c.description + '</div>' : ''}
+            </div>
+            <button onclick="deleteCategory(${c.id})" style="padding:4px 8px; background:#fce8e6; color:#c5221f; border:none; border-radius:4px; cursor:pointer; font-size:0.75rem;">删除</button>
+          `;
+          list.appendChild(div);
+        });
+      } else {
+        list.innerHTML = '<div style="padding:1rem; text-align:center; color:#999;">暂无分类</div>';
+      }
+    }
+  } catch (e) {
+    console.error("Failed to load categories:", e);
+  }
+}
+
+async function createCategory() {
+  const name = document.getElementById("new-category-name").value.trim();
+  const desc = document.getElementById("new-category-desc").value.trim();
+
+  if (!name) {
+    alert("请输入分类名称");
+    return;
+  }
+
+  try {
+    const r = await fetch(API + "/api/categories", {
+      method: "POST",
+      headers: {"Content-Type": "application/json", "Authorization": "Bearer " + token},
+      body: JSON.stringify({name: name, description: desc || null})
+    });
+    if (r.ok) {
+      document.getElementById("new-category-name").value = "";
+      document.getElementById("new-category-desc").value = "";
+      loadCategories();
+    } else {
+      const err = await r.json();
+      alert("创建失败: " + (err.detail || "未知错误"));
+    }
+  } catch (e) {
+    alert("网络错误: " + e.message);
+  }
+}
+
+async function deleteCategory(categoryId) {
+  if (!confirm("确定删除此分类吗？文档将变为未分类。")) return;
+
+  try {
+    const r = await fetch(API + "/api/categories/" + categoryId, {
+      method: "DELETE",
+      headers: {"Authorization": "Bearer " + token}
+    });
+    if (r.ok) {
+      loadCategories();
+    } else {
+      const err = await r.json();
+      alert("删除失败: " + (err.detail || "未知错误"));
+    }
+  } catch (e) {
+    alert("网络错误: " + e.message);
+  }
+}
+
+async function assignDocumentCategory(filename, categoryId) {
+  try {
+    const r = await fetch(API + "/api/categories/assign", {
+      method: "POST",
+      headers: {"Content-Type": "application/json", "Authorization": "Bearer " + token},
+      body: JSON.stringify({filename: filename, category_id: categoryId || null})
+    });
+    if (r.ok) {
+      loadDocuments(); // Refresh document list
+    }
+  } catch (e) {
+    console.error("Failed to assign category:", e);
+  }
+}
+
+// Load categories on login
+function loadCategoriesOnLogin() {
+  if (token) {
+    loadCategories();
+    loadConversations();
+  }
+}
+
+// ============================================================
+// Conversation Management Functions
+// ============================================================
+
+let currentConversationId = null;
+
+async function loadConversations() {
+  try {
+    const r = await fetch(API + "/api/conversations", {
+      headers: {"Authorization": "Bearer " + token}
+    });
+    if (r.ok) {
+      const data = await r.json();
+      const list = document.getElementById("conversation-list");
+      list.innerHTML = "";
+
+      if (data.conversations && data.conversations.length) {
+        data.conversations.forEach(c => {
+          const div = document.createElement("div");
+          div.style.cssText = "padding:0.5rem; border-radius:4px; cursor:pointer; margin-bottom:0.3rem; font-size:0.75rem; background:rgba(255,255,255,0.05);";
+          div.innerHTML = `
+            <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${c.title || '未命名对话'}</div>
+            <div style="font-size:0.65rem; color:rgba(255,255,255,0.4); margin-top:2px;">${new Date(c.updated_at).toLocaleString()}</div>
+          `;
+          div.onclick = () => loadConversation(c.id);
+          div.onmouseover = () => div.style.background = "rgba(255,255,255,0.1)";
+          div.onmouseout = () => div.style.background = "rgba(255,255,255,0.05)";
+          list.appendChild(div);
+        });
+      } else {
+        list.innerHTML = '<div style="padding:0.5rem; color:rgba(255,255,255,0.5); font-size:0.75rem;">暂无对话</div>';
+      }
+    }
+  } catch (e) {
+    console.error("Failed to load conversations:", e);
+  }
+}
+
+async function startNewConversation() {
+  try {
+    const r = await fetch(API + "/api/conversations", {
+      method: "POST",
+      headers: {"Content-Type": "application/json", "Authorization": "Bearer " + token},
+      body: JSON.stringify({})
+    });
+    if (r.ok) {
+      const data = await r.json();
+      currentConversationId = data.conversation_id;
+      clearHistory();
+      loadConversations();
+    }
+  } catch (e) {
+    console.error("Failed to create conversation:", e);
+  }
+}
+
+async function loadConversation(conversationId) {
+  currentConversationId = conversationId;
+  try {
+    const r = await fetch(API + "/api/conversations/" + conversationId, {
+      headers: {"Authorization": "Bearer " + token}
+    });
+    if (r.ok) {
+      const data = await r.json();
+      clearHistory();
+
+      // Load messages into chat
+      if (data.messages && data.messages.length) {
+        data.messages.forEach(m => {
+          addMessage(m.role, m.content, null, null);
+        });
+      }
+    }
+  } catch (e) {
+    console.error("Failed to load conversation:", e);
+  }
+}
+
+async function saveMessageToConversation(role, content) {
+  if (!currentConversationId) {
+    // Create new conversation if none exists
+    await startNewConversation();
+  }
+
+  try {
+    await fetch(API + "/api/conversations/" + currentConversationId + "/messages", {
+      method: "POST",
+      headers: {"Content-Type": "application/json", "Authorization": "Bearer " + token},
+      body: JSON.stringify({role: role, content: content})
+    });
+  } catch (e) {
+    console.error("Failed to save message:", e);
+  }
 }
 
 async function doUpload() {
@@ -206,11 +766,37 @@ async function doUpload() {
 
 async function loadDocuments() {
   try {
-    let r = await fetch(API + "/api/documents", { headers:{"Authorization":"Bearer " + token} });
+    // Get selected category filter
+    const categoryFilter = document.getElementById("category-filter");
+    const selectedCategoryId = categoryFilter ? categoryFilter.value : "";
+
+    // Add event listener for category filter change
+    if (categoryFilter && !categoryFilter.hasAttribute("data-listener")) {
+      categoryFilter.setAttribute("data-listener", "true");
+      categoryFilter.addEventListener("change", loadDocuments);
+    }
+
+    let url = API + "/api/documents";
+    if (selectedCategoryId) {
+      url = API + "/api/categories/list?category_id=" + selectedCategoryId;
+    }
+
+    let r = await fetch(url, { headers:{"Authorization":"Bearer " + token} });
     let d = await r.json();
     let list = document.getElementById("doc-list");
     list.innerHTML = "";
-    if (d.documents && d.documents.length) { d.documents.forEach(function(f) {
+
+    // Handle different response formats
+    let documents = [];
+    if (selectedCategoryId && d.documents) {
+      // From category API
+      documents = d.documents.map(doc => doc.filename);
+    } else if (d.documents) {
+      // From documents API
+      documents = d.documents;
+    }
+
+    if (documents && documents.length) { documents.forEach(function(f) {
         var div = document.createElement("div");
         div.style.display = "flex";
         div.style.justifyContent = "space-between";
@@ -221,6 +807,22 @@ async function loadDocuments() {
         span.style.overflow = "hidden";
         span.style.textOverflow = "ellipsis";
         div.appendChild(span);
+
+        // Preview button
+        var previewBtn = document.createElement("button");
+        previewBtn.textContent = "👁";
+        previewBtn.style.background = "rgba(26,35,126,0.1)";
+        previewBtn.style.border = "none";
+        previewBtn.style.color = "#1a237e";
+        previewBtn.style.fontSize = "0.7rem";
+        previewBtn.style.cursor = "pointer";
+        previewBtn.style.borderRadius = "3px";
+        previewBtn.style.padding = "2px 5px";
+        previewBtn.style.marginLeft = "5px";
+        previewBtn.title = "预览文档";
+        previewBtn.onclick = function(e) { e.stopPropagation(); previewDocument(f); };
+        div.appendChild(previewBtn);
+
         if (user && user.role === "super_admin") {
           var delBtn = document.createElement("button");
           delBtn.textContent = "✖";
@@ -301,6 +903,10 @@ async function sendMessage() {
   input.value = "";
   addMessage("user", msg, null, null);
   document.getElementById("send-btn").disabled = true;
+
+  // Save user message to conversation history
+  saveMessageToConversation("user", msg);
+
   try {
     var r = await fetch(API + "/api/chat/stream", {
       method: "POST",
@@ -318,6 +924,8 @@ async function sendMessage() {
         addMessage("assistant", d2.answer, d2.citations, d2.token_usage);
         messages.push({role:"user",content:msg},{role:"assistant",content:d2.answer});
         window._lastAnswer = d2.answer; window._lastQuery = msg;
+        // Save assistant message to conversation history
+        saveMessageToConversation("assistant", d2.answer);
       } else { addMessage("assistant", "API\u9519\u8bef\uff1a" + (d2.detail || "\u8bf7\u6c42\u5931\u8d25"), null, null); }
       document.getElementById("send-btn").disabled = false;
       return;
@@ -355,6 +963,8 @@ async function sendMessage() {
     addMessage("assistant", full, cites, usage);
     messages.push({role:"user",content:msg},{role:"assistant",content:full});
     window._lastAnswer = full; window._lastQuery = msg;
+    // Save assistant message to conversation history
+    saveMessageToConversation("assistant", full);
   } catch(e) { addMessage("assistant", "\u7f51\u7edc\u9519\u8bef\uff1a" + e.message, null, null); }
   document.getElementById("send-btn").disabled = false;
 }
@@ -375,7 +985,42 @@ function clearHistory() {
 }
 
 // Auto-login if token exists
-if (token) { try { fetch(API + "/api/documents", {headers:{"Authorization":"Bearer "+token}}).then(function(r){if(r.ok){document.getElementById("login-page").style.display="none";document.getElementById("chat-page").style.display="block";loadDocuments();}}); } catch(e){} }
+if (token) {
+  try {
+    // First try to get user info from auth endpoint
+    fetch(API + "/api/auth/me", {headers:{"Authorization":"Bearer "+token}})
+      .then(function(r) {
+        if (r.ok) {
+          return r.json();
+        }
+        throw new Error("Not authenticated");
+      })
+      .then(function(userData) {
+        user = userData;
+        updateAdminButton();
+        document.getElementById("login-page").style.display = "none";
+        document.getElementById("chat-page").style.display = "block";
+        document.getElementById("username-display").textContent = "用户: " + user.username;
+        document.getElementById("tenant-display").textContent = "租户ID：" + user.tenant_id;
+        document.getElementById("role-display").textContent = "角色：" + (user.role == "super_admin" ? "超级管理员" : "普通用户");
+        loadDocuments();
+      })
+      .catch(function() {
+        // If /api/auth/me doesn't exist, try loading documents to validate token
+        fetch(API + "/api/documents", {headers:{"Authorization":"Bearer "+token}})
+          .then(function(r) {
+            if (r.ok) {
+              // Token is valid but we don't have user info - assume admin for now
+              user = { role: "super_admin" };
+              updateAdminButton();
+              document.getElementById("login-page").style.display = "none";
+              document.getElementById("chat-page").style.display = "block";
+              loadDocuments();
+            }
+          });
+      });
+  } catch(e) {}
+}
   
   async function doDeleteDocument(filename) {  
     if (!confirm("确定删除 " + filename + " 吗？")) return;  

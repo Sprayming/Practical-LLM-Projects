@@ -6,8 +6,15 @@ from app.processing.multimodal_pipeline import MultimodalPipeline
 from langchain_community.vectorstores import Chroma
 import app.core.config as cfg
 from app.api.auth import get_user_from_token
+from app.security.middleware import get_safe_upload_path, sanitize_filename
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
+
+# Allowed file extensions
+ALLOWED_EXTENSIONS = {".pdf"}
+
+# Max file size: 100MB
+MAX_FILE_SIZE = 100 * 1024 * 1024
 
 def _require_user(authorization: str = Header(...)) -> dict:
     token = authorization.replace("Bearer ", "").strip()
@@ -21,11 +28,22 @@ async def upload_document(
     user: dict = Depends(_require_user),
 ):
     tenant_id = user["tenant_id"]
-    upload_dir = os.path.join(cfg.UPLOAD_DIR, tenant_id)
-    os.makedirs(upload_dir, exist_ok=True)
 
-    file_path = os.path.join(upload_dir, file.filename)
+    # Validate file extension
+    if not file.filename:
+        raise HTTPException(400, "No filename provided")
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(400, f"File type not allowed. Allowed: {ALLOWED_EXTENSIONS}")
+
+    # Read content and check size
     content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(413, f"File too large. Maximum size: {MAX_FILE_SIZE // (1024*1024)}MB")
+
+    # Get safe file path (prevents path traversal)
+    file_path = get_safe_upload_path(cfg.UPLOAD_DIR, tenant_id, file.filename)
+
     with open(file_path, "wb") as f:
         f.write(content)
 
@@ -66,18 +84,52 @@ def list_documents(user: dict = Depends(_require_user)):
     files = [f for f in os.listdir(upload_dir) if f.endswith(".pdf")]
     return {"documents": files}
 
+@router.get("/preview/{filename}")
+async def preview_document(filename: str, user: dict = Depends(_require_user)):
+    """预览PDF文档"""
+    tenant_id = user["tenant_id"]
+
+    # Sanitize filename
+    safe_filename = sanitize_filename(filename)
+    upload_dir = os.path.join(cfg.UPLOAD_DIR, tenant_id)
+    file_path = os.path.join(upload_dir, safe_filename)
+
+    # Verify path is safe
+    from app.security.middleware import is_safe_path
+    if not is_safe_path(upload_dir, file_path):
+        raise HTTPException(400, "Invalid filename")
+
+    # Check if file exists
+    if not os.path.exists(file_path):
+        raise HTTPException(404, "Document not found")
+
+    # Return file for preview
+    from fastapi.responses import FileResponse
+    return FileResponse(
+        path=file_path,
+        media_type="application/pdf",
+        filename=safe_filename,
+    )
+
 @router.delete("/{filename}")
 def delete_document(filename: str, user: dict = Depends(_require_user)):
-    """????????"""
+    """删除文档（仅管理员）"""
     tenant_id = user["tenant_id"]
     role = user.get("role", "user")
 
     if role != "super_admin":
-        raise HTTPException(403, "????????")
+        raise HTTPException(403, "仅管理员可以删除文档")
 
-    # ????
+    # Sanitize filename to prevent path traversal
+    safe_filename = sanitize_filename(filename)
     upload_dir = os.path.join(cfg.UPLOAD_DIR, tenant_id)
-    file_path = os.path.join(upload_dir, filename)
+    file_path = os.path.join(upload_dir, safe_filename)
+
+    # Verify path is safe
+    from app.security.middleware import is_safe_path
+    if not is_safe_path(upload_dir, file_path):
+        raise HTTPException(400, "Invalid filename")
+
     deleted = False
     if os.path.exists(file_path):
         os.remove(file_path)

@@ -1,0 +1,1 @@
+# Security module for Legal-DOC-RAG
