@@ -4,40 +4,323 @@
 基于自然语言查询的数据分析系统，面向网约车运营场景。
 用户可以用日常语言问"哪个价位的卡券核销率最高？"，系统自动生成 SQL、查询数据库、分析数据并给出运营建议。
 
-## 系统架构
+## 系统特性
 
-`
-用户问题
-  ↓
-Schema 理解（告诉 LLM 数据库结构）
-  ↓
-LLM 生成 SQL
-  ↓
-SQL 校验 → 执行查询
-  ↓
-LLM 解读数据 → 给出运营建议
-  ↓
-返回结果
-`
+### 核心功能
+- **自然语言查询**：用日常语言提问，自动生成SQL并分析数据
+- **智能分析**：LLM驱动的数据解读和业务洞察
+- **运营建议**：基于数据的可执行运营策略
+- **可视化仪表盘**：直观的数据展示和图表
+
+### 技术架构
+- **后端**：FastAPI + SQLAlchemy + SQLite/MySQL
+- **AI引擎**：DeepSeek LLM（可替换为其他模型）
+- **前端**：响应式Web界面 + Chart.js图表
+- **安全**：JWT认证、SQL注入防护、速率限制
+
+### 安全特性
+- 用户认证与授权（JWT）
+- SQL注入防护
+- 请求速率限制
+- 输入验证与净化
+- 安全响应头
 
 ## 数据模型
 
-- drivers — 司机信息
-- coupon_types — 卡券类型（面值、有效期等）
-- coupons — 卡券发放记录
-- orders — 订单记录
-- redemptions — 核销记录
+- **drivers** — 司机信息（ID、姓名、手机号、注册时间等）
+- **coupon_types** — 卡券类型（面值、有效期、使用条件等）
+- **coupons** — 卡券发放记录（用户、面值、状态、发放时间等）
+- **orders** — 订单记录（司机、乘客、金额、时间等）
+- **redemptions** — 核销记录（卡券、订单、核销时间等）
 
 ## 快速开始
 
-1. 复制 .env.example 为 .env，填入 DeepSeek API Key
-2. 创建数据库并导入 data/schema.sql
-3. pip install -r requirements.txt
-4. python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8001
+### 方式一：本地开发
 
-## API
+1. **环境准备**
+   ```bash
+   # 克隆项目
+   git clone <repository-url>
+   cd ride-hailing-analytics-system
+   
+   # 创建虚拟环境
+   python -m venv venv
+   source venv/bin/activate  # Windows: venv\Scripts\activate
+   
+   # 安装依赖
+   pip install -r requirements.txt
+   ```
+
+2. **配置环境**
+   ```bash
+   # 复制环境配置文件
+   cp .env.example .env
+   
+   # 编辑 .env 文件，填入必要配置
+   # - LLM_API_KEY: DeepSeek API密钥
+   # - DB_HOST: 数据库地址（默认127.0.0.1）
+   # - DB_NAME: 数据库名（默认ride_hailing）
+   ```
+
+3. **初始化数据库**
+   ```bash
+   # 创建数据库表
+   python scripts/init_db.py
+   ```
+
+4. **启动服务**
+   ```bash
+   # 启动开发服务器
+   python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8001
+   
+   # 访问应用
+   # - Web界面: http://127.0.0.1:8001
+   # - API文档: http://127.0.0.1:8001/docs
+   # - ReDoc文档: http://127.0.0.1:8001/redoc
+   ```
+
+### 方式二：Docker部署
+
+1. **环境准备**
+   ```bash
+   # 确保已安装Docker和Docker Compose
+   docker --version
+   docker-compose --version
+   ```
+
+2. **配置环境**
+   ```bash
+   cp .env.example .env
+   # 编辑 .env 文件，填入LLM_API_KEY
+   ```
+
+3. **启动服务**
+   ```bash
+   # 构建并启动所有服务
+   docker-compose up -d
+   
+   # 查看日志
+   docker-compose logs -f
+   
+   # 停止服务
+   docker-compose down
+   ```
+
+## API文档
+
+### 认证API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | /api/auth/register | 用户注册 |
+| POST | /api/auth/login | 用户登录 |
+| GET | /api/auth/me | 获取当前用户信息 |
+| POST | /api/auth/api-key | 创建API密钥 |
+| POST | /api/auth/change-password | 修改密码 |
+
+### 数据分析API
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | POST | /api/query/ | 自然语言查询 |
-| GET  | /api/dashboard/ | 仪表盘数据 |
+| GET | /api/dashboard/ | 仪表盘数据 |
+
+### 查询示例
+
+```bash
+# 自然语言查询
+curl -X POST "http://127.0.0.1:8001/api/query/" \
+  -H "Content-Type: application/json" \
+  -d '{"question": "哪个价位的卡券核销率最高？"}'
+
+# 带认证的查询
+curl -X POST "http://127.0.0.1:8001/api/query/" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <your-token>" \
+  -d '{"question": "最近30天哪个司机的订单量最多？"}'
+```
+
+## 项目结构
+
+```
+ride-hailing-analytics-system/
+├── app/                    # 应用代码
+│   ├── api/               # API路由
+│   ├── auth/              # 认证模块
+│   ├── security/          # 安全模块
+│   ├── nlsql/             # 自然语言转SQL
+│   ├── analysis/          # 数据分析
+│   ├── agent/             # Agent编排
+│   ├── db/                # 数据库连接
+│   └── main.py            # 应用入口
+├── data/                  # 数据文件
+├── scripts/               # 脚本工具
+├── tests/                 # 测试代码
+├── Dockerfile             # Docker配置
+├── docker-compose.yml     # Docker Compose配置
+└── requirements.txt       # Python依赖
+```
+
+## 测试
+
+```bash
+# 运行所有测试
+pytest
+
+# 运行单元测试
+pytest -m unit
+
+# 运行集成测试
+pytest -m integration
+
+# 生成测试报告
+pytest --cov=app --cov-report=html
+```
+
+## 配置说明
+
+### 环境变量
+
+| 变量名 | 说明 | 默认值 |
+|--------|------|--------|
+| DB_HOST | 数据库地址 | 127.0.0.1 |
+| DB_PORT | 数据库端口 | 3306 |
+| DB_NAME | 数据库名 | ride_hailing |
+| DB_USER | 数据库用户 | root |
+| DB_PASSWORD | 数据库密码 | |
+| LLM_API_KEY | LLM API密钥 | |
+| LLM_BASE_URL | LLM API地址 | https://api.deepseek.com/v1 |
+| LLM_MODEL | LLM模型名 | deepseek-chat |
+| LLM_TEMPERATURE | 生成温度 | 0.05 |
+| DEBUG | 调试模式 | true |
+
+### LLM配置
+
+系统支持多种LLM提供商，只需修改以下配置：
+- **DeepSeek**: `LLM_BASE_URL=https://api.deepseek.com/v1`
+- **OpenAI**: `LLM_BASE_URL=https://api.openai.com/v1`
+- **本地模型**: `LLM_BASE_URL=http://localhost:11434/v1`
+
+## 开发指南
+
+### 添加新功能
+
+1. 在 `app/` 下创建新模块
+2. 在 `app/api/` 中添加路由
+3. 在 `app/main.py` 中注册路由
+4. 编写测试用例
+5. 更新文档
+
+### 代码规范
+
+- 遵循 PEP 8 代码风格
+- 使用类型注解
+- 编写文档字符串
+- 添加单元测试
+
+## 常见问题
+
+### 1. 数据库连接失败
+- 检查数据库服务是否启动
+- 确认 `.env` 中的数据库配置
+- 确保数据库已创建并导入schema
+
+### 2. LLM API调用失败
+- 检查API密钥是否正确
+- 确认网络连接正常
+- 检查API额度是否充足
+
+### 3. 端口被占用
+```bash
+# 查找占用端口的进程
+netstat -ano | findstr :8001
+
+# 终止进程
+taskkill /PID <进程ID> /F
+```
+
+## 更新日志
+
+### v0.2.0 (2026-08-04) — 从原型到准生产
+
+从原型/Demo级别提升到接近生产可用，共新增 50+ 文件，44 个测试全部通过。
+
+#### 🧪 测试（P0）
+- 配置 pytest 框架（`pytest.ini` + `conftest.py`）
+- 新增 44 个测试用例，覆盖 5 个模块：
+  - `tests/test_config.py` — 配置加载与环境变量（3 个）
+  - `tests/test_models.py` — Pydantic 数据模型验证（10 个）
+  - `tests/test_nlsql.py` — SQL 生成、Schema 解析、SQL 安全校验（15 个）
+  - `tests/test_api.py` — API 接口 mock 测试（7 个）
+  - `tests/test_security.py` — SQL 注入攻击模拟、输入验证（9 个）
+
+#### 🔒 安全（P0）
+- 新增 `app/security/middleware.py` — 4 个安全中间件：
+  - `SecurityHeadersMiddleware` — X-Content-Type-Options, CSP 等安全响应头
+  - `RequestSizeLimitMiddleware` — 请求体大小限制（1MB）
+  - `RateLimitMiddleware` — 基于 IP 的速率限制（60 次/分钟）
+  - `SQLInjectionMiddleware` — 危险 SQL 模式检测
+- 新增 `app/security/validators.py` — 输入净化、文件名校验、SQL 注入检测、API 密钥格式验证
+- 新增 `app/security/error_handlers.py` — 统一错误处理框架：
+  - `AppError` 基类 + 5 个子类（ValidationError, NotFoundError, DatabaseError, LLMError, SecurityError）
+  - 全局异常处理器（AppError / HTTPException / Exception）
+
+#### 🛡️ 错误处理（P0）
+- 重写 `app/api/query.py` — 分层异常处理（输入验证 → SQL生成 → SQL执行 → 数据分析 → 建议生成）
+- 重写 `app/main.py` — 注册安全中间件 + 错误处理器 + 应用生命周期管理
+
+#### 👤 用户认证（P1）
+- 新增 `app/auth/` 认证模块：
+  - `models.py` — UserCreate, UserLogin, Token, PasswordChange 等 Pydantic 模型
+  - `database.py` — SQLite 用户表 + API 密钥表 + 密码哈希（SHA256+盐）
+  - `jwt_handler.py` — JWT 令牌创建/验证
+  - `dependencies.py` — FastAPI 依赖注入（get_current_user, get_current_admin_user 等）
+- 新增 `app/api/auth.py` — 5 个认证 API：注册、登录、用户信息、创建 API 密钥、修改密码
+
+#### 📖 API 文档（P1）
+- 配置 Swagger UI（`/docs`）和 ReDoc（`/redoc`）
+- 所有 API 端点添加中文说明和标签
+
+#### 🐳 Docker 部署（P1）
+- 新增 `Dockerfile` — Python 3.11 基础镜像 + uvicorn
+- 新增 `docker-compose.yml` — 三服务架构：
+  - `app` — FastAPI 应用（端口 8001）
+  - `db` — MySQL 8.0（端口 3306）+ schema 自动初始化
+  - `nginx` — 反向代理（端口 80）+ 安全头 + 请求限制
+- 新增 `nginx.conf` — 反向代理配置
+- 新增 `.dockerignore` — 构建排除规则
+
+#### 🎨 前端数据可视化（P1）
+- 新增 `app/static/index.html` — 完整响应式 Web 界面：
+  - 仪表盘卡片（总卡券数 / 核销数 / 核销率）
+  - 智能查询输入框（支持回车提交）
+  - Chart.js 图表（卡券面值饼图 + 核销趋势折线图）
+  - 查询结果展示（摘要 / 洞察 / 建议 / SQL / 数据表格）
+  - 移动端适配
+
+#### 📝 文档
+- 重写 `README.md`：
+  - 系统特性 / 技术架构 / 安全特性
+  - 快速开始（本地开发 + Docker 部署）
+  - 完整 API 文档（认证 API + 数据分析 API）
+  - 项目结构 / 测试说明 / 配置说明 / 开发指南 / 常见问题
+
+### v0.1.0 (2026-07-20)
+- 🎉 初始版本发布
+- ✅ 基础自然语言查询功能（DeepSeek LLM）
+- ✅ SQL 自动生成与安全校验
+- ✅ 数据分析与运营建议
+- ✅ Agent 编排（Planner → SQLTool → AnalysisTool → ReportTool）
+- ✅ 仪表盘 API
+
+## 贡献指南
+
+1. Fork 项目
+2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 创建 Pull Request
+
+## 许可证
+
+MIT License - 详见 [LICENSE](LICENSE) 文件

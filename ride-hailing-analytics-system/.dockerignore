@@ -1,0 +1,49 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info
+dist
+build
+.eggs
+
+# 虚拟环境
+venv/
+env/
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 测试
+tests/
+pytest.ini
+.pytest_cache/
+
+# 日志
+logs/
+*.log
+
+# 数据（生产环境应使用卷挂载）
+data/*.db
+data/*.sqlite
+
+# 文档
+*.md
+LICENSE
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+nginx.conf
