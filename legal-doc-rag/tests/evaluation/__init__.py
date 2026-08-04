@@ -1,0 +1,1 @@
+# Evaluation tests for Legal-DOC-RAG
