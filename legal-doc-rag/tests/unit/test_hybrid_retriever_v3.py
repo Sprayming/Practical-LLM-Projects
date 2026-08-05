@@ -103,22 +103,35 @@ class TestHybridRetriever:
         assert retriever.reranker is None
 
     def test_tokenize(self):
-        """Test _tokenize method."""
+        """Test _tokenize: 英文按词、中文单字+bigram、停用词过滤、中英混合。"""
         from app.retrieval.hybrid_retriever import HybridRetriever
 
         retriever = HybridRetriever.__new__(HybridRetriever)
 
+        # 英文：小写 + 按词拆分
         tokens = retriever._tokenize("Hello World")
         assert "hello" in tokens
         assert "world" in tokens
 
-        tokens = retriever._tokenize("你好世界")
-        assert "你" in tokens
-        assert "好" in tokens
+        # 中文：单字切分 + bigram（"违约责任条款" 均非停用词）
+        tokens = retriever._tokenize("违约责任条款")
+        for ch in ("违", "约", "责", "任", "条", "款"):
+            assert ch in tokens
+        assert "违约" in tokens
+        assert "责任" in tokens
+        assert "条款" in tokens
 
+        # 停用词过滤："你"/"好" 在停用词表中应被剔除，但 bigram 仍生成
+        tokens = retriever._tokenize("你好世界")
+        assert "你" not in tokens
+        assert "好" not in tokens
+        assert "世界" in tokens
+
+        # 中英混合
         tokens = retriever._tokenize("Hello 世界")
         assert "hello" in tokens
         assert "世" in tokens
+        assert "世界" in tokens
 
     @patch("app.retrieval.hybrid_retriever.BM25Okapi")
     def test_sparse_search(self, mock_bm25):

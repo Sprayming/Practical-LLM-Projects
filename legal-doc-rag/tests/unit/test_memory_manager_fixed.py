@@ -50,12 +50,14 @@ class TestMemorySystem:
         mock_embedding = Mock()
         mock_redis_instance = Mock()
         mock_redis.return_value = mock_redis_instance
-        
+        # 让 Redis 走「不可用」回退分支，short_term 保持为 []（真实环境下 is_available 为 False 时同理）
+        mock_redis_instance.is_available.return_value = False
+
         memory = MemorySystem(
             embedding_model=mock_embedding,
             persist_dir="./test_db"
         )
-        
+
         memory.add("user", "Hello world")
         
         assert len(memory.short_term) == 1
@@ -221,17 +223,24 @@ class TestMemorySystem:
         mock_embedding = Mock()
         mock_redis_instance = Mock()
         mock_redis.return_value = mock_redis_instance
-        
+        mock_redis_instance.is_available.return_value = False
+
         mock_worker_instance = Mock()
         mock_worker.return_value = mock_worker_instance
-        
+
         memory = MemorySystem(
             embedding_model=mock_embedding,
             persist_dir="./test_db"
         )
-        
+
+        # 制造短期记忆溢出（超过 max_short_term），触发异步整理任务
+        memory.short_term = [
+            {"role": "user", "content": f"msg-{i}"}
+            for i in range(memory.max_short_term + 1)
+        ]
+
         llm_func = Mock(return_value="Summary")
         memory.trigger_background_jobs(llm_func)
-        
-        # Should submit a task to the worker
+
+        # 溢出时应向后台 Worker 提交整理任务
         mock_worker_instance.submit.assert_called()

@@ -68,7 +68,7 @@ class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
 # ============================================================
 
 def sanitize_filename(filename: str) -> str:
-    """
+    r"""
     Sanitize a filename to prevent path traversal attacks.
 
     - Removes path separators (/, \)

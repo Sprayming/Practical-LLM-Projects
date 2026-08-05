@@ -290,6 +290,15 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 
 ## 更新日志
 
+### 2026-08-05: 测试套件修复 + 代码清理
+
+- **单元测试全绿（32/32）**：修复此前 14 个失败用例。
+  - 根因：运行环境缺第三方依赖（jwt / langchain_chroma / langchain_community 等），并非 mock 写错；另有 `tokenize` 断言未跟上「停用词过滤 + bigram」实现、`memory_manager` 测试中 `short_term` 被 Mock 占位导致 `len()` 失败。
+  - 修复：`tests/conftest.py` 注册**惰性桩 Finder**，对当前环境未安装的重型/可选依赖（sentence_transformers / paddleocr / bs4 等）及其任意子模块动态返回 MagicMock 桩，使 `pytest tests/unit/` 在干净环境也能秒级通过；已真实安装的包不受影响。修正 `test_hybrid_retriever_v3.py` 的 `test_tokenize` 与 `test_memory_manager_fixed.py` 的 mock 配置。
+- **依赖补齐（测试环境）**：安装 PyJWT / slowapi / redis / jieba / langchain_community / langchain_chroma（项目核心依赖，CI 应已包含）。
+- **代码清理**：删除根目录 5 个临时脚本（`_fix_login.py` / `_fix_upload.py` / `test_hybrid.py` / `test_mm.py` / `test_retrieval.py`）；修复 `app/security/middleware.py` docstring 的无效转义警告（`SyntaxWarning`）。
+- **作用**：clone 到干净环境 `pytest tests/unit/` 一键全绿，CI / 面试演示更可靠。
+
 ### 2026-08-04: 安全加固 + 代码卫生 + 依赖/测试修复
 
 > 本轮在代码体检基础上，修复了若干会直接阻塞上线的具体 bug（认证、限流、TLS、硬编码密钥等）。
