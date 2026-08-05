@@ -751,7 +751,7 @@ PDF文件
 
 ### P1 — 强烈建议（生产稳定性）
 - [ ] **HTTPS / TLS**：生产环境经反向代理（Nginx 等）配置 TLS，加密 Token / API Key 传输
-- [ ] **ES 检索层决策（二选一）**：接入（compose 加 ES 服务 + requirements 加依赖 + 验证混合检索走 ES）或明确标注「实验性·未启用」，避免「承诺未交付」
+- [ ] **Elasticsearch 检索层（实验性 · 默认关闭）**：代码已实现并作为可选 feature-flag （`HybridRetriever(use_elasticsearch=...)`，默认 `False`），但生产编排未接入——`docker-compose.yml` 未起 ES 服务、`requirements` 无 `elasticsearch` 依赖。如需启用：① compose 加 ES 服务 ② requirements 加 `elasticsearch` ③ main 创建 retriever 时传 `use_elasticsearch=True` ④ 重新验证混合检索走 ES；保持关闭则不影响现有 Chroma + BM25 检索，无功能缺失。
 - [ ] **Redis 生产化**：限流/会话依赖 Redis，多副本部署必须配 `REDIS_URL`（当前有内存回退，单机 OK、多实例会乱）
 - [ ] **密钥管理**：生产用密钥服务/环境变量注入，`.env` 不入仓库；建立 key 定期轮转
 - [ ] **向量库持久化与备份**：定期备份 `chroma_db`（已有 `scripts/backup.py`，需接入定时任务）
