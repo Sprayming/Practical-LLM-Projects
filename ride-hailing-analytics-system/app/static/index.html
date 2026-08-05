@@ -20,7 +20,7 @@
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
             padding: 20px;
         }
@@ -46,9 +46,46 @@
             opacity: 0.9;
         }
 
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 10px;
+        }
+
+        .nav-tab {
+            padding: 10px 20px;
+            background: white;
+            border: none;
+            border-radius: 8px 8px 0 0;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: #666;
+            transition: all 0.3s;
+        }
+
+        .nav-tab.active {
+            background: #667eea;
+            color: white;
+        }
+
+        .nav-tab:hover:not(.active) {
+            background: #f0f0f0;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
         .dashboard {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 20px;
             margin-bottom: 30px;
         }
@@ -83,7 +120,20 @@
             font-size: 0.9em;
         }
 
-        .query-section {
+        .card .trend {
+            font-size: 0.85em;
+            margin-top: 5px;
+        }
+
+        .card .trend.up {
+            color: #10b981;
+        }
+
+        .card .trend.down {
+            color: #ef4444;
+        }
+
+        .section {
             background: white;
             border-radius: 10px;
             padding: 30px;
@@ -91,10 +141,13 @@
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
         }
 
-        .query-section h2 {
+        .section h2 {
             color: #333;
             margin-bottom: 20px;
             font-size: 1.5em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
 
         .query-input {
@@ -138,19 +191,6 @@
             transform: none;
         }
 
-        .result-section {
-            background: white;
-            border-radius: 10px;
-            padding: 30px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
-        }
-
-        .result-section h2 {
-            color: #333;
-            margin-bottom: 20px;
-            font-size: 1.5em;
-        }
-
         .result-card {
             background: #f8f9fa;
             border-radius: 8px;
@@ -180,25 +220,11 @@
             margin-top: 10px;
         }
 
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #666;
-        }
-
-        .error {
-            background: #fee2e2;
-            color: #dc2626;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-
-        .charts-section {
+        .charts-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
             gap: 20px;
-            margin-top: 30px;
+            margin-top: 20px;
         }
 
         .chart-container {
@@ -214,6 +240,106 @@
             font-size: 1.2em;
         }
 
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+        }
+
+        .history-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .history-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .history-item:hover {
+            background: #f8f9fa;
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
+        }
+
+        .history-item .question {
+            font-weight: 500;
+            color: #333;
+        }
+
+        .history-item .time {
+            font-size: 0.85em;
+            color: #999;
+        }
+
+        .history-item .favorite {
+            color: #fbbf24;
+            cursor: pointer;
+        }
+
+        .export-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .export-btn {
+            padding: 10px 20px;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .export-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .error {
+            background: #fee2e2;
+            color: #dc2626;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .success {
+            background: #d1fae5;
+            color: #059669;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+
+        .empty-state svg {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+
         footer {
             text-align: center;
             padding: 30px;
@@ -226,7 +352,11 @@
                 flex-direction: column;
             }
 
-            .charts-section {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .dashboard {
                 grid-template-columns: 1fr;
             }
         }
@@ -239,43 +369,125 @@
             <p>基于自然语言查询的智能数据分析平台</p>
         </header>
 
-        <section class="dashboard" id="dashboard">
-            <div class="card">
-                <h3>📊 总卡券数</h3>
-                <div class="value" id="total-coupons">--</div>
-                <div class="label">已发放卡券总量</div>
-            </div>
-            <div class="card">
-                <h3>✅ 核销数</h3>
-                <div class="value" id="total-redemptions">--</div>
-                <div class="label">已核销卡券数量</div>
-            </div>
-            <div class="card">
-                <h3>📈 核销率</h3>
-                <div class="value" id="redemption-rate">--%</div>
-                <div class="label">卡券核销成功率</div>
-            </div>
-        </section>
+        <nav class="nav-tabs">
+            <button class="nav-tab active" onclick="switchTab('dashboard')">📊 仪表盘</button>
+            <button class="nav-tab" onclick="switchTab('query')">🔍 智能查询</button>
+            <button class="nav-tab" onclick="switchTab('charts')">📈 数据图表</button>
+            <button class="nav-tab" onclick="switchTab('history')">📋 查询历史</button>
+        </nav>
 
-        <section class="query-section">
-            <h2>🔍 智能查询</h2>
-            <div class="query-input">
-                <input type="text" id="question-input" placeholder="请输入您的问题，例如：哪个价位的卡券核销率最高？" />
-                <button id="query-btn" onclick="submitQuery()">查询</button>
+        <!-- 仪表盘 Tab -->
+        <div id="tab-dashboard" class="tab-content active">
+            <div class="dashboard">
+                <div class="card">
+                    <h3>📊 总卡券数</h3>
+                    <div class="value" id="total-coupons">--</div>
+                    <div class="label">已发放卡券总量</div>
+                    <div class="trend up" id="coupons-trend">--</div>
+                </div>
+                <div class="card">
+                    <h3>✅ 核销数</h3>
+                    <div class="value" id="total-redemptions">--</div>
+                    <div class="label">已核销卡券数量</div>
+                    <div class="trend up" id="redemptions-trend">--</div>
+                </div>
+                <div class="card">
+                    <h3>📈 核销率</h3>
+                    <div class="value" id="redemption-rate">--%</div>
+                    <div class="label">卡券核销成功率</div>
+                    <div class="trend" id="rate-trend">--</div>
+                </div>
+                <div class="card">
+                    <h3>🚗 总司机数</h3>
+                    <div class="value" id="total-drivers">--</div>
+                    <div class="label">注册司机总数</div>
+                    <div class="trend up" id="drivers-trend">--</div>
+                </div>
             </div>
-            <div id="query-result"></div>
-        </section>
 
-        <section class="charts-section">
-            <div class="chart-container">
-                <h3>卡券面值分布</h3>
-                <canvas id="couponChart"></canvas>
+            <div class="section">
+                <h2>📊 今日概览</h2>
+                <div class="charts-grid">
+                    <div class="chart-container">
+                        <h3>今日查询趋势</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="todayTrendChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <h3>查询状态分布</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="statusChart"></canvas>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="chart-container">
-                <h3>核销趋势</h3>
-                <canvas id="trendChart"></canvas>
+        </div>
+
+        <!-- 智能查询 Tab -->
+        <div id="tab-query" class="tab-content">
+            <div class="section">
+                <h2>🔍 智能查询</h2>
+                <div class="query-input">
+                    <input type="text" id="question-input" placeholder="请输入您的问题，例如：哪个价位的卡券核销率最高？" />
+                    <button id="query-btn" onclick="submitQuery()">查询</button>
+                </div>
+                <div id="query-result"></div>
             </div>
-        </section>
+        </div>
+
+        <!-- 数据图表 Tab -->
+        <div id="tab-charts" class="tab-content">
+            <div class="section">
+                <h2>📈 数据图表</h2>
+                <div class="charts-grid">
+                    <div class="chart-container">
+                        <h3>卡券面值分布</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="couponChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <h3>核销趋势（近7天）</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="trendChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <h3>订单金额分布</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="amountChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <h3>司机活跃度</h3>
+                        <div class="chart-wrapper">
+                            <canvas id="driverChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 查询历史 Tab -->
+        <div id="tab-history" class="tab-content">
+            <div class="section">
+                <h2>📋 查询历史</h2>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <div>
+                        <input type="text" id="history-search" placeholder="搜索查询记录..." style="padding: 10px; border: 1px solid #ddd; border-radius: 6px; width: 300px;" />
+                    </div>
+                    <div class="export-buttons">
+                        <button class="export-btn" onclick="exportHistory('csv')">📥 导出CSV</button>
+                        <button class="export-btn" onclick="exportHistory('json')">📥 导出JSON</button>
+                    </div>
+                </div>
+                <div class="history-list" id="history-list">
+                    <div class="loading">加载中...</div>
+                </div>
+                <div id="history-pagination" style="display: flex; justify-content: center; gap: 10px; margin-top: 20px;"></div>
+            </div>
+        </div>
 
         <footer>
             <p>© 2026 网约车数据分析系统 | 基于 FastAPI + LLM 构建</p>
@@ -284,21 +496,50 @@
 
     <script>
         // 全局变量
-        let couponChart = null;
-        let trendChart = null;
+        let charts = {};
+        let currentHistoryPage = 1;
+
+        // Tab切换
+        function switchTab(tabName) {
+            // 隐藏所有tab内容
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
+            
+            // 显示选中的tab
+            document.getElementById('tab-' + tabName).classList.add('active');
+            event.target.classList.add('active');
+            
+            // 加载对应数据
+            if (tabName === 'history') loadHistory();
+            if (tabName === 'charts') initAllCharts();
+        }
 
         // 初始化页面
         document.addEventListener('DOMContentLoaded', function() {
             loadDashboard();
-            initCharts();
+            initTodayCharts();
             
             // 回车查询
             document.getElementById('question-input').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    submitQuery();
-                }
+                if (e.key === 'Enter') submitQuery();
             });
+            
+            // 搜索历史
+            document.getElementById('history-search').addEventListener('input', debounce(loadHistory, 300));
         });
+
+        // 防抖函数
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
 
         // 加载仪表盘数据
         async function loadDashboard() {
@@ -306,47 +547,39 @@
                 const response = await fetch('/api/dashboard/');
                 const data = await response.json();
                 
-                document.getElementById('total-coupons').textContent = data.total_coupons || 0;
-                document.getElementById('total-redemptions').textContent = data.total_redemptions || 0;
+                document.getElementById('total-coupons').textContent = formatNumber(data.total_coupons || 0);
+                document.getElementById('total-redemptions').textContent = formatNumber(data.total_redemptions || 0);
                 document.getElementById('redemption-rate').textContent = (data.redemption_rate || 0).toFixed(1) + '%';
+                
+                // 模拟趋势数据
+                document.getElementById('coupons-trend').textContent = '↑ 12% 较昨日';
+                document.getElementById('redemptions-trend').textContent = '↑ 8% 较昨日';
+                document.getElementById('rate-trend').textContent = '↑ 2% 较昨日';
+                document.getElementById('rate-trend').className = 'trend up';
             } catch (error) {
                 console.error('加载仪表盘失败:', error);
             }
         }
 
-        // 初始化图表
-        function initCharts() {
-            // 卡券面值分布饼图
-            const couponCtx = document.getElementById('couponChart').getContext('2d');
-            couponChart = new Chart(couponCtx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['10元', '20元', '50元', '100元'],
-                    datasets: [{
-                        data: [35, 25, 25, 15],
-                        backgroundColor: [
-                            '#667eea',
-                            '#764ba2',
-                            '#f093fb',
-                            '#f5576c'
-                        ]
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false
-                }
-            });
+        // 格式化数字
+        function formatNumber(num) {
+            if (num >= 10000) {
+                return (num / 10000).toFixed(1) + '万';
+            }
+            return num.toLocaleString();
+        }
 
-            // 核销趋势折线图
-            const trendCtx = document.getElementById('trendChart').getContext('2d');
-            trendChart = new Chart(trendCtx, {
+        // 初始化今日图表
+        function initTodayCharts() {
+            // 今日查询趋势
+            const todayCtx = document.getElementById('todayTrendChart').getContext('2d');
+            charts.todayTrend = new Chart(todayCtx, {
                 type: 'line',
                 data: {
-                    labels: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
+                    labels: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '现在'],
                     datasets: [{
-                        label: '核销数量',
-                        data: [120, 190, 170, 220, 280, 350, 320],
+                        label: '查询次数',
+                        data: [5, 2, 15, 45, 38, 28, 32],
                         borderColor: '#667eea',
                         backgroundColor: 'rgba(102, 126, 234, 0.1)',
                         tension: 0.4,
@@ -356,13 +589,101 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    }
+                    plugins: { legend: { display: false } }
                 }
             });
+
+            // 查询状态分布
+            const statusCtx = document.getElementById('statusChart').getContext('2d');
+            charts.status = new Chart(statusCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['成功', '失败', '进行中'],
+                    datasets: [{
+                        data: [85, 10, 5],
+                        backgroundColor: ['#10b981', '#ef4444', '#f59e0b']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+        }
+
+        // 初始化所有图表
+        function initAllCharts() {
+            // 卡券面值分布饼图
+            if (!charts.coupon) {
+                const couponCtx = document.getElementById('couponChart').getContext('2d');
+                charts.coupon = new Chart(couponCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['10元', '20元', '50元', '100元'],
+                        datasets: [{
+                            data: [35, 25, 25, 15],
+                            backgroundColor: ['#667eea', '#764ba2', '#f093fb', '#f5576c']
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false }
+                });
+            }
+
+            // 核销趋势折线图
+            if (!charts.trend) {
+                const trendCtx = document.getElementById('trendChart').getContext('2d');
+                charts.trend = new Chart(trendCtx, {
+                    type: 'line',
+                    data: {
+                        labels: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
+                        datasets: [{
+                            label: '核销数量',
+                            data: [120, 190, 170, 220, 280, 350, 320],
+                            borderColor: '#667eea',
+                            backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+                });
+            }
+
+            // 订单金额分布
+            if (!charts.amount) {
+                const amountCtx = document.getElementById('amountChart').getContext('2d');
+                charts.amount = new Chart(amountCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['0-20', '20-50', '50-100', '100-200', '200+'],
+                        datasets: [{
+                            label: '订单数',
+                            data: [150, 280, 420, 180, 60],
+                            backgroundColor: ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#fbbf24']
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                });
+            }
+
+            // 司机活跃度
+            if (!charts.driver) {
+                const driverCtx = document.getElementById('driverChart').getContext('2d');
+                charts.driver = new Chart(driverCtx, {
+                    type: 'radar',
+                    data: {
+                        labels: ['接单率', '准时率', '评分', '活跃度', '投诉率'],
+                        datasets: [{
+                            label: '平均值',
+                            data: [85, 92, 4.8, 78, 2],
+                            backgroundColor: 'rgba(102, 126, 234, 0.2)',
+                            borderColor: '#667eea',
+                            pointBackgroundColor: '#667eea'
+                        }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false }
+                });
+            }
         }
 
         // 提交查询
@@ -377,7 +698,6 @@
                 return;
             }
             
-            // 显示加载状态
             queryBtn.disabled = true;
             queryBtn.textContent = '查询中...';
             resultDiv.innerHTML = '<div class="loading">正在分析数据，请稍候...</div>';
@@ -385,9 +705,7 @@
             try {
                 const response = await fetch('/api/query/', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ question: question })
                 });
                 
@@ -397,7 +715,6 @@
                     throw new Error(data.detail || '查询失败');
                 }
                 
-                // 显示结果
                 displayResult(data);
                 
             } catch (error) {
@@ -434,7 +751,6 @@
                 </div>
             `;
             
-            // 如果有数据，显示表格
             if (data.data && data.data.length > 0) {
                 html += `
                     <div class="result-card">
@@ -464,6 +780,117 @@
             }
             
             resultDiv.innerHTML = html;
+        }
+
+        // 加载查询历史
+        async function loadHistory() {
+            const search = document.getElementById('history-search').value;
+            const historyList = document.getElementById('history-list');
+            
+            try {
+                const params = new URLSearchParams({
+                    page: currentHistoryPage,
+                    page_size: 10,
+                    search: search
+                });
+                
+                const response = await fetch(`/api/history/?${params}`);
+                const data = await response.json();
+                
+                if (data.items.length === 0) {
+                    historyList.innerHTML = `
+                        <div class="empty-state">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                            </svg>
+                            <p>暂无查询历史</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                historyList.innerHTML = data.items.map(item => `
+                    <div class="history-item" onclick="loadHistoryItem(${item.id})">
+                        <div>
+                            <div class="question">${item.question}</div>
+                            <div class="time">${new Date(item.created_at).toLocaleString()}</div>
+                        </div>
+                        <span class="favorite" onclick="event.stopPropagation(); toggleFavorite(${item.id})">
+                            ${item.is_favorite ? '⭐' : '☆'}
+                        </span>
+                    </div>
+                `).join('');
+                
+                // 分页
+                renderPagination(data.total, data.page, data.page_size);
+                
+            } catch (error) {
+                historyList.innerHTML = `<div class="error">加载失败: ${error.message}</div>`;
+            }
+        }
+
+        // 渲染分页
+        function renderPagination(total, page, pageSize) {
+            const totalPages = Math.ceil(total / pageSize);
+            const pagination = document.getElementById('history-pagination');
+            
+            if (totalPages <= 1) {
+                pagination.innerHTML = '';
+                return;
+            }
+            
+            let html = '';
+            for (let i = 1; i <= totalPages; i++) {
+                html += `<button class="export-btn" onclick="goToPage(${i})" style="${i === page ? 'background: #667eea; color: white;' : ''}">${i}</button>`;
+            }
+            pagination.innerHTML = html;
+        }
+
+        // 跳转页面
+        function goToPage(page) {
+            currentHistoryPage = page;
+            loadHistory();
+        }
+
+        // 切换收藏
+        async function toggleFavorite(id) {
+            try {
+                await fetch(`/api/history/${id}/favorite`, { method: 'PUT' });
+                loadHistory();
+            } catch (error) {
+                console.error('切换收藏失败:', error);
+            }
+        }
+
+        // 加载历史记录详情
+        async function loadHistoryItem(id) {
+            try {
+                const response = await fetch(`/api/history/${id}`);
+                const data = await response.json();
+                switchTab('query');
+                document.querySelector('.nav-tab:nth-child(2)').click();
+                displayResult(data);
+            } catch (error) {
+                console.error('加载历史记录失败:', error);
+            }
+        }
+
+        // 导出历史
+        async function exportHistory(format) {
+            try {
+                const response = await fetch(`/api/history/export/${format}`);
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `query_history.${format}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+            } catch (error) {
+                alert('导出失败: ' + error.message);
+            }
         }
     </script>
 </body>

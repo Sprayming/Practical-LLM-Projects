@@ -11,6 +11,8 @@ from app.security.middleware import (
     SQLInjectionMiddleware
 )
 from app.security.error_handlers import register_error_handlers
+from app.monitoring.metrics import router as monitoring_router
+from app.monitoring.middleware import MonitoringMiddleware, SlowRequestMiddleware
 
 
 @asynccontextmanager
@@ -19,14 +21,17 @@ async def lifespan(app: FastAPI):
     # 启动时执行
     from app.db.connection import init_db
     init_db()
+    from loguru import logger
+    logger.info("应用启动完成")
     yield
     # 关闭时执行
-    pass
+    from loguru import logger
+    logger.info("应用关闭")
 
 
 app = FastAPI(
     title="Ride-Hailing Analytics System",
-    version="0.1.0",
+    version="0.2.0",
     description="基于自然语言查询的网约车数据分析系统",
     lifespan=lifespan,
     docs_url="/docs",
@@ -36,6 +41,10 @@ app = FastAPI(
 
 # 注册错误处理器
 register_error_handlers(app)
+
+# 添加监控中间件（最外层）
+app.add_middleware(MonitoringMiddleware)
+app.add_middleware(SlowRequestMiddleware, slow_threshold=2.0)
 
 # 添加安全中间件
 app.add_middleware(SecurityHeadersMiddleware)
@@ -55,6 +64,21 @@ app.add_middleware(
 # 注册路由
 app.include_router(query.router)
 app.include_router(dashboard.router)
+app.include_router(monitoring_router)
+
+# 查询历史路由（可选，根据需求启用）
+try:
+    from app.api import history
+    app.include_router(history.router)
+except ImportError:
+    pass
+
+# 任务路由（可选，根据需求启用）
+try:
+    from app.api import tasks
+    app.include_router(tasks.router)
+except ImportError:
+    pass
 
 # 认证路由（可选，根据需求启用）
 try:

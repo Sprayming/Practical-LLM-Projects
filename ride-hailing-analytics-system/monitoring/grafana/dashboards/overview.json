@@ -1,0 +1,123 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "网约车数据分析系统监控",
+    "tags": ["analytics", "ride-hailing"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "请求量",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(rate(app_requests_total[5m]))",
+            "legendFormat": "Requests/s"
+          }
+        ],
+        "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 }
+      },
+      {
+        "id": 2,
+        "title": "平均响应时间",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(rate(app_request_latency_seconds_sum[5m])) / sum(rate(app_request_latency_seconds_count[5m]))",
+            "legendFormat": "Avg Latency"
+          }
+        ],
+        "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 }
+      },
+      {
+        "id": 3,
+        "title": "SQL查询数",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(rate(app_sql_queries_total[5m]))",
+            "legendFormat": "Queries/s"
+          }
+        ],
+        "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 }
+      },
+      {
+        "id": 4,
+        "title": "LLM调用数",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(rate(app_llm_calls_total[5m]))",
+            "legendFormat": "Calls/s"
+          }
+        ],
+        "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 }
+      },
+      {
+        "id": 5,
+        "title": "请求延迟分布",
+        "type": "histogram",
+        "targets": [
+          {
+            "expr": "rate(app_request_latency_seconds_bucket[5m])",
+            "legendFormat": "{{le}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 }
+      },
+      {
+        "id": 6,
+        "title": "SQL查询延迟",
+        "type": "histogram",
+        "targets": [
+          {
+            "expr": "rate(app_sql_query_latency_seconds_bucket[5m])",
+            "legendFormat": "{{le}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 }
+      },
+      {
+        "id": 7,
+        "title": "CPU使用率",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "app_system_cpu_usage_percent",
+            "legendFormat": "CPU"
+          }
+        ],
+        "gridPos": { "h": 4, "w": 8, "x": 0, "y": 12 }
+      },
+      {
+        "id": 8,
+        "title": "内存使用率",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "app_system_memory_usage_percent",
+            "legendFormat": "Memory"
+          }
+        ],
+        "gridPos": { "h": 4, "w": 8, "x": 8, "y": 12 }
+      },
+      {
+        "id": 9,
+        "title": "磁盘使用率",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "app_system_disk_usage_percent",
+            "legendFormat": "Disk"
+          }
+        ],
+        "gridPos": { "h": 4, "w": 8, "x": 16, "y": 12 }
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "refresh": "10s"
+  }
+}

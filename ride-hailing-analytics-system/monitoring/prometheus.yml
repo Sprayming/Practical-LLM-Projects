@@ -1,0 +1,17 @@
+# Prometheus 配置文件
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # 应用监控
+  - job_name: 'ride-hailing-analytics'
+    static_configs:
+      - targets: ['app:8001']
+    metrics_path: '/api/monitoring/metrics'
+    scrape_interval: 10s
+
+  # Prometheus 自身监控
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

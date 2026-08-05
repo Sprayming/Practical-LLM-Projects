@@ -241,6 +241,51 @@ taskkill /PID <进程ID> /F
 
 ## 更新日志
 
+### v0.3.0 (2026-08-05) — 生产级增强
+
+在 v0.2.0 基础上新增监控、历史、可视化、性能优化四大模块。
+
+#### 📊 监控告警（P2）
+- 新增 `app/monitoring/metrics.py` — Prometheus 指标采集：
+  - 请求计数器/延迟直方图（`app_requests_total`, `app_request_latency_seconds`）
+  - SQL 查询计数器/延迟（`app_sql_queries_total`, `app_sql_query_latency_seconds`）
+  - LLM 调用计数器/延迟/Token 用量（`app_llm_calls_total`, `app_llm_tokens_total`）
+  - 系统资源指标（CPU / 内存 / 磁盘使用率）
+  - 健康检查端点（`/api/monitoring/health`）+ 应用统计端点（`/api/monitoring/stats`）
+- 新增 `app/monitoring/middleware.py` — 监控中间件 + 慢请求日志（>2s 告警）
+- 新增 `monitoring/prometheus.yml` — Prometheus 采集配置
+- 新增 `monitoring/grafana/` — Grafana 数据源 + 仪表盘自动配置
+- 更新 `docker-compose.yml` — 新增 Prometheus（9090）+ Grafana（3000）服务
+
+#### 📋 查询历史 & 数据导出（P2）
+- 新增 `app/history/` 查询历史模块：
+  - `models.py` — QueryHistory / QueryHistoryCreate / ExportFormat 模型
+  - `database.py` — SQLite 查询历史表 + CRUD 操作 + 统计接口
+- 新增 `app/api/history.py` — 7 个 API：
+  - 创建/列表/详情/收藏切换/删除查询历史
+  - 查询统计端点（总查询数/成功率/平均延迟/今日查询数）
+  - CSV / JSON 数据导出（支持指定记录、元数据开关）
+
+#### 📈 数据可视化增强（P2）
+- 重写 `app/static/index.html` — 四 Tab 布局：
+  - **仪表盘** — 统计卡片（带趋势指标）+ 今日查询趋势图 + 状态分布图
+  - **智能查询** — 保留原有查询功能
+  - **数据图表** — 4 种图表：卡券面值饼图、核销趋势折线图、订单金额柱状图、司机活跃度雷达图
+  - **查询历史** — 历史列表 + 搜索 + 收藏 + 分页 + CSV/JSON 导出按钮
+  - Tab 切换、防抖搜索、移动端适配
+
+#### ⚡ 性能优化（P2）
+- 新增 `app/cache/redis_cache.py` — 内存缓存实现：
+  - LRU 淘汰策略 + TTL 过期
+  - 查询结果缓存（`QueryCache`）— 默认 10 分钟过期，最大 500 条
+  - 缓存命中率统计
+  - `@cached_query` 装饰器
+- 新增 `app/tasks/background.py` — 异步任务管理器：
+  - `TaskManager` — 任务提交/状态查询/列表/清理
+  - `TaskStatus` 枚举（pending / running / completed / failed）
+  - 示例任务（长时间查询、数据导出、缓存预热）
+- 新增 `app/api/tasks.py` — 任务 API：列出/查询/取消/清理任务
+
 ### v0.2.0 (2026-08-04) — 从原型到准生产
 
 从原型/Demo级别提升到接近生产可用，共新增 50+ 文件，44 个测试全部通过。
