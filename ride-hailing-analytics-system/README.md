@@ -4,6 +4,113 @@
 基于自然语言查询的数据分析系统，面向网约车运营场景。
 用户可以用日常语言问"哪个价位的卡券核销率最高？"，系统自动生成 SQL、查询数据库、分析数据并给出运营建议。
 
+**项目类型**：NL2SQL + 数据分析 Agent（基于 LLM 的智能数据分析平台）
+
+## 系统架构
+
+### 整体架构图
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              用户层 (User Layer)                            │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+│  │   Web UI    │  │   REST API  │  │   CLI       │  │   SDK       │        │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘        │
+└─────────┼────────────────┼────────────────┼────────────────┼────────────────┘
+          │                │                │                │
+          ▼                ▼                ▼                ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            网关层 (Gateway Layer)                           │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  CORS │ 速率限制 │ 请求验证 │ SQL注入检测 │ 安全头 │ 监控中间件    │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+          │
+          ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           应用层 (Application Layer)                        │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                         FastAPI Application                         │   │
+│  ├─────────────┬─────────────┬─────────────┬─────────────┬─────────────┤   │
+│  │  Query API  │ Dashboard   │ History API │  Auth API   │ Monitor API │   │
+│  └──────┬──────┴──────┬──────┴──────┬──────┴──────┬──────┴──────┬──────┘   │
+│         │             │             │             │             │          │
+│         ▼             ▼             ▼             ▼             ▼          │
+│  ┌─────────────┐ ┌─────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐   │
+│  │   NLSQL     │ │Dashboard│ │  History  │ │   Auth    │ │ Monitoring│   │
+│  │  Module     │ │ Module  │ │  Module   │ │  Module   │ │  Module   │   │
+│  └──────┬──────┘ └────┬────┘ └─────┬─────┘ └─────┬─────┘ └─────┬─────┘   │
+└─────────┼─────────────┼────────────┼─────────────┼─────────────┼──────────┘
+          │             │            │             │             │
+          ▼             ▼            ▼             ▼             ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           核心层 (Core Layer)                               │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │                        Agent Orchestrator                           │   │
+│  │  ┌─────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────┐ │   │
+│  │  │ Planner │───▶│  SQL Tool   │───▶│Analysis Tool│───▶│Report   │ │   │
+│  │  │         │    │             │    │             │    │Tool     │ │   │
+│  │  └─────────┘    └─────────────┘    └─────────────┘    └─────────┘ │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐          │
+│  │  SQL Gen    │ │  SQL Exec   │ │ Interpreter │ │ Recommender │          │
+│  │  (LLM)     │ │  (Validator)│ │  (LLM)      │ │  (LLM)      │          │
+│  └──────┬──────┘ └──────┬──────┘ └──────┬──────┘ └──────┬──────┘          │
+└─────────┼───────────────┼───────────────┼───────────────┼──────────────────┘
+          │               │               │               │
+          ▼               ▼               ▼               ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          基础设施层 (Infrastructure Layer)                   │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐          │
+│  │   Cache     │ │   Database  │ │   LLM API   │ │   Tasks     │          │
+│  │  (Memory)   │ │ (SQLite/MySQL│ │ (DeepSeek)  │ │ (Background)│          │
+│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘          │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 核心流程
+
+```
+用户问题
+  │
+  ▼
+[输入验证] ──▶ [净化 & 安全检查]
+  │
+  ▼
+[Planner] ──▶ LLM 拆解问题为执行步骤
+  │
+  ▼
+[SQL Generator] ──▶ LLM 根据 Schema 生成 SQL
+  │
+  ▼
+[SQL Validator] ──▶ 安全校验（只允许 SELECT）
+  │
+  ▼
+[SQL Executor] ──▶ 执行查询，返回数据
+  │
+  ▼
+[Interpreter] ──▶ LLM 解读数据，生成洞察
+  │
+  ▼
+[Recommender] ──▶ LLM 生成运营建议
+  │
+  ▼
+返回结果（摘要 + 洞察 + 建议 + SQL + 数据）
+```
+
+### 技术栈
+
+| 层级 | 技术 | 说明 |
+|------|------|------|
+| **前端** | HTML/CSS/JS + Chart.js | 响应式Web界面，4种图表 |
+| **后端** | FastAPI + Uvicorn | 高性能异步Python Web框架 |
+| **AI引擎** | DeepSeek LLM | 可替换为OpenAI/本地模型 |
+| **数据库** | SQLite (开发) / MySQL (生产) | 双数据库支持 |
+| **缓存** | 内存缓存 (LRU + TTL) | 查询结果缓存，10分钟过期 |
+| **监控** | Prometheus + Grafana | 指标采集 + 可视化仪表盘 |
+| **认证** | JWT + API Key | 双认证方式 |
+| **部署** | Docker + Nginx | 容器化部署，反向代理 |
+
 ## 系统特性
 
 ### 核心功能
@@ -12,18 +119,12 @@
 - **运营建议**：基于数据的可执行运营策略
 - **可视化仪表盘**：直观的数据展示和图表
 
-### 技术架构
-- **后端**：FastAPI + SQLAlchemy + SQLite/MySQL
-- **AI引擎**：DeepSeek LLM（可替换为其他模型）
-- **前端**：响应式Web界面 + Chart.js图表
-- **安全**：JWT认证、SQL注入防护、速率限制
-
-### 安全特性
-- 用户认证与授权（JWT）
-- SQL注入防护
-- 请求速率限制
-- 输入验证与净化
-- 安全响应头
+### 生产级特性
+- **监控告警**：Prometheus指标采集 + Grafana仪表盘 + 慢请求日志
+- **查询历史**：自动保存查询记录，支持搜索、收藏、分页
+- **数据导出**：支持CSV和JSON格式导出
+- **性能优化**：查询缓存、异步任务、内存LRU淘汰
+- **安全防护**：JWT认证、SQL注入防护、速率限制、输入验证
 
 ## 数据模型
 
@@ -125,6 +226,35 @@
 | POST | /api/query/ | 自然语言查询 |
 | GET | /api/dashboard/ | 仪表盘数据 |
 
+### 查询历史API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | /api/history/ | 创建查询历史 |
+| GET | /api/history/ | 列出查询历史（分页/搜索） |
+| GET | /api/history/stats | 查询统计 |
+| GET | /api/history/{id} | 获取单条历史 |
+| PUT | /api/history/{id}/favorite | 切换收藏状态 |
+| DELETE | /api/history/{id} | 删除历史 |
+| GET | /api/history/export/{format} | 导出（csv/json） |
+
+### 监控API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | /api/monitoring/metrics | Prometheus指标 |
+| GET | /api/monitoring/health | 健康检查 |
+| GET | /api/monitoring/stats | 应用统计 |
+
+### 任务API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | /api/tasks/ | 列出任务 |
+| GET | /api/tasks/{id} | 获取任务状态 |
+| DELETE | /api/tasks/{id} | 取消任务 |
+| POST | /api/tasks/cleanup | 清理过期任务 |
+
 ### 查询示例
 
 ```bash
@@ -144,37 +274,113 @@ curl -X POST "http://127.0.0.1:8001/api/query/" \
 
 ```
 ride-hailing-analytics-system/
-├── app/                    # 应用代码
-│   ├── api/               # API路由
-│   ├── auth/              # 认证模块
-│   ├── security/          # 安全模块
-│   ├── nlsql/             # 自然语言转SQL
-│   ├── analysis/          # 数据分析
-│   ├── agent/             # Agent编排
-│   ├── db/                # 数据库连接
-│   └── main.py            # 应用入口
-├── data/                  # 数据文件
-├── scripts/               # 脚本工具
-├── tests/                 # 测试代码
-├── Dockerfile             # Docker配置
-├── docker-compose.yml     # Docker Compose配置
-└── requirements.txt       # Python依赖
+├── app/                          # 应用代码
+│   ├── api/                     # API路由层
+│   │   ├── auth.py              # 认证API（注册/登录/API密钥）
+│   │   ├── dashboard.py         # 仪表盘API
+│   │   ├── history.py           # 查询历史API（CRUD/导出）
+│   │   ├── query.py             # 核心查询API
+│   │   └── tasks.py             # 异步任务API
+│   ├── auth/                    # 认证模块
+│   │   ├── database.py          # 用户数据库（SQLite）
+│   │   ├── dependencies.py      # FastAPI依赖注入
+│   │   ├── jwt_handler.py       # JWT令牌管理
+│   │   └── models.py            # 用户模型
+│   ├── cache/                   # 缓存模块
+│   │   └── redis_cache.py       # 内存缓存（LRU + TTL）
+│   ├── history/                 # 查询历史模块
+│   │   ├── database.py          # 历史数据库
+│   │   └── models.py            # 历史模型
+│   ├── monitoring/              # 监控模块
+│   │   ├── metrics.py           # Prometheus指标
+│   │   └── middleware.py        # 监控中间件
+│   ├── security/                # 安全模块
+│   │   ├── error_handlers.py    # 统一错误处理
+│   │   ├── middleware.py         # 安全中间件
+│   │   └── validators.py        # 输入验证
+│   ├── nlsql/                   # 自然语言转SQL
+│   │   ├── schema_parser.py     # 数据库Schema解析
+│   │   ├── sql_executor.py      # SQL执行与校验
+│   │   └── sql_generator.py     # LLM生成SQL
+│   ├── analysis/                # 数据分析
+│   │   ├── interpreter.py       # LLM数据解读
+│   │   └── recommender.py       # LLM运营建议
+│   ├── agent/                   # Agent编排
+│   │   ├── orchestrator.py      # 任务调度器
+│   │   ├── planner.py           # LLM问题拆解
+│   │   └── tools/               # 工具集
+│   ├── tasks/                   # 异步任务
+│   │   └── background.py        # 后台任务管理
+│   ├── db/                      # 数据库连接
+│   │   └── connection.py        # SQLite连接管理
+│   ├── static/                  # 静态文件
+│   │   └── index.html           # 前端界面（四Tab布局）
+│   ├── config.py                # 应用配置
+│   ├── models.py                # Pydantic数据模型
+│   └── main.py                  # 应用入口
+├── data/                        # 数据文件
+│   ├── schema.sql               # MySQL表结构
+│   ├── schema_sqlite.sql        # SQLite表结构
+│   └── *.db                     # SQLite数据库文件
+├── monitoring/                  # 监控配置
+│   ├── prometheus.yml           # Prometheus配置
+│   └── grafana/                 # Grafana配置
+│       ├── datasources.yml      # 数据源配置
+│       ├── dashboards.yml       # 仪表盘配置
+│       └── dashboards/          # 仪表盘JSON
+├── scripts/                     # 脚本工具
+│   └── init_db.py               # 数据库初始化
+├── tests/                       # 测试代码（44个测试）
+│   ├── conftest.py              # pytest fixtures
+│   ├── test_api.py              # API测试
+│   ├── test_config.py           # 配置测试
+│   ├── test_models.py           # 模型测试
+│   ├── test_nlsql.py            # SQL生成测试
+│   └── test_security.py         # 安全测试
+├── Dockerfile                   # Docker镜像配置
+├── docker-compose.yml           # Docker Compose（5服务）
+├── nginx.conf                   # Nginx反向代理配置
+├── pytest.ini                   # pytest配置
+├── requirements.txt             # Python依赖
+├── .env.example                 # 环境变量模板
+└── README.md                    # 项目文档
+```
+
+### Docker 服务架构
+
+```yaml
+services:
+  app:        # FastAPI应用 (端口 8001)
+  db:         # MySQL 8.0 (端口 3306)
+  nginx:      # 反向代理 (端口 80)
+  prometheus: # 指标采集 (端口 9090)
+  grafana:    # 监控仪表盘 (端口 3000)
 ```
 
 ## 测试
+
+项目包含 **44 个测试用例**，覆盖核心模块：
+
+| 测试文件 | 测试数 | 覆盖模块 |
+|----------|--------|----------|
+| test_config.py | 3 | 配置加载、环境变量、验证 |
+| test_models.py | 10 | Pydantic数据模型 |
+| test_nlsql.py | 15 | SQL生成、Schema解析、SQL安全校验 |
+| test_api.py | 7 | API接口（mock测试） |
+| test_security.py | 9 | SQL注入攻击、输入验证 |
 
 ```bash
 # 运行所有测试
 pytest
 
-# 运行单元测试
-pytest -m unit
+# 运行指定模块测试
+pytest tests/test_nlsql.py -v
 
-# 运行集成测试
-pytest -m integration
-
-# 生成测试报告
+# 运行带覆盖率的测试
 pytest --cov=app --cov-report=html
+
+# 查看测试报告
+# 打开 htmlcov/index.html
 ```
 
 ## 配置说明
@@ -238,6 +444,50 @@ netstat -ano | findstr :8001
 # 终止进程
 taskkill /PID <进程ID> /F
 ```
+
+## 项目演进
+
+本项目从原型到生产级应用，经历了三个版本迭代：
+
+```
+v0.1.0 (原型) ──▶ v0.2.0 (准生产) ──▶ v0.3.0 (生产级)
+     │                   │                    │
+     │                   │                    │
+     ▼                   ▼                    ▼
+  基础功能           P0+P1改进              P2改进
+  · NL2SQL          · 测试 (44个)          · 监控告警
+  · 数据分析         · 安全加固             · 查询历史
+  · Agent编排        · 用户认证             · 数据导出
+                    · Docker部署           · 可视化增强
+                    · 前端界面             · 性能优化
+                    · API文档
+```
+
+### 版本对比
+
+| 特性 | v0.1.0 | v0.2.0 | v0.3.0 |
+|------|--------|--------|--------|
+| **核心查询** | ✅ | ✅ | ✅ |
+| **Agent编排** | ✅ | ✅ | ✅ |
+| **测试** | ❌ | ✅ 44个 | ✅ 44个 |
+| **安全中间件** | ❌ | ✅ 4个 | ✅ 4个 |
+| **用户认证** | ❌ | ✅ JWT | ✅ JWT |
+| **Docker** | ❌ | ✅ 3服务 | ✅ 5服务 |
+| **前端界面** | 基础 | 响应式 | 四Tab |
+| **监控** | ❌ | ❌ | ✅ Prometheus |
+| **查询历史** | ❌ | ❌ | ✅ |
+| **数据导出** | ❌ | ❌ | ✅ CSV/JSON |
+| **缓存** | ❌ | ❌ | ✅ LRU |
+| **异步任务** | ❌ | ❌ | ✅ |
+| **API端点** | 2个 | 8个 | 20+个 |
+
+### 改进优先级说明
+
+项目采用 P0/P1/P2 三级优先级进行改进：
+
+- **P0（必须）**：测试、安全、错误处理 — 直接影响生产可用性
+- **P1（重要）**：认证、文档、部署、前端 — 影响用户体验和运维
+- **P2（优化）**：监控、历史、可视化、性能 — 提升系统质量和效率
 
 ## 更新日志
 
