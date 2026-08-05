@@ -119,6 +119,11 @@
 - **运营建议**：基于数据的可执行运营策略
 - **可视化仪表盘**：直观的数据展示和图表
 
+### 业务功能
+- **真实数据模拟**：模拟网约车运营数据（司机/订单/卡券/核销）
+- **运营报告生成**：自动生成周报/月报（核心指标+趋势分析+运营建议）
+- **异常检测告警**：自动识别订单/金额/核销率异常并告警
+
 ### 生产级特性
 - **监控告警**：Prometheus指标采集 + Grafana仪表盘 + 慢请求日志
 - **查询历史**：自动保存查询记录，支持搜索、收藏、分页
@@ -255,6 +260,25 @@
 | DELETE | /api/tasks/{id} | 取消任务 |
 | POST | /api/tasks/cleanup | 清理过期任务 |
 
+### 运营报告API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | /api/report/generate | 生成运营报告（week/month） |
+| GET | /api/report/metrics | 获取核心指标 |
+| GET | /api/report/trend | 获取趋势数据 |
+| GET | /api/report/coupon-analysis | 卡券分析 |
+| GET | /api/report/top-drivers | TOP司机排名 |
+| GET | /api/report/hourly-distribution | 时段分布 |
+
+### 异常检测API
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | /api/anomaly/detect | 检测所有异常 |
+| GET | /api/anomaly/summary | 异常摘要 |
+| GET | /api/anomaly/health | 系统健康检查 |
+
 ### 查询示例
 
 ```bash
@@ -280,7 +304,9 @@ ride-hailing-analytics-system/
 │   │   ├── dashboard.py         # 仪表盘API
 │   │   ├── history.py           # 查询历史API（CRUD/导出）
 │   │   ├── query.py             # 核心查询API
-│   │   └── tasks.py             # 异步任务API
+│   │   ├── tasks.py             # 异步任务API
+│   │   ├── report.py            # 运营报告API
+│   │   └── anomaly.py           # 异常检测API
 │   ├── auth/                    # 认证模块
 │   │   ├── database.py          # 用户数据库（SQLite）
 │   │   ├── dependencies.py      # FastAPI依赖注入
@@ -294,6 +320,10 @@ ride-hailing-analytics-system/
 │   ├── monitoring/              # 监控模块
 │   │   ├── metrics.py           # Prometheus指标
 │   │   └── middleware.py        # 监控中间件
+│   ├── report/                  # 运营报告模块
+│   │   └── generator.py         # 报告生成器
+│   ├── anomaly/                 # 异常检测模块
+│   │   └── detector.py          # 异常检测器
 │   ├── security/                # 安全模块
 │   │   ├── error_handlers.py    # 统一错误处理
 │   │   ├── middleware.py         # 安全中间件
@@ -329,7 +359,8 @@ ride-hailing-analytics-system/
 │       ├── dashboards.yml       # 仪表盘配置
 │       └── dashboards/          # 仪表盘JSON
 ├── scripts/                     # 脚本工具
-│   └── init_db.py               # 数据库初始化
+│   ├── init_db.py               # 数据库初始化
+│   └── generate_data.py         # 数据模拟生成器
 ├── tests/                       # 测试代码（44个测试）
 │   ├── conftest.py              # pytest fixtures
 │   ├── test_api.py              # API测试
@@ -447,17 +478,17 @@ taskkill /PID <进程ID> /F
 
 ## 项目演进
 
-本项目从原型到生产级应用，经历了三个版本迭代：
+本项目从原型到生产级应用，经历了四个版本迭代：
 
 ```
-v0.1.0 (原型) ──▶ v0.2.0 (准生产) ──▶ v0.3.0 (生产级)
-     │                   │                    │
-     │                   │                    │
-     ▼                   ▼                    ▼
-  基础功能           P0+P1改进              P2改进
-  · NL2SQL          · 测试 (44个)          · 监控告警
-  · 数据分析         · 安全加固             · 查询历史
-  · Agent编排        · 用户认证             · 数据导出
+v0.1.0 (原型) ──▶ v0.2.0 (准生产) ──▶ v0.3.0 (生产级) ──▶ v0.4.0 (业务增强)
+     │                   │                    │                    │
+     │                   │                    │                    │
+     ▼                   ▼                    ▼                    ▼
+  基础功能           P0+P1改进              P2改进              业务功能
+  · NL2SQL          · 测试 (44个)          · 监控告警          · 数据模拟
+  · 数据分析         · 安全加固             · 查询历史          · 运营报告
+  · Agent编排        · 用户认证             · 数据导出          · 异常检测
                     · Docker部署           · 可视化增强
                     · 前端界面             · 性能优化
                     · API文档
@@ -465,31 +496,72 @@ v0.1.0 (原型) ──▶ v0.2.0 (准生产) ──▶ v0.3.0 (生产级)
 
 ### 版本对比
 
-| 特性 | v0.1.0 | v0.2.0 | v0.3.0 |
-|------|--------|--------|--------|
-| **核心查询** | ✅ | ✅ | ✅ |
-| **Agent编排** | ✅ | ✅ | ✅ |
-| **测试** | ❌ | ✅ 44个 | ✅ 44个 |
-| **安全中间件** | ❌ | ✅ 4个 | ✅ 4个 |
-| **用户认证** | ❌ | ✅ JWT | ✅ JWT |
-| **Docker** | ❌ | ✅ 3服务 | ✅ 5服务 |
-| **前端界面** | 基础 | 响应式 | 四Tab |
-| **监控** | ❌ | ❌ | ✅ Prometheus |
-| **查询历史** | ❌ | ❌ | ✅ |
-| **数据导出** | ❌ | ❌ | ✅ CSV/JSON |
-| **缓存** | ❌ | ❌ | ✅ LRU |
-| **异步任务** | ❌ | ❌ | ✅ |
-| **API端点** | 2个 | 8个 | 20+个 |
+| 特性 | v0.1.0 | v0.2.0 | v0.3.0 | v0.4.0 |
+|------|--------|--------|--------|--------|
+| **核心查询** | ✅ | ✅ | ✅ | ✅ |
+| **Agent编排** | ✅ | ✅ | ✅ | ✅ |
+| **测试** | ❌ | ✅ 44个 | ✅ 44个 | ✅ 44个 |
+| **安全中间件** | ❌ | ✅ 4个 | ✅ 4个 | ✅ 4个 |
+| **用户认证** | ❌ | ✅ JWT | ✅ JWT | ✅ JWT |
+| **Docker** | ❌ | ✅ 3服务 | ✅ 5服务 | ✅ 5服务 |
+| **前端界面** | 基础 | 响应式 | 四Tab | 四Tab |
+| **监控** | ❌ | ❌ | ✅ Prometheus | ✅ Prometheus |
+| **查询历史** | ❌ | ❌ | ✅ | ✅ |
+| **数据导出** | ❌ | ❌ | ✅ CSV/JSON | ✅ CSV/JSON |
+| **缓存** | ❌ | ❌ | ✅ LRU | ✅ LRU |
+| **异步任务** | ❌ | ❌ | ✅ | ✅ |
+| **数据模拟** | ❌ | ❌ | ❌ | ✅ |
+| **运营报告** | ❌ | ❌ | ❌ | ✅ 周报/月报 |
+| **异常检测** | ❌ | ❌ | ❌ | ✅ 6种检测 |
+| **API端点** | 2个 | 8个 | 20+个 | 30+个 |
 
 ### 改进优先级说明
 
-项目采用 P0/P1/P2 三级优先级进行改进：
+项目采用 P0/P1/P2 + 业务功能 四级优先级进行改进：
 
 - **P0（必须）**：测试、安全、错误处理 — 直接影响生产可用性
 - **P1（重要）**：认证、文档、部署、前端 — 影响用户体验和运维
 - **P2（优化）**：监控、历史、可视化、性能 — 提升系统质量和效率
+- **业务功能**：数据模拟、运营报告、异常检测 — 贴近实际运营场景
 
 ## 更新日志
+
+### v0.4.0 (2026-08-05) — 业务功能增强
+
+基于网约车数据运营实际场景，新增数据模拟、运营报告、异常检测三大业务功能。
+
+#### 📊 真实数据模拟
+- 新增 `scripts/generate_data.py` — 网约车运营数据生成器：
+  - 支持自定义：天数（`--days`）、司机数（`--drivers`）、订单数（`--orders`）、卡券数（`--coupons`）
+  - 生成数据：司机信息、卡券类型、卡券发放记录、订单记录、核销记录
+  - 真实模拟：城市分布、时段高峰、金额分布、核销率、司机等级
+  - 使用示例：`python scripts/generate_data.py --days 30 --drivers 100 --orders 5000`
+
+#### 📈 运营报告自动生成
+- 新增 `app/report/generator.py` — 运营报告生成器：
+  - 核心指标：订单数/金额/完成率/卡券使用率
+  - 趋势分析：近7天订单/金额/司机趋势
+  - 卡券分析：各类型核销率对比
+  - TOP司机：按金额排名
+  - 时段分布：24小时订单分布
+  - 运营建议：基于数据的策略建议
+- 新增 `app/api/report.py` — 6 个 API：
+  - `GET /api/report/generate` — 生成运营报告（支持 week/month）
+  - `GET /api/report/metrics` — 获取核心指标
+  - `GET /api/report/trend` — 获取趋势数据
+  - `GET /api/report/coupon-analysis` — 卡券分析
+  - `GET /api/report/top-drivers` — TOP司机排名
+  - `GET /api/report/hourly-distribution` — 时段分布
+
+#### 🚨 异常检测与告警
+- 新增 `app/anomaly/detector.py` — 异常检测器：
+  - 检测类型：订单下降/金额下降/核销率下降/司机下降/异常激增/低核销率
+  - 异常级别：INFO / WARNING / CRITICAL
+  - 阈值配置：可自定义各指标告警阈值
+- 新增 `app/api/anomaly.py` — 3 个 API：
+  - `GET /api/anomaly/detect` — 检测所有异常
+  - `GET /api/anomaly/summary` — 异常摘要
+  - `GET /api/anomaly/health` — 系统健康检查
 
 ### v0.3.0 (2026-08-05) — 生产级增强
 
