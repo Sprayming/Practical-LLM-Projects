@@ -140,6 +140,40 @@ python -m pytest --cov=app --cov-report=term-missing
 
 > 说明：`setup.cfg` 已移除 `fail_under=80` 的覆盖率门槛，测试不再因覆盖率不足而"变红"（用例本身 pass 即通过）。integration / evaluation 现已实现并纳入统计。所有用例用 pytest 标记分层（`unit` / `integration` / `evaluation`），可按层运行，例如 `python -m pytest -m integration`。
 
+## 模型服务选型决策（LLM / Embedding）
+
+### 背景
+本项目为**中文法律文书 RAG**，推理链路需要两类模型服务：
+- **LLM（问答生成）**：将检索到的法条 / 案例 / 文书片段喂给大模型，生成最终回答。要求指令遵循强、中文语感好、能忠实引用上下文。
+- **Embedding（向量化）**：将文档切片与用户 query 编码为向量，决定混合检索的召回质量，是 RAG 效果的上限。
+
+### LLM 选型：DeepSeek（deepseek-chat / V3）
+- **候选对比**：DeepSeek、智谱 GLM-4、阿里 通义千问、火山 豆包、小米 MiMo、MiniMax
+- **选定**：`deepseek-chat`（OpenAI 兼容端点 `https://api.deepseek.com/v1`）
+- **选择原因**：
+  1. 中文质量第一梯队，RAG 问答生成完全够用；
+  2. 成本极低（输入约 ¥1 / 百万 token），面试演示 / 长期自测不心疼；
+  3. 提供 OpenAI 兼容 API，`config.py` 的 `LLM_BASE_URL` + `LLM_MODEL` 直接填即可，**无需改代码**；
+  4. 响应快、服务稳定。
+- **否决项**：
+  - **小米 MiMo**：推理专精模型（数学 / 代码 / 逻辑链），而 RAG 生成端要的是「忠实复述 + 指令遵循」，MiMo 更慢更贵且角色不匹配；
+  - **MiniMax / 豆包 / 智谱**：可用，但综合中文质量与性价比不及 DeepSeek。
+
+### Embedding 选型：本地 BGE-M3（默认）
+- **演进历史**：
+  1. **最初（本地）**：`shibing624/text2vec-base-chinese`（sentence-transformers 本地加载，零成本）→ 因国内下载模型超时 / 依赖冲突 / CPU 推理慢，**跑不通**；
+  2. **中期（线上）**：切火山方舟 / 豆包 embedding（`openai` 兼容端点，模型 `ep-m-...`）→ 可用，但源码曾硬编码 key（已移除），**历史可能留存泄露风险，需轮换**；
+  3. **现在（方案 2，默认）**：切回本地 **`BAAI/bge-m3`**。
+- **选定本地 BGE-M3 原因**：
+  1. 零成本、零外部依赖、零密钥泄露风险（彻底绕开线上 key 隐患）；
+  2. 中文法律文本语义效果优于 `text2vec-base-chinese`；
+  3. 项目 `requirements-docker.txt` 已含 `sentence-transformers`，huggingface backend 已支持；
+  4. 面试加分点：「检索层不依赖任何外部 embedding 服务」。
+- **切换注意事项**：
+  - BGE-M3 输出 **1024 维**，首次运行需联网下载模型到 `./model_cache`（建议提前在有网环境预下载，或配置 HuggingFace 镜像源）；
+  - 切换 embedding 模型后，已存的 Chroma 向量库维度 / 语义不再匹配，需**清空 `chroma_db` 重新向量化**文档；
+  - 如需线上 embedding：设 `EMBEDDER_TYPE=openai` 并填 `EMBEDDING_API_KEY`（火山 / 智谱 / 阿里均可），但务必先**轮换原泄露的 key**。
+
 ## 环境变量
 
 | 变量 | 默认值 | 说明 |

@@ -46,7 +46,7 @@ def create_embedder():
     elif embedder_type == "huggingface":
         from langchain_huggingface import HuggingFaceEmbeddings
         return HuggingFaceEmbeddings(
-            model_name=os.getenv("HF_MODEL_NAME", "shibing624/text2vec-base-chinese"),
+            model_name=os.getenv("HF_MODEL_NAME", "BAAI/bge-m3"),
             cache_folder=os.getenv("HF_CACHE_DIR", "./model_cache"),
         )
 
