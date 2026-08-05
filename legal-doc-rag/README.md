@@ -299,6 +299,14 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 - **代码清理**：删除根目录 5 个临时脚本（`_fix_login.py` / `_fix_upload.py` / `test_hybrid.py` / `test_mm.py` / `test_retrieval.py`）；修复 `app/security/middleware.py` docstring 的无效转义警告（`SyntaxWarning`）。
 - **作用**：clone 到干净环境 `pytest tests/unit/` 一键全绿，CI / 面试演示更可靠。
 
+### 2026-08-05（续）: 代码整洁度 + Webhook 重试补全
+
+- **生产路径 debug 输出规范化**：`app/memory/redis_client.py`、`app/processing/ocr_engine.py` 的连接 / 引擎选择日志由 `print()` 改为 `logging`（连接成功 `info`、回退 / 无引擎 `warning`）；`app/observability/tracker.py` 的链路追踪摘要由 `print()` 改为 `logger.debug`，避免服务器运行时向 stdout 刷屏。
+- **Webhook 失败重试真正生效**：`app/worker/webhook.py` 的 `_retry_loop` 此前是空壳（仅留 TODO）。新增 `_retry_failed()`，每 60 秒轮询 `webhook_logs` 中 `success=0 且 attempts < MAX_RETRIES(5)` 的记录，复用 `_send_webhook` 重新投递（含签名与日志更新）；webhook 已删除时将该日志置为最大次数、停止重试。
+- **清理过时 TODO**：`app/api/chat.py` 的 `stream` 字段原注释 `# TODO: implement streaming`，但 SSE 流式分支早已实现，改为如实描述。
+- **仓库清理**：删除 `requirements.txt.bak` / `requirements.txt.orig` 两个 sed 备份冗余文件（均无引用）。
+- **测试**：完整套件 `pytest tests/` → 44 passed / 1 skipped；1 条 `test_config::test_env_override` 失败为沙箱环境注入了超长 `LLM_API_KEY`（>32767 字符）所致，与本机运行无关。
+
 ### 2026-08-04: 安全加固 + 代码卫生 + 依赖/测试修复
 
 > 本轮在代码体检基础上，修复了若干会直接阻塞上线的具体 bug（认证、限流、TLS、硬编码密钥等）。

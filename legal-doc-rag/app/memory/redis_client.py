@@ -3,7 +3,10 @@
 Redis 客户端 - 短期/中期记忆存储（自动 TTL 过期 + 内存回退）
 """
 import json, os
+import logging
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 class RedisClient:
@@ -15,9 +18,9 @@ class RedisClient:
             import redis
             self._client = redis.from_url(redis_url, socket_timeout=2)
             self._client.ping()
-            print("Redis 连接成功")
+            logger.info("Redis 连接成功")
         except Exception as e:
-            print(f"Redis 不可用，使用内存回退: {e}")
+            logger.warning(f"Redis 不可用，使用内存回退: {e}")
             self._client = None
 
     def is_available(self):

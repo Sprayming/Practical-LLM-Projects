@@ -61,7 +61,7 @@ router = APIRouter(prefix="/api/chat", tags=["chat"]) # 创建一个API路由器
 class ChatRequest(BaseModel):
     message: str
     history: Optional[List[dict]] = []
-    stream: Optional[bool] = True # TODO: implement streaming
+    stream: Optional[bool] = True  # SSE 流式输出（默认开启，见 chat 端点的流式分支）
 
 
 

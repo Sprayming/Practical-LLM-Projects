@@ -23,6 +23,9 @@ try:
 except ImportError:
     HTTPX_AVAILABLE = False
 
+# 失败 Webhook 的最大发送次数（含首次触发），达到后不再重试
+MAX_RETRIES = 5
+
 
 def _db_path() -> str:
     """返回 webhooks.db 的路径"""
@@ -338,13 +341,70 @@ class WebhookManager:
                 conn.close()
 
     def _retry_loop(self):
-        """重试失败的Webhook"""
+        """重试失败的 Webhook：每 60 秒检查一次，调用 _retry_failed 重发"""
         while self._running:
             try:
-                time.sleep(60)  # Check every minute
-                # TODO: Implement retry logic for failed webhooks
+                time.sleep(60)  # 每 60 秒检查一次
+                self._retry_failed()
             except Exception as e:
                 logger.error("Retry loop error: {}", e)
+
+    def _retry_failed(self):
+        """重发所有未成功且未超过最大发送次数的 Webhook 日志。"""
+        conn = sqlite3.connect(_db_path())
+        try:
+            rows = conn.execute(
+                "SELECT id, webhook_id, event_type, payload "
+                "FROM webhook_logs WHERE success = 0 AND attempts < ? "
+                "ORDER BY created_at ASC",
+                (MAX_RETRIES,),
+            ).fetchall()
+        finally:
+            conn.close()
+
+        for log_id, webhook_id, event_type, payload_str in rows:
+            # 重新读取 webhook 的 url/secret（可能被更新或删除）
+            conn = sqlite3.connect(_db_path())
+            try:
+                row = conn.execute(
+                    "SELECT url, secret FROM webhooks WHERE id = ?", (webhook_id,)
+                ).fetchone()
+            finally:
+                conn.close()
+
+            if not row:
+                # webhook 已删除：将该日志置为最大次数，停止重试
+                conn = sqlite3.connect(_db_path())
+                try:
+                    conn.execute(
+                        "UPDATE webhook_logs SET attempts = ? WHERE id = ?",
+                        (MAX_RETRIES, log_id),
+                    )
+                    conn.commit()
+                finally:
+                    conn.close()
+                continue
+
+            url, secret = row
+
+            # 递增重试计数（达到 MAX_RETRIES 后下一轮不再选中）
+            conn = sqlite3.connect(_db_path())
+            try:
+                conn.execute(
+                    "UPDATE webhook_logs SET attempts = attempts + 1 WHERE id = ?",
+                    (log_id,),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+            try:
+                payload = json.loads(payload_str) if payload_str else {}
+            except json.JSONDecodeError:
+                payload = {}
+
+            # 复用统一发送逻辑（含签名与日志更新）
+            self._send_webhook(log_id, webhook_id, url, secret, event_type, payload)
 
     def get_webhook_logs(
         self,

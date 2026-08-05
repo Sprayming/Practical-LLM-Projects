@@ -3,8 +3,11 @@
 OCR 引擎 - 支持多种后端引擎的 OCR 接口
 """
 import os, base64
+import logging
 from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 class OCREngine:
@@ -24,11 +27,11 @@ class OCREngine:
         for name, init_fn in backends:
             try:
                 init_fn()
-                print(f"OCR 后端: {name}")
+                logger.info(f"OCR 后端: {name}")
                 return
             except Exception:
                 continue
-        print("OCR 后端: 无可用引擎，返回空文本")
+        logger.warning("OCR 后端: 无可用引擎，返回空文本")
         self._backend = "none"
 
     def _init_paddleocr(self):

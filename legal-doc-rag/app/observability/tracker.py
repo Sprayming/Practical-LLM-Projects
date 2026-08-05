@@ -89,13 +89,14 @@ class TraceContext:
         }
 
     def print_summary(self):
-        """打印追踪摘要"""
-        print(f"\n[Tracer {self.trace_id}] 链路追踪")
+        """打印追踪摘要（调试用，输出到日志）"""
+        lines = [f"[Tracer {self.trace_id}] 链路追踪"]
         for s in self.spans:
             err = f" ❌ {s.error}" if s.error else ""
             tok = f" | {s.tokens} tokens" if s.tokens else ""
-            print(f"  ├─ {s.name}: {s.duration_ms}ms{tok}{err}")
-        print(f"  └─ 总计: {self.total_duration_ms()}ms")
+            lines.append(f"  ├─ {s.name}: {s.duration_ms}ms{tok}{err}")
+        lines.append(f"  └─ 总计: {self.total_duration_ms()}ms")
+        logger.debug("\n".join(lines))
 
 
 class TraceStore:
