@@ -87,6 +87,20 @@ try:
 except ImportError:
     pass
 
+# 报告路由（可选，根据需求启用）
+try:
+    from app.api import report
+    app.include_router(report.router)
+except ImportError:
+    pass
+
+# 异常检测路由（可选，根据需求启用）
+try:
+    from app.api import anomaly
+    app.include_router(anomaly.router)
+except ImportError:
+    pass
+
 # 静态文件服务
 from fastapi.staticfiles import StaticFiles
 import os
