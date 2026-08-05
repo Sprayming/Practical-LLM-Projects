@@ -322,7 +322,7 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 - 限流策略：`/api/chat` 100/min、`/api/auth` 注册/登录 20/min，防爆破
 
 #### 3. 恢复 TLS 证书校验
-- `chat.py`(3 处)、`embedder_factory.py`、`streamlit_app.py`、`scripts/run_ragas_eval.py` 的 `verify=False` 全部改为 `True`
+- `chat.py`(3 处)、`scripts/run_ragas_eval.py` 的 `verify=False` 改为 `True`；`embedder_factory.py` 移除显式 `verify` 参数（其 `requests.post` 默认 `verify=True`，TLS 同样开启）；`streamlit_app.py` 已删除
 - 删除 `main.py`/`streamlit_app.py` 清空 `CURL_CA_BUNDLE`/`REQUESTS_CA_BUNDLE` 的行，以及 `ssl._create_unverified_context` 全局关闭 TLS 的危险写法
 
 #### 4. 移除硬编码密钥
@@ -353,6 +353,9 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 #### 当前测试状态
 - integration：11 用例全过；evaluation：2 过 + 1 跳过（需 `LLM_API_KEY`/`ARK_API_KEY`）；unit：29 过 + 3 陈旧失败
 - 3 个 unit 失败与本次无关（`test_hybrid_retriever_v3::test_tokenize` 的 jieba 分词期望、`test_memory_manager_fixed` 的两个 Mock 设置问题），属历史遗留，待后续清理
+
+- （状态更新 · 2026-08-05）以上为 2026-08-04 当晚状态；2026-08-05 已将 unit 3 个陈旧失败修绿，整体测试现为 **44 passed / 1 skipped**（unit 32 + integration 13 + evaluation 1 skipped）。
+- （核验记录 · 2026-08-05）本节已对照 `git HEAD` 代码逐条核验：除本处测试状态已更新外，第 3 节 `embedder_factory.py` 实为「无显式 verify、靠 requests 默认 True」而非「verify=False→True」（已更正）；其余断言（PyJWT 真认证、限流注册、TLS 全开、admin 迁 sqlite、`require_user` 抽取、依赖补齐、无硬编码 key 等）均与代码一致。
 
 ---
 
