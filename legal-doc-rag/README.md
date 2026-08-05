@@ -562,7 +562,6 @@ docker compose up -d
 legal-doc-rag/
 ├── app/
 │   ├── main.py                    # FastAPI 入口，注册路由 + 加载 .env
-│   ├── streamlit_app.py           # (旧版) Streamlit 入口，已废弃
 │   ├── api/                       # HTTP API 层
 │   │   ├── auth.py                # POST /api/auth/login, /register
 │   │   ├── chat.py                # POST /api/chat (流式 SSE)
