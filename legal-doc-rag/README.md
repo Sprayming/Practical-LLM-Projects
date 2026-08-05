@@ -692,23 +692,43 @@ PDF文件
   → 流式返回 → 前端渲染
 "
 
-## 待开发模块 (上线前)
+## 生产上线前检查清单
 
-### P0 — 必须
-- [x] 数据备份恢复 — ChromaDB 向量库 + uploads 文件自动备份（见 `scripts/backup.py`）
-- [x] 请求限流 (Rate Limit) — 已用 slowapi 实现，/api/chat 100/min、/api/auth 20/min
-- [ ] HTTPS — 加密传输 Token 和 API Key
+> 基于 2026-08-05 对 `HEAD`（commit `cf6a9dd`）的实地核查。区分「面试/作品集展示」与「真实生产部署」两档要求。
 
-### P1 — 建议
-- [ ] 管理员后台 — 用户管理、文档管理、系统配置页面
-- [ ] 知识库分组 — 按"合同/法规/案例"隔离文档
-- [ ] 文档预览 — PDF 上传后在线预览
-- [ ] 使用统计 — Token 消耗、热门问题、用户活跃度
-- [ ] 批量导入 — 文件夹/压缩包批量上传
+### 当前状态速览
+- ✅ **功能完整**：P0/P1/P2 全部实现（RAG 核心、安全、管理后台、多轮对话、A/B、Webhook、监控、备份）
+- ✅ **测试**：44 passed / 1 skipped（注意：LLM / embedding 真实调用链路全程 mock，未用真实 key 跑过）
+- ✅ **密钥安全**：`.env` 已被 `.gitignore` 忽略且未入库
+- ✅ **容器编排**：Docker + compose（Redis + Chroma 持久化卷）+ `/api/health` healthcheck
+- ✅ **健康检查**：`main.py` 挂载 monitoring router 提供 `/api/health`，compose 已配置 healthcheck
+- ⚠️ **CI 不完整**：已有 `.github/workflows/ci.yml`，但**只跑 `scripts/ci_check.py` 语法检查，不跑 pytest**
+- ⚠️ **检索层有死代码**：P2 写了 `app/retrieval/elasticsearch_client.py`，但 compose 未起 ES 服务、requirements 无 ES 依赖 → 未启用
 
-### P2 — 锦上添花
-- [ ] Webhook 通知 — 文档处理完成等事件回调
-- [ ] 全文检索 — Elasticsearch 兜底
-- [ ] 多轮对话管理 — 对话标题、历史列表、继续对话
-- [ ] Embedding / LLM 模型热切换
-- [ ] A/B 测试框架 — 对比检索策略和模型效果
+### P0 — 上线阻断项（必须完成）
+- [ ] **真实链路端到端验证**：用真实 `LLM_API_KEY` + `EMBEDDING_API_KEY` 跑通「文档上传→向量化→检索→问答（含 SSE 流式）」全流程（当前测试全 mock，上线可能直接报错）
+- [ ] **修复 `.env.example` 的 embedding 配置（真 bug）**：第 11 行 `EMBEDDING_MODEL_NAME` 变量 `config.py` 根本不读；实际需要的 `EMBEDDER_TYPE` / `EMBEDDING_API_KEY` / `EMBEDDING_BASE_URL` / `EMBEDDING_MODEL` 全未列出，不填则检索必失败
+- [ ] **让 CI 真正跑测试**：在 `ci.yml` 增加 step 运行 `pytest tests/unit tests/integration`（当前仅语法检查）
+- [ ] **修复文档端口错误**：`.env.example` 注释写「访问 http://localhost:8501」（Streamlit 旧端口，已删除），改为实际端口 `8000`
+- [ ] **清理冗余**：删除 `.env.example.orig` 备份（sed 残留）
+
+### P1 — 强烈建议（生产稳定性）
+- [ ] **HTTPS / TLS**：生产环境经反向代理（Nginx 等）配置 TLS，加密 Token / API Key 传输
+- [ ] **ES 检索层决策（二选一）**：接入（compose 加 ES 服务 + requirements 加依赖 + 验证混合检索走 ES）或明确标注「实验性·未启用」，避免「承诺未交付」
+- [ ] **Redis 生产化**：限流/会话依赖 Redis，多副本部署必须配 `REDIS_URL`（当前有内存回退，单机 OK、多实例会乱）
+- [ ] **密钥管理**：生产用密钥服务/环境变量注入，`.env` 不入仓库；建立 key 定期轮转
+- [ ] **向量库持久化与备份**：定期备份 `chroma_db`（已有 `scripts/backup.py`，需接入定时任务）
+- [ ] **监控告警闭环**：`/metrics`（Prometheus）接 Grafana / 告警规则
+
+### P2 — 可选增强
+- [ ] Webhook 重试改指数退避（当前固定 60s）
+- [ ] 真实并发 / 压测验证
+- [ ] 日志聚合（ELK / Loki）
+- [ ] ragas 评估接真实 `LLM_API_KEY`（当前 `test_ragas_eval.py` 因缺 key 被 skip）
+- [ ] 速率限制按租户维度细化
+
+### 结论
+- **面试 / 作品集**：已达偏上水平，重点准备「混合检索如何融合」「三层记忆如何设计」「多租户如何隔离」三道题
+- **真实生产**：完成 P0（尤其真实链路验证 + embedding 配置修复）即可宣布「可上线」；P1 决定长期稳定性
+
+---
