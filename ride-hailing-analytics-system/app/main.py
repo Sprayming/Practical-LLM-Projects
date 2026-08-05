@@ -31,8 +31,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Ride-Hailing Analytics System",
-    version="0.2.0",
-    description="基于自然语言查询的网约车数据分析系统",
+    version="0.5.0",
+    description="基于多Agent协作的网约车智能数据分析系统",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",

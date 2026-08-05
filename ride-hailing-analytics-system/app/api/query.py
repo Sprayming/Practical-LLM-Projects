@@ -2,6 +2,7 @@ from __future__ import annotations
 import time
 from fastapi import APIRouter, HTTPException, Depends
 from loguru import logger
+from typing import Optional
 
 from app.models import QueryRequest, AnalysisResult
 from app.nlsql.sql_generator import generate_sql
@@ -17,7 +18,7 @@ router = APIRouter(prefix="/api/query", tags=["Query"])
 
 @router.post("/", response_model=AnalysisResult)
 async def natural_language_query(request: QueryRequest):
-    """自然语言查询接口"""
+    """自然语言查询接口（单Agent模式）"""
     start = time.perf_counter()
     
     try:
@@ -75,3 +76,61 @@ async def natural_language_query(request: QueryRequest):
     except Exception as e:
         logger.error("查询失败: {}", e)
         raise HTTPException(status_code=500, detail="查询失败，请稍后重试")
+
+
+@router.post("/multi-agent")
+async def multi_agent_query(request: QueryRequest):
+    """多Agent协作查询接口"""
+    from app.agent.orchestrator import multi_agent_orchestrator
+    
+    start = time.perf_counter()
+    
+    try:
+        # 输入验证
+        question = sanitize_input(request.question)
+        is_valid, error_msg = validate_question(question)
+        if not is_valid:
+            raise ValidationError(error_msg, "INVALID_QUESTION")
+        
+        # 多Agent处理
+        result = await multi_agent_orchestrator.process(question)
+        
+        elapsed = (time.perf_counter() - start) * 1000
+        
+        # 提取结果
+        agent_result = result.get("result", {})
+        
+        return {
+            "question": question,
+            "sql": agent_result.get("sql", ""),
+            "summary": agent_result.get("summary", ""),
+            "insight": agent_result.get("analysis", ""),
+            "recommendation": "\n".join([
+                f"- {r.get('action', '')}"
+                for r in agent_result.get("recommendations", [])
+            ]),
+            "data": agent_result.get("data", [])[:100],
+            "latency_ms": round(elapsed, 2),
+            "agent_trace": result.get("agent_trace", {}),
+            "agents_used": result.get("agents_used", []),
+            "execution_mode": "multi-agent"
+        }
+    
+    except (ValidationError, DatabaseError, LLMError):
+        raise
+    except Exception as e:
+        logger.error("多Agent查询失败: {}", e)
+        raise HTTPException(status_code=500, detail="查询失败，请稍后重试")
+
+
+@router.get("/agent-status")
+async def get_agent_status():
+    """获取Agent系统状态"""
+    from app.agent.orchestrator import multi_agent_orchestrator
+    
+    try:
+        status = multi_agent_orchestrator.get_system_status()
+        return status
+    except Exception as e:
+        logger.error("获取Agent状态失败: {}", e)
+        raise HTTPException(status_code=500, detail="获取状态失败")
