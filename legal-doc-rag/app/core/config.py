@@ -10,7 +10,7 @@ LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-v4-pro")
 
 # Embedding
 EMBEDDER_TYPE = os.getenv("EMBEDDER_TYPE", "openai")
-EMBEDDING_API_KEY = os.getenv("EMBEDDING_API_KEY", "df9c9b2d-35d9-4df6-b49d-f489708e1eab")
+EMBEDDING_API_KEY = os.getenv("EMBEDDING_API_KEY", "")
 EMBEDDING_BASE_URL = os.getenv("EMBEDDING_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "ep-m-20251117205847-trwgz")
 

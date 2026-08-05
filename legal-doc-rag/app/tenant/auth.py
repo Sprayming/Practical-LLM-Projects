@@ -3,7 +3,7 @@ import hashlib
 import secrets
 import sqlite3
 from pathlib import Path
-from typing import Optional, Tuple, Dict
+from typing import Optional, Tuple, Dict, List
 
 
 def _db_path() -> str:
@@ -165,5 +165,40 @@ def has_users() -> bool:
     try:
         cur = conn.execute("SELECT COUNT(*) FROM users")
         return cur.fetchone()[0] > 0
+    finally:
+        conn.close()
+
+
+def list_users() -> List[Dict]:
+    """列出所有用户（供管理后台使用）。返回字典列表。"""
+    _init_db()
+    conn = sqlite3.connect(_db_path())
+    try:
+        cur = conn.execute(
+            "SELECT id, username, tenant_id, role, created_at FROM users ORDER BY id"
+        )
+        rows = cur.fetchall()
+        return [
+            {
+                "user_id": r[0],
+                "username": r[1],
+                "tenant_id": r[2],
+                "role": r[3],
+                "created_at": r[4],
+            }
+            for r in rows
+        ]
+    finally:
+        conn.close()
+
+
+def delete_user(username: str) -> bool:
+    """删除指定用户。返回是否实际删除了记录。"""
+    _init_db()
+    conn = sqlite3.connect(_db_path())
+    try:
+        cur = conn.execute("DELETE FROM users WHERE username=?", (username,))
+        conn.commit()
+        return cur.rowcount > 0
     finally:
         conn.close()

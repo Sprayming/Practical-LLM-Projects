@@ -1,11 +1,11 @@
 import os, sys, json, tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Header
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from app.retrieval.embedder_factory import create_embedder
 from app.processing.multimodal_pipeline import MultimodalPipeline
 from langchain_community.vectorstores import Chroma
 import app.core.config as cfg
-from app.api.auth import get_user_from_token
+from app.api.auth import get_user_from_token, require_user
 from app.security.middleware import get_safe_upload_path, sanitize_filename
 
 router = APIRouter(prefix="/api/documents", tags=["documents"])
@@ -16,16 +16,10 @@ ALLOWED_EXTENSIONS = {".pdf"}
 # Max file size: 100MB
 MAX_FILE_SIZE = 100 * 1024 * 1024
 
-def _require_user(authorization: str = Header(...)) -> dict:
-    token = authorization.replace("Bearer ", "").strip()
-    if not token:
-        raise HTTPException(401, "Missing token")
-    return get_user_from_token(token)
-
 @router.post("/upload")
 async def upload_document(
     file: UploadFile = File(...),
-    user: dict = Depends(_require_user),
+    user: dict = Depends(require_user),
 ):
     tenant_id = user["tenant_id"]
 
@@ -76,7 +70,7 @@ async def upload_document(
     }
 
 @router.get("")
-def list_documents(user: dict = Depends(_require_user)):
+def list_documents(user: dict = Depends(require_user)):
     tenant_id = user["tenant_id"]
     upload_dir = os.path.join(cfg.UPLOAD_DIR, tenant_id)
     if not os.path.exists(upload_dir):
@@ -85,7 +79,7 @@ def list_documents(user: dict = Depends(_require_user)):
     return {"documents": files}
 
 @router.get("/preview/{filename}")
-async def preview_document(filename: str, user: dict = Depends(_require_user)):
+async def preview_document(filename: str, user: dict = Depends(require_user)):
     """预览PDF文档"""
     tenant_id = user["tenant_id"]
 
@@ -112,7 +106,7 @@ async def preview_document(filename: str, user: dict = Depends(_require_user)):
     )
 
 @router.delete("/{filename}")
-def delete_document(filename: str, user: dict = Depends(_require_user)):
+def delete_document(filename: str, user: dict = Depends(require_user)):
     """删除文档（仅管理员）"""
     tenant_id = user["tenant_id"]
     role = user.get("role", "user")
@@ -135,7 +129,7 @@ def delete_document(filename: str, user: dict = Depends(_require_user)):
         os.remove(file_path)
         deleted = True
 
-    # ? ChromaDB ??
+    # 从 ChromaDB 删除对应的向量数据
     persist_dir = os.path.join(cfg.CHROMA_PERSIST_DIR, tenant_id)
     if os.path.exists(persist_dir):
         try:
@@ -152,7 +146,7 @@ def delete_document(filename: str, user: dict = Depends(_require_user)):
             pass
 
     if not deleted:
-        raise HTTPException(404, "?????")
+        raise HTTPException(404, "Document not found")
 
-    return {"success": True, "message": f"{filename} ???"}
+    return {"success": True, "message": f"{filename} 已删除"}
 

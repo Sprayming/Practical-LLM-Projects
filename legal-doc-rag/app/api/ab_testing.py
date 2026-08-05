@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException, Depends, Header
 from pydantic import BaseModel
 from typing import Optional, Dict
 from app.evaluation.ab_testing import get_ab_manager
-from app.api.auth import get_user_from_token
+from app.api.auth import get_user_from_token, require_user
 
 router = APIRouter(prefix="/api/ab-testing", tags=["ab-testing"])
 
@@ -30,13 +30,6 @@ def _require_admin(authorization: str = Header(...)) -> dict:
         raise HTTPException(403, "Admin access required")
     return user
 
-
-def _require_user(authorization: str = Header(...)) -> dict:
-    """Require authenticated user."""
-    token = authorization.replace("Bearer ", "").strip()
-    if not token:
-        raise HTTPException(401, "Missing token")
-    return get_user_from_token(token)
 
 
 class CreateExperimentRequest(BaseModel):
@@ -137,7 +130,7 @@ def add_variant(experiment_id: int, req: AddVariantRequest, admin: dict = Depend
 # ============================================================
 
 @router.get("/variant/{experiment_id}")
-def get_variant(experiment_id: int, user: dict = Depends(_require_user)):
+def get_variant(experiment_id: int, user: dict = Depends(require_user)):
     """获取用户当前变体"""
     manager = get_ab_manager()
     user_id = str(user.get("id", ""))
@@ -150,7 +143,7 @@ def get_variant(experiment_id: int, user: dict = Depends(_require_user)):
 # ============================================================
 
 @router.post("/events")
-def record_event(req: RecordEventRequest, user: dict = Depends(_require_user)):
+def record_event(req: RecordEventRequest, user: dict = Depends(require_user)):
     """记录实验事件"""
     manager = get_ab_manager()
     user_id = str(user.get("id", ""))

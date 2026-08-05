@@ -25,33 +25,29 @@ class TestChatAPI:
         # Should return 422 due to missing authorization header
         assert response.status_code == 422
 
-    @patch("app.api.chat.get_user_from_token")
-    def test_chat_endpoint_invalid_token(self, mock_auth):
-        """Test chat endpoint with invalid token."""
+    def test_chat_endpoint_invalid_token(self):
+        """非法 token -> 401（真 JWT 校验，不再进入业务逻辑）。"""
         from app.main import app
-        
-        mock_auth.side_effect = Exception("Invalid token")
-        
+
         client = TestClient(app)
         response = client.post(
             "/api/chat",
             json={"message": "Test message"},
             headers={"Authorization": "Bearer invalid-token"}
         )
-        
-        # Should return 500 due to invalid token
-        assert response.status_code == 500
+        assert response.status_code == 401
 
     def test_chat_endpoint_missing_message(self):
-        """Test chat endpoint with missing message."""
+        """缺 message 字段（带合法 token）-> 422 请求体校验。"""
         from app.main import app
-        
+        from app.api.auth import _create_token
+
+        token = _create_token({"username": "u", "tenant_id": "t", "role": "user"})
         client = TestClient(app)
         response = client.post(
             "/api/chat",
             json={},
-            headers={"Authorization": "Bearer test-token"}
+            headers={"Authorization": f"Bearer {token}"}
         )
-        
-        # Should return 422 due to missing required field
+        # 鉴权通过后才做请求体校验，缺必填字段 -> 422
         assert response.status_code == 422

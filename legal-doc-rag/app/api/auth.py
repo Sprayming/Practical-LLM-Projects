@@ -1,37 +1,46 @@
-import sys, secrets
+import sys
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent.parent.parent))
-from fastapi import APIRouter, HTTPException, Header
+from datetime import datetime, timedelta, timezone
+
+import jwt
+from fastapi import APIRouter, HTTPException, Header, Request
 from pydantic import BaseModel
 from app.tenant.auth import login as _login, register as _register, has_users as _has_users
 import app.core.config as cfg
+from app.core.limiter import limiter
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-# Simple in-memory token store: token -> user_info
-_tokens: dict = {}
+JWT_ALGORITHM = "HS256"
+TOKEN_EXPIRE_DAYS = 30
+
 
 class LoginRequest(BaseModel):
     username: str
     password: str
 
+
 class RegisterRequest(BaseModel):
     username: str
     password: str
 
+
 @router.post("/register")
-def register(req: RegisterRequest):
+@limiter.limit("20/minute")
+def register(request: Request, req: RegisterRequest):
     ok, msg = _register(req.username, req.password)
     if not ok:
         raise HTTPException(400, msg)
     return {"success": True, "message": msg}
 
+
 @router.post("/login")
-def login(req: LoginRequest):
+@limiter.limit("20/minute")
+def login(request: Request, req: LoginRequest):
     ok, result = _login(req.username, req.password)
     if not ok:
         raise HTTPException(401, result.get("error", "Login failed"))
-    token = secrets.token_urlsafe(32)
-    _tokens[token] = result
+    token = _create_token(result)
     return {
         "success": True,
         "token": token,
@@ -42,11 +51,38 @@ def login(req: LoginRequest):
         },
     }
 
+
+def _create_token(user_info: dict, expires_days: int = TOKEN_EXPIRE_DAYS) -> str:
+    """签发带签名、有过期时间的 JWT。"""
+    payload = {
+        "sub": user_info.get("username", ""),
+        "tenant_id": user_info.get("tenant_id", ""),
+        "role": user_info.get("role", "user"),
+        "exp": datetime.now(timezone.utc) + timedelta(days=expires_days),
+    }
+    return jwt.encode(payload, cfg.JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
 def get_user_from_token(token: str) -> dict:
-    user = _tokens.get(token)
-    if not user:
+    """解码 JWT 并返回用户信息；无效或过期则抛出 401。"""
+    try:
+        payload = jwt.decode(token, cfg.JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.PyJWTError:
         raise HTTPException(401, "Invalid or expired token")
-    return user
+    return {
+        "username": payload.get("sub", ""),
+        "tenant_id": payload.get("tenant_id", ""),
+        "role": payload.get("role", "user"),
+    }
+
+
+def require_user(authorization: str = Header(...)) -> dict:
+    """FastAPI 依赖：从 Authorization 头解析并校验 JWT。"""
+    token = authorization.replace("Bearer ", "").strip()
+    if not token:
+        raise HTTPException(401, "Missing token")
+    return get_user_from_token(token)
+
 
 @router.get("/me")
 def get_current_user(authorization: str = Header(...)):

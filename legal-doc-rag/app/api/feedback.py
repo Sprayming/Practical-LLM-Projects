@@ -1,16 +1,10 @@
 import sys, json, os, time
 sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent.parent.parent))
-from fastapi import APIRouter, HTTPException, Depends, Header
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from app.api.auth import get_user_from_token
+from app.api.auth import get_user_from_token, require_user
 
 router = APIRouter(prefix="/api/feedback", tags=["feedback"])
-
-def _require_user(authorization: str = Header(...)) -> dict:
-    token = authorization.replace("Bearer ", "").strip()
-    if not token:
-        raise HTTPException(401, "Missing token")
-    return get_user_from_token(token)
 
 class FeedbackRequest(BaseModel):
     answer: str = ""
@@ -18,7 +12,7 @@ class FeedbackRequest(BaseModel):
     query: str = ""
 
 @router.post("")
-def submit_feedback(req: FeedbackRequest, user: dict = Depends(_require_user)):
+def submit_feedback(req: FeedbackRequest, user: dict = Depends(require_user)):
     tenant_id = user["tenant_id"]
     fb_dir = os.path.join("data", "feedback", tenant_id)
     os.makedirs(fb_dir, exist_ok=True)

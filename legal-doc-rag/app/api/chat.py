@@ -1,6 +1,6 @@
 ﻿import os, sys, json, requests, time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
-from fastapi import APIRouter, HTTPException, Depends, Header
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse, JSONResponse 
 from pydantic import BaseModel
 from typing import List, Optional
@@ -16,14 +16,15 @@ from app.observability.structured_logger import StructuredLogger
 from app.observability.monitoring import record_query
 from langchain_community.vectorstores import Chroma
 import app.core.config as cfg  #从.evn中加载配置，便于后期维护
-from app.api.auth import get_user_from_token
+from app.api.auth import get_user_from_token, require_user
 import httpx
 import asyncio
 import threading
 from typing import Dict, Any, AsyncGenerator
 from fastapi import Request
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+from app.core.limiter import limiter
+
+_log = StructuredLogger("chat")
 
 def _validate_config():
     """验证必要的配置项是否存在"""
@@ -55,7 +56,6 @@ except ValueError as e:
 
 
 router = APIRouter(prefix="/api/chat", tags=["chat"]) # 创建一个API路由器，用于处理与聊天相关的API请求
-_log = StructuredLogger("chat")
 
 
 class ChatRequest(BaseModel):
@@ -64,12 +64,6 @@ class ChatRequest(BaseModel):
     stream: Optional[bool] = True # TODO: implement streaming
 
 
-
-def _require_user(authorization: str = Header(...)) -> dict:
-    token = authorization.replace("Bearer ", "").strip()
-    if not token:
-        raise HTTPException(401, "Missing token")
-    return get_user_from_token(token)
 
 
 _memory_cache = {}
@@ -82,7 +76,7 @@ _cache_lock = threading.Lock() # 创建一个锁对象，用于保护缓存
 #             r = requests.post(f"{cfg.LLM_BASE_URL}/chat/completions",
 #                 headers={"Authorization": f"Bearer {cfg.LLM_API_KEY}", "Content-Type": "application/json"},
 #                 json={"model": cfg.LLM_MODEL, "messages": [{"role": "user", "content": prompt}], "temperature": 0.1, "max_tokens": 512},
-#                 timeout=30, verify=False)
+#                 timeout=30, verify=True)
 #             return r.json()["choices"][0]["message"]["content"]
 #         except:
 #             return ""
@@ -94,12 +88,11 @@ async def call_llm(prompt: str) -> str:
 
     Args:
         prompt (str): 发送给大模型的提示词。
-c
     Returns:
         str: 大模型生成的文本响应，如果调用失败则返回空字符串。
     """
     try:
-        async with httpx.AsyncClient(timeout=30, verify=False) as client:
+        async with httpx.AsyncClient(timeout=30, verify=True) as client:
             r = await client.post(
                 f"{cfg.LLM_BASE_URL}/chat/completions",
                 headers={
@@ -181,16 +174,9 @@ def _build_pipeline(tenant_id: str):
         _log.error(f"管道构建失败: {str(e)}")
         return None, None, None, None, None
 
-limiter = Limiter(key_func=get_remote_address)
-
 @router.post("")
 @limiter.limit("100/minute")
-async def chat(req: ChatRequest,user: dict = Depends(_require_user)):
-    embedder, vector_store, qr, cache, ct = _build_pipeline(user["tenant_id"])
-    mem = _get_memory(user["tenant_id"], embedder) if embedder else None
-    trace = TraceContext()
-    trace.begin_span("total")
-async def chat(req: ChatRequest, user: dict = Depends(_require_user)):
+async def chat(request: Request, req: ChatRequest, user: dict = Depends(require_user)):
     embedder, vector_store, qr, cache, ct = _build_pipeline(user["tenant_id"])
     mem = _get_memory(user["tenant_id"], embedder) if embedder else None
     trace = TraceContext()
@@ -277,7 +263,7 @@ async def chat(req: ChatRequest, user: dict = Depends(_require_user)):
             last_yield_time = time.time() # 记录最后一次 yield 的时间
             try:
                 # 👉 使用 httpx 异步流式请求
-                async with httpx.AsyncClient(timeout=60, verify=False) as client:
+                async with httpx.AsyncClient(timeout=60, verify=True) as client:
                     async with client.stream("POST",
                         f"{cfg.LLM_BASE_URL}/chat/completions",
                         headers={"Authorization": f"Bearer {cfg.LLM_API_KEY}", "Content-Type": "application/json"},
@@ -379,7 +365,7 @@ async def chat(req: ChatRequest, user: dict = Depends(_require_user)):
         token_usage = 0
         try:
             # 👉 使用 httpx 异步非流式请求
-            async with httpx.AsyncClient(timeout=60, verify=False) as client:
+            async with httpx.AsyncClient(timeout=60, verify=True) as client:
                 r = await client.post(
                     f"{cfg.LLM_BASE_URL}/chat/completions",
                     headers={"Authorization": f"Bearer {cfg.LLM_API_KEY}", "Content-Type": "application/json"},

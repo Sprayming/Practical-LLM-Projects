@@ -10,7 +10,7 @@ import os
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from fastapi import APIRouter, HTTPException, Depends, Header
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
 from app.tenant.category import (
@@ -21,17 +21,9 @@ from app.tenant.category import (
     get_document_category,
     list_documents_by_category,
 )
-from app.api.auth import get_user_from_token
+from app.api.auth import get_user_from_token, require_user
 
 router = APIRouter(prefix="/api/categories", tags=["categories"])
-
-
-def _require_user(authorization: str = Header(...)) -> dict:
-    """Require authenticated user."""
-    token = authorization.replace("Bearer ", "").strip()
-    if not token:
-        raise HTTPException(401, "Missing token")
-    return get_user_from_token(token)
 
 
 class CreateCategoryRequest(BaseModel):
@@ -49,7 +41,7 @@ class SetDocumentCategoryRequest(BaseModel):
 # ============================================================
 
 @router.post("")
-def create(req: CreateCategoryRequest, user: dict = Depends(_require_user)):
+def create(req: CreateCategoryRequest, user: dict = Depends(require_user)):
     """创建文档分类"""
     tenant_id = user["tenant_id"]
     ok, msg = create_category(tenant_id, req.name, req.description)
@@ -59,7 +51,7 @@ def create(req: CreateCategoryRequest, user: dict = Depends(_require_user)):
 
 
 @router.get("")
-def list_all(user: dict = Depends(_require_user)):
+def list_all(user: dict = Depends(require_user)):
     """列出所有分类"""
     tenant_id = user["tenant_id"]
     categories = list_categories(tenant_id)
@@ -67,7 +59,7 @@ def list_all(user: dict = Depends(_require_user)):
 
 
 @router.delete("/{category_id}")
-def delete(category_id: int, user: dict = Depends(_require_user)):
+def delete(category_id: int, user: dict = Depends(require_user)):
     """删除分类"""
     tenant_id = user["tenant_id"]
     ok, msg = delete_category(tenant_id, category_id)
@@ -81,7 +73,7 @@ def delete(category_id: int, user: dict = Depends(_require_user)):
 # ============================================================
 
 @router.post("/assign")
-def assign_document(req: SetDocumentCategoryRequest, user: dict = Depends(_require_user)):
+def assign_document(req: SetDocumentCategoryRequest, user: dict = Depends(require_user)):
     """设置文档分类"""
     tenant_id = user["tenant_id"]
     ok, msg = set_document_category(tenant_id, req.filename, req.category_id)
@@ -91,7 +83,7 @@ def assign_document(req: SetDocumentCategoryRequest, user: dict = Depends(_requi
 
 
 @router.get("/document/{filename}")
-def get_document_category_info(filename: str, user: dict = Depends(_require_user)):
+def get_document_category_info(filename: str, user: dict = Depends(require_user)):
     """获取文档的分类信息"""
     tenant_id = user["tenant_id"]
     category = get_document_category(tenant_id, filename)
@@ -99,7 +91,7 @@ def get_document_category_info(filename: str, user: dict = Depends(_require_user
 
 
 @router.get("/list")
-def list_documents(category_id: Optional[int] = None, user: dict = Depends(_require_user)):
+def list_documents(category_id: Optional[int] = None, user: dict = Depends(require_user)):
     """列出文档（可按分类筛选）"""
     tenant_id = user["tenant_id"]
     documents = list_documents_by_category(tenant_id, category_id)

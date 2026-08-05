@@ -9,13 +9,9 @@ from app.memory.memory_manager import MemorySystem
 
 # 网络配置
 os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
-os.environ["CURL_CA_BUNDLE"] = ""
-os.environ["REQUESTS_CA_BUNDLE"] = ""
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 os.environ["HF_HUB_OFFLINE"] = "1"
-ssl._create_default_https_context = ssl._create_unverified_context
 import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 import requests, streamlit as st
 # Heavy packages loaded lazily below
@@ -37,7 +33,7 @@ if env_path.exists():
 DEEPSEEK_API_KEY = os.getenv("LLM_API_KEY", "")
 DEEPSEEK_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1")
 # Embedding 配置（豆包 API，兼容 OpenAI 格式）
-EMBEDDING_API_KEY = os.getenv("EMBEDDING_API_KEY", "df9c9b2d-35d9-4df6-b49d-f489708e1eab")
+EMBEDDING_API_KEY = os.getenv("EMBEDDING_API_KEY", "")
 EMBEDDING_BASE_URL = os.getenv("EMBEDDING_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "ep-m-20251117205847-trwgz")
 TOKENIZER = tiktoken.get_encoding("cl100k_base")
@@ -340,7 +336,7 @@ def summarize_history(messages: list) -> str:
             f"{DEEPSEEK_BASE_URL}/chat/completions",
             headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
             json={"model": os.getenv("LLM_MODEL", "deepseek-v4-pro"), "messages": [{"role": "user", "content": prompt}], "temperature": 0.1},
-            timeout=15, verify=False,
+            timeout=15, verify=True,
         )
     # 解析返回
         if resp.status_code == 200:
@@ -364,7 +360,7 @@ def memory_llm(prompt: str) -> str:
                 "temperature": 0.1,
                 "stream": True,
             },
-            timeout=60, verify=False, stream=True,
+            timeout=60, verify=True, stream=True,
         )
         if resp.status_code == 200:
             answer = ""
@@ -397,7 +393,7 @@ def memory_llm(prompt: str) -> str:
                             r = requests.post(f"{DEEPSEEK_BASE_URL}/chat/completions",
                                 headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
                                 json={"model": os.getenv("LLM_MODEL", "deepseek-v4-pro"), "messages": [{"role": "user", "content": p}], "temperature": 0.1},
-                                timeout=15, verify=False)
+                                timeout=15, verify=True)
                             return r.json()["choices"][0]["message"]["content"] if r.status_code == 200 else ""
                         except: return ""
                     st.session_state.memory.async_consolidate(memory_llm)
@@ -594,7 +590,7 @@ Requirements: Cite relevant clauses using [source:N] notation. If the text doesn
                 headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
     # 构建 Prompt
                 json={"model": os.getenv("LLM_MODEL", "deepseek-v4-pro"), "messages": [{"role": "user", "content": full_prompt}], "temperature": 0.1},
-                timeout=60, verify=False,
+                timeout=60, verify=True,
             )
     # 解析返回
             if resp.status_code == 200:

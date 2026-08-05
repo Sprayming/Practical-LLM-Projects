@@ -33,6 +33,8 @@ uploads/
 # Large files (git history bloat prevention)
 *.pdf
 *.sqlite3
+*.tar
+*.tar.gz
 memory_db/
 chroma_db/
 model_cache/

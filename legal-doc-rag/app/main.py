@@ -1,8 +1,6 @@
 ﻿import os
 os.environ['TRANSFORMERS_OFFLINE'] = '1'
 os.environ['HF_HUB_DISABLE_SYMLINKS_WARNING'] = '1'
-os.environ['CURL_CA_BUNDLE'] = ''
-os.environ['REQUESTS_CA_BUNDLE'] = ''
 # os.environ['HF_ENDPOINT'] = ''
 import os
 from pathlib import Path
@@ -42,6 +40,13 @@ app = FastAPI(
 
 # Setup global error handlers
 setup_error_handlers(app)
+
+# Rate limiting (slowapi)
+from app.core.limiter import limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS - restrict origins in production
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000").split(",")

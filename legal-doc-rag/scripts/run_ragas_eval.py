@@ -1,21 +1,16 @@
 # -*- coding: utf-8 -*-
-import os, ssl
+import os
 os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
-ssl._create_default_https_context = ssl._create_unverified_context
 import json, sys, requests
 from pathlib import Path
 from dotenv import load_dotenv
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ragas import evaluate
-from ragas.dataset_schema import EvaluationDataset
-from ragas.metrics import Faithfulness, AnswerRelevancy, ContextPrecision, ContextRecall
-
 env_path = Path(__file__).resolve().parent.parent / '.env'
 if env_path.exists(): load_dotenv(str(env_path))
 API_KEY = os.getenv('LLM_API_KEY', '')
 BASE_URL = os.getenv('LLM_BASE_URL', 'https://api.deepseek.com/v1')
-ARK_API_KEY = 'df9c9b2d-35d9-4df6-b49d-f489708e1eab'
+ARK_API_KEY = os.getenv('ARK_API_KEY', '')
 ARK_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3/'
 ARK_LLM_MODEL = 'doubao-1-5-pro-32k-250115'
 ARK_EMBEDDING_ENDPOINT = 'ep-m-20251117205847-trwgz'
@@ -73,7 +68,7 @@ def call_llm(prompt, timeout=30):
     r = requests.post(f'{BASE_URL}/chat/completions',
       headers={'Authorization': f'Bearer {API_KEY}', 'Content-Type': 'application/json'},
       json={'model': 'deepseek-chat', 'messages': [{'role': 'user', 'content': prompt}], 'temperature': 0.1},
-      timeout=timeout, verify=False)
+      timeout=timeout, verify=True)
     if r.status_code == 200:
       d = r.json()
       if isinstance(d, dict) and d.get('choices') and d['choices'][0].get('message'):
@@ -86,6 +81,12 @@ def generate_answer(q, ctxs):
   return call_llm('You are a legal expert. Answer based on:\n\n' + chr(10).join(ctxs[:3]) + '\n\nQuestion: ' + q)
 
 def run_eval():
+  # ragas 相关依赖较重且在无 GPU/网络环境下非必需，改为函数内惰性导入，
+  # 这样本模块在无 ragas 时也能被 import（供离线测试 / CI 使用）。
+  from ragas import evaluate
+  from ragas.dataset_schema import EvaluationDataset
+  from ragas.metrics import Faithfulness, AnswerRelevancy, ContextPrecision, ContextRecall
+
   if not API_KEY: print('WARNING: LLM_API_KEY not set'); return
   s = []
   print(f'Evaluating {len(TEST_QUESTIONS)} questions...')

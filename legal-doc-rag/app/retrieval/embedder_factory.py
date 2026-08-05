@@ -22,7 +22,6 @@ class DirectEmbed:
             headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
             json={"model": self.model, "input": texts},
             timeout=120,
-            verify=False,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -40,7 +39,7 @@ def create_embedder():
     if embedder_type == "openai":
         return DirectEmbed(
             model=os.getenv("EMBEDDING_MODEL", "ep-m-20251117205847-trwgz"),
-            api_key=os.getenv("EMBEDDING_API_KEY", "df9c9b2d-35d9-4df6-b49d-f489708e1eab"),
+            api_key=os.getenv("EMBEDDING_API_KEY", ""),
             base_url=os.getenv("EMBEDDING_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),
         )
 

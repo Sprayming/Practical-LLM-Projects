@@ -15,7 +15,7 @@ services:
       - LLM_API_KEY=${LLM_API_KEY:-}
       - LLM_BASE_URL=${LLM_BASE_URL:-https://api.deepseek.com/v1}
       - APP_PASSWORD=${APP_PASSWORD:-}
-      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-df9c9b2d-35d9-4df6-b49d-f489708e1eab}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
       - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-https://ark.cn-beijing.volces.com/api/v3}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-ep-m-20251117205847-trwgz}
       - EMBEDDER_TYPE=${EMBEDDER_TYPE:-openai}

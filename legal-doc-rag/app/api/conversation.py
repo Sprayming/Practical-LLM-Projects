@@ -10,7 +10,7 @@ import os
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from fastapi import APIRouter, HTTPException, Depends, Header
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional, List
 from app.tenant.conversation import (
@@ -22,17 +22,9 @@ from app.tenant.conversation import (
     delete_conversation,
     get_conversation_stats,
 )
-from app.api.auth import get_user_from_token
+from app.api.auth import get_user_from_token, require_user
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
-
-
-def _require_user(authorization: str = Header(...)) -> dict:
-    """Require authenticated user."""
-    token = authorization.replace("Bearer ", "").strip()
-    if not token:
-        raise HTTPException(401, "Missing token")
-    return get_user_from_token(token)
 
 
 class CreateConversationRequest(BaseModel):
@@ -53,7 +45,7 @@ class UpdateTitleRequest(BaseModel):
 # ============================================================
 
 @router.post("")
-def create(req: CreateConversationRequest, user: dict = Depends(_require_user)):
+def create(req: CreateConversationRequest, user: dict = Depends(require_user)):
     """创建新对话"""
     tenant_id = user["tenant_id"]
     user_id = str(user.get("id", ""))
@@ -64,7 +56,7 @@ def create(req: CreateConversationRequest, user: dict = Depends(_require_user)):
 
 
 @router.get("")
-def list_all(user: dict = Depends(_require_user)):
+def list_all(user: dict = Depends(require_user)):
     """列出所有对话"""
     tenant_id = user["tenant_id"]
     user_id = str(user.get("id", ""))
@@ -73,14 +65,14 @@ def list_all(user: dict = Depends(_require_user)):
 
 
 @router.get("/{conversation_id}")
-def get_messages(conversation_id: int, user: dict = Depends(_require_user)):
+def get_messages(conversation_id: int, user: dict = Depends(require_user)):
     """获取对话消息历史"""
     messages = get_conversation_messages(conversation_id)
     return {"messages": messages, "total": len(messages)}
 
 
 @router.post("/{conversation_id}/messages")
-def add_message_to_conversation(conversation_id: int, req: AddMessageRequest, user: dict = Depends(_require_user)):
+def add_message_to_conversation(conversation_id: int, req: AddMessageRequest, user: dict = Depends(require_user)):
     """添加消息到对话"""
     ok, msg = add_message(conversation_id, req.role, req.content)
     if not ok:
@@ -89,7 +81,7 @@ def add_message_to_conversation(conversation_id: int, req: AddMessageRequest, us
 
 
 @router.put("/{conversation_id}/title")
-def update_title(conversation_id: int, req: UpdateTitleRequest, user: dict = Depends(_require_user)):
+def update_title(conversation_id: int, req: UpdateTitleRequest, user: dict = Depends(require_user)):
     """更新对话标题"""
     ok, msg = update_conversation_title(conversation_id, req.title)
     if not ok:
@@ -98,7 +90,7 @@ def update_title(conversation_id: int, req: UpdateTitleRequest, user: dict = Dep
 
 
 @router.delete("/{conversation_id}")
-def delete(conversation_id: int, user: dict = Depends(_require_user)):
+def delete(conversation_id: int, user: dict = Depends(require_user)):
     """删除对话"""
     ok, msg = delete_conversation(conversation_id)
     if not ok:
@@ -107,7 +99,7 @@ def delete(conversation_id: int, user: dict = Depends(_require_user)):
 
 
 @router.get("/stats/summary")
-def stats(user: dict = Depends(_require_user)):
+def stats(user: dict = Depends(require_user)):
     """获取对话统计"""
     tenant_id = user["tenant_id"]
     stats = get_conversation_stats(tenant_id)

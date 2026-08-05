@@ -14,8 +14,8 @@ from fastapi import APIRouter, HTTPException, Depends, Header
 from pydantic import BaseModel
 from typing import Optional
 import app.core.config as cfg
-from app.api.auth import get_user_from_token, _tokens
-from app.tenant.auth import has_users, _load_users, _save_users
+from app.api.auth import get_user_from_token
+from app.tenant.auth import has_users, list_users, delete_user
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -38,17 +38,8 @@ def _require_admin(authorization: str = Header(...)) -> dict:
 @router.get("/users")
 def list_users(admin: dict = Depends(_require_admin)):
     """List all users (admin only)."""
-    users = _load_users()
-    user_list = []
-    for uid, user_data in users.items():
-        user_list.append({
-            "user_id": uid,
-            "username": user_data.get("username", ""),
-            "tenant_id": user_data.get("tenant_id", ""),
-            "role": user_data.get("role", "user"),
-            "created_at": user_data.get("created_at", ""),
-        })
-    return {"users": user_list, "total": len(user_list)}
+    users = list_users()
+    return {"users": users, "total": len(users)}
 
 
 class DeleteUserRequest(BaseModel):
@@ -58,30 +49,13 @@ class DeleteUserRequest(BaseModel):
 @router.delete("/users/{username}")
 def delete_user(username: str, admin: dict = Depends(_require_admin)):
     """Delete a user (admin only)."""
-    users = _load_users()
-
-    # Find user by username
-    target_uid = None
-    for uid, user_data in users.items():
-        if user_data.get("username") == username:
-            target_uid = uid
-            break
-
-    if not target_uid:
-        raise HTTPException(404, "User not found")
-
     # Prevent deleting yourself
-    if users[target_uid].get("username") == admin.get("username"):
+    if username == admin.get("username"):
         raise HTTPException(400, "Cannot delete yourself")
 
-    # Delete user
-    del users[target_uid]
-    _save_users(users)
-
-    # Remove token if exists
-    tokens_to_remove = [t for t, u in _tokens.items() if u.get("username") == username]
-    for t in tokens_to_remove:
-        _tokens.pop(t, None)
+    ok = delete_user(username)
+    if not ok:
+        raise HTTPException(404, "User not found")
 
     return {"success": True, "message": f"User '{username}' deleted"}
 
@@ -100,7 +74,7 @@ def get_stats(admin: dict = Depends(_require_admin)):
     trace_store = get_trace_store()
 
     # User stats
-    users = _load_users()
+    users = list_users()
     user_count = len(users)
     admin_count = sum(1 for u in users.values() if u.get("role") == "super_admin")
 
