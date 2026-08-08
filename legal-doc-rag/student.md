@@ -135,7 +135,7 @@ POST /api/chat（Bearer）→ [安全] JWT 校验 + 限流
 
 ## 七、架构速记图（MVC 对照 + 双数据流）
 
-> 如果你学过 MVC，直接把项目对齐三层：**Controller = app/api/\***（只收 HTTP、鉴权、调服务）；**Service = retrieval/processing/memory/security/tenant**（业务逻辑）；**Model = Chroma 向量库 / SQLite / uploads / cache / memory_db**（持久化）；**View = API 返回的 JSON**。下面三张图已生成为 SVG（`docs/images/*.svg`），任何 Markdown 预览器 / GitHub / VS Code 都能直接显示；同时保留第二节 ASCII 版供离线速读。
+> 如果你学过 MVC，直接把项目对齐三层：**Controller = app/api/\***（只收 HTTP、鉴权、调服务）；**Service = retrieval/processing/memory/security/tenant**（业务逻辑）；**Model = Chroma 向量库 / SQLite / uploads / cache / memory_db**（持久化）；**View = API 返回的 JSON**。下面三张图已生成为 SVG（`docs/images/*.svg`），任何 Markdown 预览器 / GitHub / VS Code 都能直接显示；同时保留第二节 ASCII 版供离线速读。每处图注里的 `文件:行号` 引用，其真实代码见第八节「关键代码直读」，可不再跳文件直接读。
 
 ### 图 1 · MVC 三层对照
 
@@ -178,4 +178,103 @@ POST /api/chat（Bearer）→ [安全] JWT 校验 + 限流
    会话/短期、用户长期偏好、知识库级记忆；按 `tenant_id` 目录（`memory_db/<tenant>`）与 Redis 前缀（`tenant:{id}:memory`）做物理 + 前缀隔离。
 
 > 能流畅答出上面 6 张卡 = 吃透。建议配合第三节"白板默写"一起练。
+
+---
+
+## 八、关键代码直读（图文对照，不跳文件）
+
+把三张图里引用的关键代码直接贴在这里，配合本文即可阅读，无需在仓库里翻找。行号链接指向 GitHub（版本演进后行号可能微调，以仓库为准）。
+
+### 8.1 落盘根目录（图 1·Model 层 / 图 2·3 的 `{tenant}` 来源）—— `app/core/config.py`
+```python
+CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")  # 向量库根
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "./uploads")                    # 原始 PDF 根
+```
+→ [config.py#L22](https://github.com/Sprayming/Practical-LLM-Projects/blob/main/legal-doc-rag/app/core/config.py#L22)
+
+### 8.2 上传入库（图 2·红色安全落盘 + 绿色持久化）—— `app/api/documents.py`
+```python
+# ① 安全落盘：拼出 uploads/<tenant>/<safe>.pdf
+file_path = get_safe_upload_path(cfg.UPLOAD_DIR, tenant_id, file.filename)
+with open(file_path, "wb") as f:
+    f.write(content)
+
+# ... 切块 + 向量化 ...
+texts = [c.text for c in chunks]
+embedder = create_embedder()
+
+# ② 持久化：persist_directory 直接带 tenant_id，每个租户独立目录
+persist_dir = os.path.join(cfg.CHROMA_PERSIST_DIR, tenant_id)
+vector_store = Chroma.from_texts(
+    texts=texts,
+    embedding=embedder,
+    metadatas=[{"source": file.filename, "chunk": i} for i in range(len(texts))],
+    persist_directory=persist_dir,
+)
+```
+→ [documents.py#L39](https://github.com/Sprayming/Practical-LLM-Projects/blob/main/legal-doc-rag/app/api/documents.py#L39)
+
+### 8.3 安全护栏：防路径穿越（图 2·红色块的本质）—— `app/security/middleware.py`
+```python
+def get_safe_upload_path(upload_dir, tenant_id, filename):
+    # ① tenant_id 只留字母数字下划线，杜绝 ../../ 注入
+    safe_tenant = re.sub(r'[^a-zA-Z0-9_-]', '', tenant_id)
+    safe_filename = sanitize_filename(filename)
+    upload_dir = os.path.join(upload_dir, safe_tenant)
+    os.makedirs(upload_dir, exist_ok=True)
+    file_path = os.path.join(upload_dir, safe_filename)
+    # ② 最终校验：resolve 后必须仍在 base 内
+    if not is_safe_path(upload_dir, file_path):
+        raise ValueError(f"Unsafe file path detected: {filename}")
+    return file_path
+
+def is_safe_path(base_dir, target_path):
+    base = Path(base_dir).resolve()
+    target = Path(target_path).resolve()
+    return target.is_relative_to(base)
+```
+→ [middleware.py#L114](https://github.com/Sprayming/Practical-LLM-Projects/blob/main/legal-doc-rag/app/security/middleware.py#L114)
+
+### 8.4 查询问答（图 3·全链路）—— `app/api/chat.py`
+```python
+def _build_pipeline(tenant_id: str):
+    embedder = create_embedder()
+    # 按 tenant_id 读回该租户的独立向量库
+    persist_dir = os.path.join(cfg.CHROMA_PERSIST_DIR, tenant_id)
+    if not os.path.exists(persist_dir):
+        return None, None, None, None, None   # 没建库的租户优雅降级
+    vector_store = Chroma(embedding_function=embedder, persist_directory=persist_dir)
+    query_rewriter = QueryRewriter(api_key=cfg.LLM_API_KEY, base_url=cfg.LLM_BASE_URL)
+    cache = QueryCache(cache_dir=os.path.join("cache", tenant_id))
+    citation_tracker = CitationTracker()
+    return embedder, vector_store, query_rewriter, cache, citation_tracker
+```
+→ [chat.py#L162](https://github.com/Sprayming/Practical-LLM-Projects/blob/main/legal-doc-rag/app/api/chat.py#L162)
+
+### 8.5 Reranker 是真 Cross-Encoder（图 3·橙色块，非嘴上 hybrid）—— `app/retrieval/hybrid_retriever.py`
+```python
+class Reranker:
+    """BGE 交叉编码器重排序（可选，模型加载失败则跳过）"""
+    def __init__(self, model_name: str = "BAAI/bge-reranker-base"):
+        self.model = None
+        self.available = False
+        try:
+            from sentence_transformers import CrossEncoder
+            self.model = CrossEncoder(model_name, device="cpu")
+            self.available = True
+        except Exception as e:
+            logger.warning("Reranker unavailable (skip): {}", e)
+
+    def rerank(self, query, documents, top_k=5):
+        if not self.available or not documents:
+            return documents[:top_k]          # 不可用时优雅降级
+        pairs = [[query, d.page_content[:512]] for d in documents]
+        scores = self.model.predict(pairs)
+        scored = list(zip(documents, scores))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return [d for d, _ in scored[:top_k]]
+```
+→ [hybrid_retriever.py#L28](https://github.com/Sprayming/Practical-LLM-Projects/blob/main/legal-doc-rag/app/retrieval/hybrid_retriever.py#L28)
+
+> 这组代码就是三张图的"源码版"。配合第七节 SVG 图 + 本节代码 + 第六节自测卡，三管齐下即可脱离仓库独立复现架构。
 
