@@ -40,3 +40,8 @@ chroma_db/
 model_cache/
 knowledge_base/
 uploads/
+
+# Architecture explainer VIDEO (kept locally only, viewed via localhost; NOT pushed to GitHub)
+legal-doc-rag/docs/architecture-explainer.html
+legal-doc-rag/docs/audio/
+ride-hailing-analytics-system/docs/architecture-explainer.html

@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>legal-doc-rag 架构速览（静态可读版）</title>
+<style>
+  :root{ --bg:#0d1117; --card:#161b22; --border:#30363d; --fg:#e6edf3; --muted:#8b949e;
+         --blue:#58a6ff; --green:#3fb950; --orange:#f0883e; --red:#ff7b72; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font-family:-apple-system,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+       line-height:1.7;padding:32px 18px 80px}
+  .wrap{max-width:960px;margin:0 auto}
+  h1{font-size:26px;margin:0 0 6px}
+  h2{font-size:20px;margin:38px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--border);color:var(--blue)}
+  h3{font-size:16px;margin:20px 0 6px;color:var(--fg)}
+  p{margin:8px 0;color:#c9d1d9}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:8px}
+  .scene{border:1px solid var(--border);border-radius:10px;background:var(--card);
+         padding:18px 20px;margin:16px 0}
+  .tag{display:inline-block;font-size:12px;padding:2px 8px;border-radius:20px;
+       background:rgba(88,166,255,.15);color:var(--blue);margin-bottom:8px}
+  .step{position:relative;padding:10px 12px 10px 44px;border-left:3px solid var(--border);
+        margin:10px 0;background:#0f141a;border-radius:6px}
+  .step .n{position:absolute;left:12px;top:10px;font-weight:700;color:var(--muted)}
+  .step.red{border-left-color:var(--red)} .step.green{border-left-color:var(--green)}
+  .step.orange{border-left-color:var(--orange)}
+  pre{background:#010409;border:1px solid var(--border);border-radius:8px;
+      padding:12px 14px;overflow:auto;font-size:12.5px;line-height:1.55;color:#c9d1d9}
+  code{font-family:"SF Mono",Consolas,Menlo,monospace}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:14px}
+  th,td{border:1px solid var(--border);padding:8px 10px;text-align:left}
+  th{background:#0f141a;color:var(--blue)}
+  .tree{background:#010409;border:1px solid var(--border);border-radius:8px;
+        padding:14px;font-size:13px;white-space:pre;overflow:auto;color:#c9d1d9}
+  .note{font-size:13px;color:var(--muted);margin-top:6px}
+  .legend span{margin-right:14px;font-size:13px}
+  .dotr{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:middle}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>legal-doc-rag · 架构速览（静态可读版）</h1>
+<p class="sub">本页不依赖任何 JavaScript，在预览面板或任何浏览器中打开即可直接滚动阅读。想要自动播放的"视频版"，请用本机浏览器打开 <code>file:///D:/video-explainers/legal-doc-rag/architecture-explainer.html</code>。</p>
+
+<div class="legend">
+  <span><i class="dotr" style="background:var(--red)"></i>红 = 安全把关</span>
+  <span><i class="dotr" style="background:var(--green)"></i>绿 = 落盘/持久化</span>
+  <span><i class="dotr" style="background:var(--orange)"></i>橙 = 精度关键</span>
+</div>
+
+<h2>0 · MVC 三层对照</h2>
+<table>
+  <tr><th>层</th><th>对应代码</th><th>职责</th></tr>
+  <tr><td>View</td><td>JSON 响应</td><td>API 返回的 JSON</td></tr>
+  <tr><td>Controller</td><td><code>app/api/*</code></td><td>收请求、鉴权、调服务（只编排，不含业务）</td></tr>
+  <tr><td>Service</td><td><code>retrieval/ processing/ memory/ security/ tenant</code></td><td>检索、切块、记忆、安全、租户</td></tr>
+  <tr><td>Model</td><td>Chroma / SQLite / uploads / cache / memory_db</td><td>按 <code>tenant_id</code> 子目录物理隔离</td></tr>
+</table>
+<p class="note">关键：每个 Model 按 <code>tenant_id</code> 子目录物理隔离（不是 Chroma collection 字段隔离），隔离贯穿全链路。</p>
+
+<h2>1 · 写入链路：上传入库（7 步）</h2>
+<div class="scene">
+  <span class="tag">POST /api/documents/upload</span>
+  <div class="step"><span class="n">1</span><b>入口</b> <code>documents.py:20 upload_document()</code> 由 <code>Depends(require_user)</code> 拿到 <code>tenant_id</code>，再安全落盘 + 切块 + 向量化 + persist。</div>
+  <div class="step"><span class="n">2</span><b>鉴权</b> <code>auth.py:79 require_user()</code> 解 JWT 取出 <code>tenant_id</code>（写入侧与读取侧共用）。</div>
+  <div class="step red"><span class="n">3</span><b>安全落盘</b> <code>middleware.py:114 get_safe_upload_path()</code> → <code>sanitize_filename()</code> + <code>is_safe_path()</code>，写到 <code>uploads/{tenant}/</code>，防 <code>../</code> 穿越。</div>
+  <div class="step"><span class="n">4</span><b>切块</b> <code>multimodal_pipeline.py:29 MultimodalPipeline.process()</code> 把 文本+OCR+图片描述 合并切 500 字块。</div>
+  <div class="step"><span class="n">5</span><b>向量化</b> <code>embedder_factory.py:35 create_embedder()</code> 返回 <code>DirectEmbed</code>，调 <code>/embeddings</code> 并<b>按 index 排序</b>保证顺序。</div>
+  <div class="step green"><span class="n">6</span><b>落盘向量</b> <code>Chroma.from_texts(persist_directory=chroma_db/{tenant}).persist()</code> 写入该租户目录。</div>
+  <div class="step"><span class="n">7</span><b>返回</b> <code>return {success, chunks, tenant_id}</code>。</div>
+</div>
+
+<h3>关键代码 · 安全落盘三件套（步骤 3）</h3>
+<pre><code>def get_safe_upload_path(upload_dir, tenant_id, filename):
+    safe_tenant = re.sub(r'[^a-zA-Z0-9_-]', '', tenant_id)   # ①清洗 tenant_id
+    safe_filename = sanitize_filename(filename)              # ②清洗文件名
+    upload_dir = os.path.join(upload_dir, safe_tenant)
+    os.makedirs(upload_dir, exist_ok=True)
+    file_path = os.path.join(upload_dir, safe_filename)
+    if not is_safe_path(upload_dir, file_path):              # ③终极校验
+        raise ValueError(f"Unsafe file path detected: {filename}")
+    return file_path
+
+def is_safe_path(base_dir, target_path) -&gt; bool:
+    base = Path(base_dir).resolve()        # 解析符号链接/../ 到真实绝对路径
+    target = Path(target_path).resolve()
+    return target.is_relative_to(base)     # target 必须仍在 base 之下</code></pre>
+
+<h3>关键代码 · 切块（步骤 4）</h3>
+<pre><code>class MultimodalPipeline:
+    def __init__(self):
+        self._splitter = RecursiveCharacterTextSplitter(
+            chunk_size=500, chunk_overlap=50,
+            separators=["\n\n","\n","。","；","，"," "])   # 中文按句/段断
+    def _process_pdf(self, pdf_path):
+        pages = extract_pdf_pages(pdf_path)
+        for page in pages:
+            # ① 图片 OCR 出文字  ② 图片用视觉模型生成描述
+            combined = page_text
+            if caption_texts: combined += "\n" + "\n".join(caption_texts)
+            if ocr_texts:     combined += "\n[图片文字]\n" + "\n".join(ocr_texts)
+            for st in self._splitter.split_text(combined):  # ③ 切 500 字块
+                chunks.append(MultimodalChunk(text=st, page_number=page["page_number"]))
+        return chunks</code></pre>
+
+<h3>关键代码 · 向量化按 index 排序（步骤 5，易错点）</h3>
+<pre><code>class DirectEmbed:
+    def embed_documents(self, texts):
+        resp = requests.post(f"{self.base_url}/embeddings",
+            json={"model": self.model, "input": texts}, timeout=120)
+        data = resp.json()
+        # 批量 embedding 返回顺序未必与输入一致，必须按 index 排回来！
+        return [item["embedding"] for item in sorted(data["data"], key=lambda x: x["index"])]</code></pre>
+
+<h2>2 · 读取链路：查询问答（7 步）</h2>
+<div class="scene">
+  <span class="tag">POST /api/chat</span>
+  <div class="step"><span class="n">1</span><b>入口</b> <code>chat.py:179 chat()</code> 由 <code>require_user</code> 拿 <code>tenant_id</code>，判空库后改写查询。</div>
+  <div class="step"><span class="n">2</span><b>建管道</b> <code>chat.py:162 _build_pipeline()</code> 按 tenant 载入 Chroma，实例化 <code>QueryRewriter / QueryCache / CitationTracker</code>。</div>
+  <div class="step"><span class="n">3</span><b>查询改写</b> <code>query_rewriter.py:29 QueryRewriter.rewrite()</code> 调 LLM 改写，失败回退原查询。</div>
+  <div class="step"><span class="n">4</span><b>混合检索</b> <code>hybrid_retriever.py:238 HybridRetriever.retrieve()</code> 跑 稠密(Chroma)+稀疏(BM25)+RRF 融合。</div>
+  <div class="step orange"><span class="n">5</span><b>精排</b> <code>hybrid_retriever.py:42 Reranker.rerank()</code> 用 BGE Cross-Encoder 精排，失败优雅降级。</div>
+  <div class="step"><span class="n">6</span><b>拼上下文</b> <code>chat.py:85 call_llm()(httpx 调 DeepSeek)</code> + <code>citation.py:55 CitationTracker.format_context()</code> 打 [N] 引用。</div>
+  <div class="step"><span class="n">7</span><b>返回</b> <code>return {answer, citations:[...]}</code>，每条答案可溯源。</div>
+</div>
+
+<h3>关键代码 · 混合检索 + RRF 融合（步骤 4）</h3>
+<pre><code>def retrieve(self, query, top_k=None):
+    k = top_k or self.k
+    dense  = self._dense_search(query)    # ① Chroma 向量相似度
+    sparse = self._sparse_search(query)   # ② BM25 关键词
+    es     = self._elasticsearch_search(query)  # ③ ES（可选）
+    fused  = self._rrf_fuse(dense, sparse, es)  # ④ RRF 融合
+    if self.reranker and self.reranker.available:
+        fused = self.reranker.rerank(query, fused, k)  # ⑤ BGE 精排
+    return fused
+
+def _rrf_fuse(self, dense_results, sparse_results, es_results=None):
+    doc_map = {}
+    for rank,(doc,_) in enumerate(dense_results):
+        key = doc.page_content[:200]
+        if key not in doc_map: doc_map[key]=doc; doc_map[key].metadata["rrf_score"]=0.0
+        doc_map[key].metadata["rrf_score"] += self.dense_weight/(self.rrf_k+rank+1)
+    # sparse / es 同法累加（只按排名给分，不依赖分数绝对值）
+    return sorted(doc_map.values(), key=lambda d:d.metadata["rrf_score"], reverse=True)</code></pre>
+<p class="note">RRF 本质：不比较向量分和 BM25 分（量纲不同），只按"排名"加分 <code>1/(60+rank)</code>，三路都靠前的自然总分最高。</p>
+
+<h3>关键代码 · BGE 交叉编码器精排（步骤 5）</h3>
+<pre><code>class Reranker:
+    def __init__(self, model_name="BAAI/bge-reranker-base"):
+        self.model=None; self.available=False
+        try:
+            from sentence_transformers import CrossEncoder
+            self.model = CrossEncoder(model_name, device="cpu")
+            self.available = True
+        except Exception as e:
+            logger.warning("Reranker unavailable (skip): {}", e)  # 失败跳过，不阻塞
+    def rerank(self, query, documents, top_k=5):
+        if not self.available or not documents: return documents[:top_k]
+        pairs = [[query, d.page_content[:512]] for d in documents]
+        scores = self.model.predict(pairs)   # 把 (query,doc) 拼一起交叉编码
+        scored = sorted(zip(documents, scores), key=lambda x:x[1], reverse=True)
+        return [d for d,_ in scored[:top_k]]</code></pre>
+
+<h3>关键代码 · 引用追踪（步骤 6，可溯源实现）</h3>
+<pre><code>class CitationTracker:
+    def format_context(self) -&gt; str:
+        parts = []
+        for i, src in enumerate(self._sources):
+            marker = f"[{i+1}]"          # 对应 Prompt 要求的"用 [N] 引用"
+            ref = src.filename
+            if src.page_number: ref += f" 第{src.page_number}页"
+            parts.append(f"{marker} {ref}\n{src.content}")
+        return "\n\n".join(parts)</code></pre>
+
+<h2>3 · 文件间调用关系树</h2>
+<div class="tree">app/main.py  ·  FastAPI 装配入口（include_router ×9）
+├─ auth_router        app/api/auth.py
+│   ├─ register()/login()  → 写 JWT（含 tenant_id）
+│   └─ require_user()      → 解 JWT 拿 tenant_id（被 upload/chat 依赖注入）
+├─ documents_router   app/api/documents.py
+│   └─ upload_document()        → 收文件、判类型/大小
+│       ├─ get_safe_upload_path()   [security/middleware.py]  安全落盘
+│       ├─ MultimodalPipeline.process()  [processing]         切块(OCR+描述)
+│       ├─ create_embedder()           [retrieval/embedder_factory]
+│       └─ Chroma.from_texts().persist()   → 写 chroma_db/{tenant}/
+├─ chat_router        app/api/chat.py
+│   └─ chat()                    → 问答总入口
+│       ├─ _build_pipeline()         → 按 tenant 重建 Chroma
+│       ├─ QueryRewriter.rewrite()   [retrieval/query_rewriter]
+│       ├─ HybridRetriever.retrieve()[retrieval/hybrid_retriever]
+│       │   ├─ _dense_search()  (Chroma 向量)
+│       │   ├─ _sparse_search() (BM25)
+│       │   ├─ _rrf_fuse()      (RRF 融合)
+│       │   └─ Reranker.rerank() (BGE 交叉编码器精排)
+│       ├─ CitationTracker.format_context() [retrieval/citation]
+│       └─ call_llm()  (httpx 调 DeepSeek，流式/非流式)
+└─ monitoring_router  observability/monitoring.py  (/health /metrics /stats)</div>
+
+<h2>4 · 两个最常考点</h2>
+<div class="scene">
+  <div class="step red"><span class="n">①</span><b>租户隔离</b> = 根目录 + <code>tenant_id</code> 拼子目录；安全靠 <code>get_safe_upload_path()</code>(middleware.py:114) 清洗 + <code>is_safe_path()</code>(:102) 防 <code>../</code> 穿越。</div>
+  <div class="step orange"><span class="n">②</span><b>hybrid + reranker 而非纯语义</b>：法律术语要精确匹配避免漏检；向量找语义相似，BM25 保精确，BGE 精排提精度。记住这两点，架构就吃透了。</div>
+</div>
+<p class="note">完整逐函数版见 <code>docs/code-walkthrough.md</code>；自动播放视频版见 <code>architecture-explainer.html</code>（本机浏览器 file:// 打开）。</p>
+</div>
+</body>
+</html>
