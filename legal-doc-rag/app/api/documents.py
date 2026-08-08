@@ -1,6 +1,7 @@
 import os, sys, json, tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from loguru import logger
 from app.retrieval.embedder_factory import create_embedder
 from app.processing.multimodal_pipeline import MultimodalPipeline
 from langchain_community.vectorstores import Chroma
@@ -52,6 +53,21 @@ async def upload_document(
 
     texts = [c.text for c in chunks]
     embedder = create_embedder()
+
+    # 生成并持久化 BGE-M3 稀疏向量（失败不影响稠密入库，检索时自动降级）
+    try:
+        from app.retrieval.bge_m3_embedder import BGEM3Embedder
+        from app.retrieval.sparse_store import save_sparse
+
+        if isinstance(embedder, BGEM3Embedder):
+            sp_items = [
+                {"key": t[:200], "sp": sp}
+                for t, sp in zip(texts, embedder.encode_sparse(texts))
+            ]
+            save_sparse(tenant_id, file.filename, sp_items)
+            logger.info("BGE-M3 稀疏向量已持久化: {} chunks", len(sp_items))
+    except Exception as e:  # noqa: BLE001
+        logger.warning("稀疏向量生成失败（不影响稠密入库）: {}", e)
 
     persist_dir = os.path.join(cfg.CHROMA_PERSIST_DIR, tenant_id)
     vector_store = Chroma.from_texts(
@@ -144,6 +160,14 @@ def delete_document(filename: str, user: dict = Depends(require_user)):
                 vector_store.persist()
         except Exception:
             pass
+
+    # 同步删除 BGE-M3 稀疏向量文件
+    try:
+        from app.retrieval.sparse_store import delete_sparse
+
+        delete_sparse(tenant_id, filename)
+    except Exception:
+        pass
 
     if not deleted:
         raise HTTPException(404, "Document not found")

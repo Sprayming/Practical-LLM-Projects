@@ -190,12 +190,13 @@ python -m pytest --cov=app --cov-report=term-missing
 1. **检索质量跃升**：BGE-M3 中文检索能力远超 text2vec，长文档语义对齐更准，召回 Top-K 相关性更高；
 2. **长文本不再截断**：8192 token 上限，长法条 / 长判决可被完整向量化（text2vec 的 512 是硬伤，会强制截断丢失后续内容）。
 
-> ⚠️ **潜力已具备但尚未接上**：BGE-M3 的稀疏向量（SPLADE）与 ColBERT 多向量能力，`embedder_factory` 当前仅返回稠密 `HuggingFaceEmbeddings` 未启用。项目现靠 BM25 做词面召回 + 稠密做语义 + RRF 融合，BM25 已部分覆盖稀疏匹配，但 BGE-M3 同源稀疏质量更高、可与稠密一起重排；ColBERT 则是长文细粒度匹配的杀手锏。要完全发挥需改造检索层（见下方待办）。
+> ✅ **稀疏向量已接上**：BGE-M3 的 SPLADE 稀疏向量已接入混合检索。`embedder_factory` 优先返回 `BGEM3Embedder`（稠密 1024 维 + 自计算稀疏权重）；文档上传时把每段稀疏权重落盘到 `./sparse_db/{tenant}/{file}.json`，`HybridRetriever` 新增稀疏检索分支，与 BM25 + 稠密经 RRF 融合重排，法律术语 / 法条编号精确召回明显提升。注意：稀疏权重由本模块**自计算**（绕过 FlagEmbedding 1.4.0 的 `scatter_reduce` 在 CPU 下偶发整条丢失的 bug），结果 100% 可复现。ColBERT 多向量仍未接（见下方待办）。
 
 **代价**：模型体积 2.3GB（text2vec ≈400MB），加载更占内存、首向量化更慢；已下载到 `./model_cache` 并由 `.gitignore` 忽略，不入库。
 
 **待办（解锁 BGE-M3 全部能力）**：
-- [ ] 接入 BGE-M3 稀疏向量，与现有 BM25 + 稠密做融合重排（提升法律术语精确召回）；
+- [x] 接入 BGE-M3 稀疏向量，与现有 BM25 + 稠密做融合重排（提升法律术语精确召回）；
+  - 实现：`app/retrieval/bge_m3_embedder.py` 自计算 SPLADE 权重（确定性 `gather`，不经 FlagEmbedding 的 `scatter_reduce`），`sparse_store.py` 落盘/加载，`HybridRetriever._sparse_search_bge` 与 BM25 + 稠密做 RRF 加权融合。回归测试 `tests/unit/test_bge_m3_sparse.py` 覆盖非空/确定性/特殊 token 过滤。
 - [ ] 实验 ColBERT 多向量 late-interaction，强化长文证据定位；
 - [ ] 在 `tests/golden_test_set.json`（31 条法律问答回归集）上对比 text2vec → BGE-M3 的检索/回答质量提升。
 

@@ -205,7 +205,7 @@ async def chat(request: Request, req: ChatRequest, user: dict = Depends(require_
         return cached_result
 
     # 获取上下文
-    context = _get_context(query, pipeline, req.message, req.history)
+    context = _get_context(query, pipeline, req.message, req.history, user["tenant_id"])
     
     # 处理响应
     if req.stream:
@@ -243,14 +243,25 @@ def _create_streaming_response(content):
         yield f"data: {json.dumps({'type': 'done', 'citations': [], 'token_usage': 0})}\n\n"
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
-def _get_context(query, pipeline, message, history):
+def _get_context(query, pipeline, message, history, tenant_id=None):
     """获取RAG上下文和记忆上下文"""
     # 获取记忆上下文
     mem_ctx = pipeline.mem.get_context(query) if pipeline.mem else ""
     
     # RAG检索
     all_texts = _get_all_texts(pipeline.vector_store)
-    retriever = HybridRetriever(pipeline.vector_store, all_texts, k=10)
+    # 加载 BGE-M3 稀疏向量库（按租户），检索时与 BM25 + 稠密做 RRF 融合
+    sparse_store = None
+    if tenant_id:
+        try:
+            from app.retrieval.sparse_store import load_sparse_lookup
+
+            sparse_store = load_sparse_lookup(tenant_id)
+        except Exception:  # noqa: BLE001
+            sparse_store = None
+    retriever = HybridRetriever(
+        pipeline.vector_store, all_texts, k=10, sparse_store=sparse_store
+    )
     docs = retriever.retrieve(query)
     docs = _get_reranker().rerank(query, docs, top_k=5)
     

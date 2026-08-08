@@ -5,6 +5,8 @@ import os
 import requests
 from typing import List
 
+import loguru
+
 
 class DirectEmbed:
     """直接调用豆包 / OpenAI 兼容 Embedding API。
@@ -44,11 +46,20 @@ def create_embedder():
         )
 
     elif embedder_type == "huggingface":
-        from langchain_huggingface import HuggingFaceEmbeddings
-        return HuggingFaceEmbeddings(
-            model_name=os.getenv("HF_MODEL_NAME", "BAAI/bge-m3"),
-            cache_folder=os.getenv("HF_CACHE_DIR", "./model_cache"),
-        )
+        try:
+            from app.retrieval.bge_m3_embedder import BGEM3Embedder
+
+            return BGEM3Embedder()
+        except Exception as e:  # noqa: BLE001
+            loguru.logger.warning(
+                "BGEM3Embedder 不可用，回退 HuggingFaceEmbeddings: {}", e
+            )
+            from langchain_huggingface import HuggingFaceEmbeddings
+
+            return HuggingFaceEmbeddings(
+                model_name=os.getenv("HF_MODEL_NAME", "BAAI/bge-m3"),
+                cache_folder=os.getenv("HF_CACHE_DIR", "./model_cache"),
+            )
 
     else:
         raise ValueError(

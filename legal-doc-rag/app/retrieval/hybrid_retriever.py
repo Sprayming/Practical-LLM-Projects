@@ -65,6 +65,8 @@ class HybridRetriever:
         use_reranker: bool = False,
         use_elasticsearch: bool = False,
         tenant_id: str = None,
+        sparse_store: Optional[dict] = None,
+        bge_sparse_weight: float = 1.0,
     ):
         self.dense_store = dense_store
         self.texts = texts
@@ -73,6 +75,8 @@ class HybridRetriever:
         self.dense_weight = dense_weight
         self.sparse_weight = sparse_weight
         self.tenant_id = tenant_id
+        self.sparse_store = sparse_store
+        self.bge_sparse_weight = bge_sparse_weight
 
         # 初始化 BM25 索引
         tokenized = [self._tokenize(t) for t in texts]
@@ -168,13 +172,50 @@ class HybridRetriever:
         scored.sort(key=lambda x: x[1], reverse=True)
         return [(self.texts[i], s) for i, s in scored[:self.k * 3]]
 
+    def _sparse_search_bge(self, query: str) -> list[tuple[str, float]]:
+        """稀疏检索 (BGE-M3 SPLADE 词汇权重)。
+
+        与 BM25 互补：BM25 基于词频/逆文档频率，BGE-M3 稀疏是**学习到的**词汇权重，
+        对法律术语、法条编号的同义/近义匹配更强。dot-product 打分后参与 RRF 融合。
+        sparse_store 为 None 或模型不可用时返回空（降级为 BM25 + 稠密）。
+        """
+        if not self.sparse_store:
+            return []
+        try:
+            from app.retrieval.bge_m3_embedder import get_bge_m3_model, encode_sparse_direct
+
+            model = get_bge_m3_model()
+            if model is None:
+                return []
+            # 直接使用本模块自计算的确定性 SPLADE 稀疏权重（绕过 FlagEmbedding 偶发丢值路径）
+            qsp = encode_sparse_direct(model, [query])[0]
+        except Exception as e:  # noqa: BLE001
+            logger.warning("BGE-M3 稀疏检索失败，跳过: {}", e)
+            return []
+
+        scored = []
+        for i, text in enumerate(self.texts):
+            dsp = self.sparse_store.get(text[:200])
+            if not dsp:
+                continue
+            score = 0.0
+            for tid, qw in qsp.items():
+                dw = dsp.get(tid)
+                if dw:
+                    score += qw * dw
+            if score > 0:
+                scored.append((i, score))
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return [(self.texts[i], s) for i, s in scored[: self.k * 3]]
+
     def _rrf_fuse(
         self,
         dense_results: list[tuple[Document, float]],
         sparse_results: list[tuple[str, float]],
         elasticsearch_results: list[tuple[Document, float]] = None,
+        bge_sparse_results: list[tuple[str, float]] = None,
     ) -> list[Document]:
-        """Reciprocal Rank Fusion 融合"""
+        """Reciprocal Rank Fusion 融合（稠密 + BM25 + 可选 ES + 可选 BGE-M3 稀疏）"""
         doc_map: dict[str, Document] = {}
 
         for rank, (doc, score) in enumerate(dense_results):
@@ -199,6 +240,16 @@ class HybridRetriever:
                     doc_map[key] = doc
                     doc_map[key].metadata["rrf_score"] = 0.0
                 doc_map[key].metadata["rrf_score"] += es_weight / (self.rrf_k + rank + 1)
+
+        # BGE-M3 稀疏结果 (optional)
+        if bge_sparse_results:
+            for rank, (text, score) in enumerate(bge_sparse_results):
+                key = text[:200]
+                if key not in doc_map:
+                    doc_map[key] = Document(page_content=text, metadata={"rrf_score": 0.0})
+                doc_map[key].metadata["rrf_score"] += self.bge_sparse_weight / (
+                    self.rrf_k + rank + 1
+                )
 
         result = sorted(doc_map.values(), key=lambda d: d.metadata["rrf_score"], reverse=True)
         return result
@@ -236,24 +287,32 @@ class HybridRetriever:
             return []
 
     def retrieve(self, query: str, top_k: Optional[int] = None) -> list[Document]:
-        """执行混合检索：稠密→稀疏→(可选)Elasticsearch→RRF融合→(可选)重排序"""
+        """执行混合检索：稠密→BM25→(可选)ES→BGE-M3稀疏→RRF融合→(可选)重排序"""
         k = top_k or self.k
 
         # 1. 稠密检索
         dense = self._dense_search(query)
         logger.debug("Dense: top={}, bottom={}", dense[0][1] if dense else 0, dense[-1][1] if dense else 0)
 
-        # 2. 稀疏检索
+        # 2. 稀疏检索 (BM25)
         sparse = self._sparse_search(query)
-        logger.debug("Sparse: {} results", len(sparse))
+        logger.debug("Sparse(BM25): {} results", len(sparse))
 
         # 3. Elasticsearch全文检索 (可选)
         elasticsearch_results = self._elasticsearch_search(query)
         logger.debug("Elasticsearch: {} results", len(elasticsearch_results))
 
-        # 4. RRF 融合
-        fused = self._rrf_fuse(dense, sparse, elasticsearch_results)
-        logger.debug("RRF fused: {} -> {}", len(dense) + len(sparse) + len(elasticsearch_results), len(fused))
+        # 4. BGE-M3 稀疏检索 (可选)
+        bge_sparse = self._sparse_search_bge(query)
+        logger.debug("Sparse(BGE-M3): {} results", len(bge_sparse))
+
+        # 5. RRF 融合
+        fused = self._rrf_fuse(dense, sparse, elasticsearch_results, bge_sparse)
+        logger.debug(
+            "RRF fused: {} -> {}",
+            len(dense) + len(sparse) + len(elasticsearch_results) + len(bge_sparse),
+            len(fused),
+        )
 
         # 5. 重排序
         if self.reranker and self.reranker.available:
