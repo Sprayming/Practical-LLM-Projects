@@ -38,6 +38,11 @@ uploads/
 memory_db/
 chroma_db/
 model_cache/
+# 本地临时测试目录（镜像下载探测残留，非业务文件）
+_test_mirror/
+_mirror_test*/
+# 模型下载辅助脚本（含镜像硬编码路径，仅本地备用，不入库）
+legal-doc-rag/download_bge_m3.py
 knowledge_base/
 uploads/
 
