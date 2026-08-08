@@ -278,3 +278,79 @@ class Reranker:
 
 > 这组代码就是三张图的"源码版"。配合第七节 SVG 图 + 本节代码 + 第六节自测卡，三管齐下即可脱离仓库独立复现架构。
 
+## 九、函数映射速查表（数据流 ↔ 真实 `file:function`）
+
+**核心难点**：抽象的数据流 / MVC 框架，必须能落到具体文件的具体函数，才算真懂。下表逐条对应。
+
+### 9.1 上传 / 入库链路（写）
+
+| 步骤 | 干什么 | 真实函数 | 文件:行 |
+|---|---|---|---|
+| 1 | 接收上传请求 | `upload_document()` | `app/api/documents.py:20` |
+| 2 | 鉴权、取 tenant_id | `require_user()` → `get_user_from_token()` | `app/api/auth.py:79` / `:66` |
+| 3 | 安全落盘（防穿越） | `get_safe_upload_path()` → `sanitize_filename()` + `is_safe_path()` | `security/middleware.py:114` / `:70` / `:102` |
+| 4 | PDF 切块 | `MultimodalPipeline.process()` | `processing/multimodal_pipeline.py:29` |
+| 5 | 向量化 | `create_embedder()` → `DirectEmbed` | `retrieval/embedder_factory.py:35` / `:9` |
+| 6 | 持久化 | `Chroma.from_texts(...).persist()` | langchain（落盘 `chroma_db/{tenant}`） |
+| 7 | 返回结果 | `upload_document()` return | `documents.py:65` |
+
+### 9.2 查询 / 问答链路（读）
+
+| 步骤 | 干什么 | 真实函数 | 文件:行 |
+|---|---|---|---|
+| 1 | 接收提问 | `chat()` | `app/api/chat.py:179` |
+| 2 | 载入管道 | `_build_pipeline()` | `chat.py:162` |
+| 3 | 查询改写 | `QueryRewriter.rewrite()` | `retrieval/query_rewriter.py:29` |
+| 4 | 混合检索 | `HybridRetriever.retrieve()`（内含 `_dense_search` / `_sparse_search` / `_rrf_fuse`） | `retrieval/hybrid_retriever.py:238` / `:155` / `:163` / `:171` |
+| 5 | 精排 | `Reranker.rerank()`（BGE Cross-Encoder） | `hybrid_retriever.py:42` |
+| 6 | 生成+引用 | `call_llm()` + `CitationTracker.format_context()` | `chat.py:85` / `citation.py:55` |
+| 7 | 返回带引用 JSON | `chat()` return | `chat.py:422` |
+
+### 9.3 文件间调用关系（谁调谁）
+
+`app/main.py` 用 `include_router` 装配 9 个路由，API 层是入口；`require_user` 统一鉴权；业务函数散落在 `retrieval / processing / memory / security / tenant`，最终落到 `Chroma / SQLite / 磁盘`。
+
+```
+app/main.py                         FastAPI 装配入口（include_router ×9）
+├─ auth_router        app/api/auth.py
+│   ├─ register()         → tenant/auth.py:104  写 SQLite 用户
+│   ├─ login()            → tenant/auth.py:137  校验密码
+│   └─ require_user()     → get_user_from_token() 解 JWT 拿 tenant_id
+├─ documents_router   app/api/documents.py
+│   └─ upload_document()   ← 入库链路入口
+│        ├─ require_user()                  [auth.py:79]
+│        ├─ get_safe_upload_path()          [security/middleware.py:114]  (红)
+│        │    ├─ sanitize_filename()        [middleware.py:70]
+│        │    └─ is_safe_path()             [middleware.py:102]  防 ../ 穿越
+│        ├─ MultimodalPipeline.process()    [processing/multimodal_pipeline.py:29]
+│        ├─ create_embedder()              [retrieval/embedder_factory.py:35]
+│        └─ Chroma.from_texts().persist()  [langchain]  落盘 chroma_db/{tenant}
+├─ chat_router        app/api/chat.py
+│   └─ chat()   ← 查询链路入口
+│        ├─ _build_pipeline()               [chat.py:162]
+│        ├─ QueryRewriter.rewrite()         [query_rewriter.py:29]
+│        ├─ MemorySystem.get_context()      [memory/memory_manager.py:135]
+│        ├─ HybridRetriever.retrieve()      [hybrid_retriever.py:238]
+│        │    ├─ _dense_search()           [hybrid_retriever.py:155]  Chroma
+│        │    ├─ _sparse_search()          [hybrid_retriever.py:163]  BM25
+│        │    └─ _rrf_fuse()               [hybrid_retriever.py:171]
+│        ├─ Reranker.rerank()               [hybrid_retriever.py:42]  BGE 精排
+│        ├─ CitationTracker.*               [citation.py:32]
+│        ├─ QueryCache.get()/set()          [cache.py:22]
+│        ├─ call_llm()                      [chat.py:85]  → DeepSeek
+│        └─ mem.add()/trigger_background_jobs()  [memory_manager.py:69/157]
+└─ monitoring_router  observability/monitoring.py  (record_query:126 / TraceContext:41)
+```
+
+> 记牢这棵树：把「API 路由 → require_user 鉴权 → 业务函数（retrieval/processing/memory/security/tenant）→ Chroma/SQLite/磁盘」这条主线背下来，任何数据流/框架问题都能对到具体函数。
+
+### 9.4 三层记忆涉及的函数（常被追问）
+
+| 记忆层 | 作用 | 函数 | 文件:行 |
+|---|---|---|---|
+| 短期 | 最近 N 轮原话 | `MemorySystem.add()` | `memory/memory_manager.py:69` |
+| 中期 | 对话摘要 | `MemorySystem._do_consolidate()`（异步） | `memory_manager.py:174` |
+| 长期 | 向量化知识 | `MemorySystem.retrieve_long_term()` / `store.add_texts()` | `memory_manager.py:75` / `:196` |
+| 遗忘 | 访问衰减 | `ForgettingMechanism.score()` | `memory/forgetting.py` |
+| 后台 | 不阻塞主链路 | `ShadowWorker.submit()` | `worker/shadow_worker.py:46` |
+

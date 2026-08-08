@@ -3,82 +3,89 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>legal-doc-rag 架构速览 · 讲解视频</title>
+<title>legal-doc-rag 架构速览 · 讲解视频（含函数映射）</title>
 <style>
 :root{
   --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --txt:#e6edf3; --muted:#8b949e;
   --blue:#1f6feb; --purple:#a371f7; --green:#3fb950; --orange:#d29922; --red:#f85149; --accent:#58a6ff;
+  --t-ctrl:#79c0ff; --t-svc:#d2a8ff; --t-model:#7ee787; --t-sec:#ff7b72; --t-tenant:#e3b341; --t-main:#58a6ff;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
 body{background:var(--bg);color:var(--txt);font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;overflow:hidden}
 #stage{position:fixed;inset:0;display:flex;flex-direction:column}
-.scene{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;padding:56px 64px 120px;opacity:0;transition:opacity .5s}
+.scene{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;padding:48px 60px 120px;opacity:0;transition:opacity .5s}
 .scene.active{display:flex;opacity:1}
 
-/* 标题场景 */
-.title h1{font-size:46px;letter-spacing:3px;background:linear-gradient(90deg,#58a6ff,#a371f7);-webkit-background-clip:text;background-clip:text;color:transparent;margin-bottom:14px}
+.title h1{font-size:44px;letter-spacing:3px;background:linear-gradient(90deg,#58a6ff,#a371f7);-webkit-background-clip:text;background-clip:text;color:transparent;margin-bottom:14px}
 .title .sub{color:var(--muted);font-size:19px;letter-spacing:1px}
 .title .tag{margin-top:26px;color:var(--accent);font-size:15px;border:1px solid #21304a;padding:6px 16px;border-radius:20px}
 
-/* 场景通用标题 */
-.scene-title{font-size:26px;font-weight:600;margin-bottom:30px;letter-spacing:1px;align-self:flex-start;max-width:1100px;width:100%}
+.scene-title{font-size:25px;font-weight:600;margin-bottom:26px;letter-spacing:1px;align-self:flex-start;max-width:1120px;width:100%}
 .scene-title b{color:var(--accent)}
 
-/* MVC 四列 */
-.mvc{display:grid;grid-template-columns:repeat(4,1fr);gap:18px;width:100%;max-width:1100px}
-.col{border-radius:14px;padding:18px;min-height:340px;border:1px solid #2a3340}
-.col h3{font-size:16px;margin-bottom:14px;display:flex;align-items:center;gap:8px}
-.col .chip{background:var(--panel2);border:1px solid #2f3a47;border-radius:8px;padding:9px 11px;margin-bottom:9px;font-size:13.5px;color:#c9d4e0}
-.col .chip small{color:var(--muted);display:block;font-size:11.5px;margin-top:2px}
-.c-view{background:rgba(210,153,34,.08);border-color:#5a4a1e}
-.c-view h3{color:var(--orange)}
-.c-ctrl{background:rgba(31,111,235,.08);border-color:#1f3a63}
-.c-ctrl h3{color:var(--blue)}
-.c-svc{background:rgba(163,113,247,.08);border-color:#3d2f63}
-.c-svc h3{color:var(--purple)}
-.c-model{background:rgba(63,185,80,.08);border-color:#1e4a2b}
-.c-model h3{color:var(--green)}
-.arrow-down{text-align:center;color:var(--muted);font-size:22px;margin:14px 0 4px}
+/* MVC */
+.mvc{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;width:100%;max-width:1120px}
+.col{border-radius:14px;padding:16px;min-height:330px;border:1px solid #2a3340}
+.col h3{font-size:15px;margin-bottom:12px}
+.col .chip{background:var(--panel2);border:1px solid #2f3a47;border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:13px;color:#c9d4e0}
+.col .chip small{color:var(--muted);display:block;font-size:11px;margin-top:2px}
+.c-view{background:rgba(210,153,34,.08);border-color:#5a4a1e}.c-view h3{color:var(--orange)}
+.c-ctrl{background:rgba(31,111,235,.08);border-color:#1f3a63}.c-ctrl h3{color:var(--blue)}
+.c-svc{background:rgba(163,113,247,.08);border-color:#3d2f63}.c-svc h3{color:var(--purple)}
+.c-model{background:rgba(63,185,80,.08);border-color:#1e4a2b}.c-model h3{color:var(--green)}
+.arrow-down{text-align:center;color:var(--muted);font-size:20px;margin:12px 0 4px}
 
-/* 流程步骤 */
-.flow{width:100%;max-width:980px;display:flex;flex-direction:column;gap:10px}
-.step{display:flex;align-items:center;gap:16px;background:var(--panel);border:1px solid #2a3340;border-radius:10px;padding:13px 18px;opacity:.45;transform:translateX(0);transition:all .45s}
-.step .num{flex:0 0 34px;height:34px;border-radius:50%;background:#222c39;display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--muted);font-size:15px}
-.step .body{flex:1}
-.step .body .t{font-size:16px;font-weight:600}
-.step .body .c{font-size:12.5px;color:var(--accent);margin-top:3px;font-family:"SFMono-Regular",Consolas,monospace}
-.step.current{opacity:1;background:var(--panel2);border-color:#3d4d61;transform:translateX(8px);box-shadow:0 0 0 1px #3d4d61,0 8px 30px rgba(0,0,0,.4)}
+/* Flow steps */
+.flow{width:100%;max-width:1000px;display:flex;flex-direction:column;gap:8px}
+.step{display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid #2a3340;border-radius:10px;padding:11px 16px;opacity:.4;transition:all .4s}
+.step .num{flex:0 0 32px;height:32px;border-radius:50%;background:#222c39;display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--muted);font-size:14px}
+.step .body{flex:1;min-width:0}
+.step .body .t{font-size:15.5px;font-weight:600}
+.step .body .c{font-size:12px;color:var(--accent);margin-top:2px;font-family:"SFMono-Regular",Consolas,monospace}
+.step .body .f{font-size:12px;color:var(--green);margin-top:2px;font-family:"SFMono-Regular",Consolas,monospace}
+.step.current{opacity:1;background:var(--panel2);border-color:#3d4d61;transform:translateX(8px);box-shadow:0 0 0 1px #3d4d61,0 8px 26px rgba(0,0,0,.4)}
 .step.current .num{background:var(--accent);color:#04111f}
-.step.danger.current{border-color:var(--red);box-shadow:0 0 0 1px var(--red),0 8px 30px rgba(248,81,73,.18)}
+.step.done{opacity:1;background:var(--panel2);border-color:#2a3340}
+.step.danger.current{border-color:var(--red);box-shadow:0 0 0 1px var(--red),0 8px 26px rgba(248,81,73,.16)}
 .step.danger.current .num{background:var(--red);color:#fff}
-.step.ok.current{border-color:var(--green);box-shadow:0 0 0 1px var(--green),0 8px 30px rgba(63,185,80,.16)}
+.step.ok.current{border-color:var(--green);box-shadow:0 0 0 1px var(--green),0 8px 26px rgba(63,185,80,.14)}
 .step.ok.current .num{background:var(--green);color:#04140a}
-.step.warn.current{border-color:var(--orange);box-shadow:0 0 0 1px var(--orange),0 8px 30px rgba(210,153,34,.16)}
+.step.warn.current{border-color:var(--orange);box-shadow:0 0 0 1px var(--orange),0 8px 26px rgba(210,153,34,.14)}
 .step.warn.current .num{background:var(--orange);color:#1a1205}
 
-/* 考点 */
-.takeaways{width:100%;max-width:1000px;display:flex;flex-direction:column;gap:18px}
-.tw{border-left:4px solid var(--accent);background:var(--panel);border-radius:0 12px 12px 0;padding:18px 22px}
-.tw h4{font-size:18px;margin-bottom:8px;color:var(--accent)}
-.tw p{font-size:15px;color:#c9d4e0;line-height:1.7}
-.tw code{background:#0b1220;border:1px solid #2a3340;border-radius:5px;padding:1px 7px;color:#7ee787;font-size:13px}
+/* Call tree */
+.tree{width:100%;max-width:1080px;background:#0b1220;border:1px solid #2a3340;border-radius:12px;padding:18px 20px;overflow:auto;max-height:62vh}
+.step.codeline{opacity:0;background:transparent;border:none;padding:2px 8px;border-radius:4px;font-size:12.5px;font-family:"SFMono-Regular",Consolas,monospace;white-space:pre;line-height:1.65;transition:opacity .35s}
+.step.codeline.current,.step.codeline.done{opacity:1}
+.step.codeline.current{background:rgba(88,166,255,.12);box-shadow:0 0 0 1px rgba(88,166,255,.4)}
+.t-main{color:var(--t-main);font-weight:700}
+.t-ctrl{color:var(--t-ctrl)}
+.t-svc{color:var(--t-svc)}
+.t-model{color:var(--t-model)}
+.t-sec{color:var(--t-sec)}
+.t-tenant{color:var(--t-tenant)}
 
-/* 字幕 */
-#caption{position:fixed;left:0;right:0;bottom:64px;display:flex;justify-content:center;padding:0 60px;pointer-events:none}
-#caption span{display:none;max-width:1040px;background:rgba(13,17,23,.92);border:1px solid #2a3340;border-radius:12px;padding:14px 24px;font-size:16.5px;line-height:1.6;text-align:center;color:#e6edf3}
+/* Takeaways */
+.takeaways{width:100%;max-width:1000px;display:flex;flex-direction:column;gap:16px}
+.tw{border-left:4px solid var(--accent);background:var(--panel);border-radius:0 12px 12px 0;padding:16px 22px}
+.tw h4{font-size:17px;margin-bottom:7px;color:var(--accent)}
+.tw p{font-size:14.5px;color:#c9d4e0;line-height:1.7}
+.tw code{background:#0b1220;border:1px solid #2a3340;border-radius:5px;padding:1px 7px;color:#7ee787;font-size:12.5px}
+
+#caption{position:fixed;left:0;right:0;bottom:62px;display:flex;justify-content:center;padding:0 56px;pointer-events:none}
+#caption span{display:none;max-width:1060px;background:rgba(13,17,23,.94);border:1px solid #2a3340;border-radius:12px;padding:13px 22px;font-size:16px;line-height:1.6;text-align:center;color:#e6edf3}
 #caption span.show{display:block;animation:fade .4s}
 @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
-/* 控制条 */
-#controls{position:fixed;left:0;right:0;bottom:0;height:56px;background:rgba(13,17,23,.96);border-top:1px solid #1d2530;display:flex;align-items:center;gap:14px;padding:0 24px;z-index:5}
-#controls button{background:var(--panel2);color:var(--txt);border:1px solid #2f3a47;border-radius:8px;padding:7px 14px;font-size:14px;cursor:pointer;transition:.2s}
+#controls{position:fixed;left:0;right:0;bottom:0;height:56px;background:rgba(13,17,23,.96);border-top:1px solid #1d2530;display:flex;align-items:center;gap:12px;padding:0 22px;z-index:5}
+#controls button{background:var(--panel2);color:var(--txt);border:1px solid #2f3a47;border-radius:8px;padding:7px 13px;font-size:13.5px;cursor:pointer;transition:.2s}
 #controls button:hover{border-color:var(--accent);color:var(--accent)}
-#progress{display:flex;gap:8px;margin-left:6px}
+#progress{display:flex;gap:7px;margin-left:4px}
 .dot{width:9px;height:9px;border-radius:50%;background:#30363d;cursor:pointer;transition:.2s}
 .dot.on{background:var(--accent);transform:scale(1.25)}
 #time{margin-left:auto;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
-.scene-name{color:var(--muted);font-size:13px}
+.scene-name{color:var(--muted);font-size:12.5px}
 </style>
 </head>
 <body>
@@ -87,83 +94,113 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,"Segoe UI",
   <!-- 0 标题 -->
   <section class="scene title active">
     <h1>legal-doc-rag 架构速览</h1>
-    <div class="sub">对照 MVC 三层 · 走通双数据流 · 记牢两个考点</div>
-    <div class="tag">自动讲解视频 · 建议静音看字幕，约 2 分钟一遍过</div>
+    <div class="sub">对照 MVC 三层 · 数据流 ↔ 真实函数 · 文件间调用关系</div>
+    <div class="tag">自动讲解视频 · 建议静音看字幕，约 3 分钟一遍过</div>
   </section>
 
   <!-- 1 MVC -->
   <section class="scene">
     <div class="scene-title">一、<b>MVC 三层对照</b>：把项目拆成你最熟的控制器 / 业务 / 数据</div>
     <div class="mvc">
-      <div class="col c-view">
-        <h3>◐ VIEW 视图</h3>
-        <div class="chip">FastAPI 返回的 JSON<small>chat 回复 / 文档列表 / PDF 预览</small></div>
-      </div>
-      <div class="col c-ctrl">
-        <h3>① CONTROLLER 控制器</h3>
-        <div class="chip">documents.py<small>上传 / 列表 / 预览 / 删除</small></div>
+      <div class="col c-view"><h3>◐ VIEW 视图</h3><div class="chip">FastAPI 返回的 JSON<small>chat 回复 / 文档列表 / PDF 预览</small></div></div>
+      <div class="col c-ctrl"><h3>① CONTROLLER 控制器</h3>
+        <div class="chip">documents.py<small>upload / list / preview / delete</small></div>
         <div class="chip">chat.py<small>问答入口</small></div>
         <div class="chip">auth.py<small>JWT 鉴权</small></div>
-        <div class="chip">admin.py / feedback.py<small>统计 / 反馈落盘</small></div>
+        <div class="chip">admin / feedback / category ...</div>
       </div>
-      <div class="col c-svc">
-        <h3>② SERVICE 业务层</h3>
+      <div class="col c-svc"><h3>② SERVICE 业务层</h3>
         <div class="chip">retrieval<small>检索 / 重排 / 改写</small></div>
         <div class="chip">processing<small>PDF 切块</small></div>
         <div class="chip">memory<small>三层记忆</small></div>
         <div class="chip">security<small>路径 / 注入防护</small></div>
         <div class="chip">tenant<small>租户隔离</small></div>
       </div>
-      <div class="col c-model">
-        <h3>③ MODEL 数据层</h3>
+      <div class="col c-model"><h3>③ MODEL 数据层</h3>
         <div class="chip">Chroma 向量库<small>chroma_db/{tenant}</small></div>
         <div class="chip">SQLite<small>tenant_data 注册表</small></div>
         <div class="chip">uploads<small>原始 PDF</small></div>
-        <div class="chip">cache / memory_db<small>查询缓存 / 记忆库</small></div>
+        <div class="chip">cache / memory_db</div>
       </div>
     </div>
-    <div class="arrow-down">↑ 请求流向：View → Controller → Service → Model，数据再原路返回</div>
+    <div class="arrow-down">↑ 请求：View → Controller → Service → Model，数据原路返回</div>
   </section>
 
   <!-- 2 入库 -->
   <section class="scene">
-    <div class="scene-title">二、<b>上传 / 入库链路</b>：一次上传如何变成可检索的向量</div>
-    <div class="flow" id="flow-ingest">
-      <div class="step"><div class="num">1</div><div class="body"><div class="t">上传请求</div><div class="c">POST /api/documents/upload</div></div></div>
-      <div class="step"><div class="num">2</div><div class="body"><div class="t">鉴权</div><div class="c">解 JWT → 拿到 tenant_id</div></div></div>
-      <div class="step danger"><div class="num">3</div><div class="body"><div class="t">安全落盘（红色 = 安全把关）</div><div class="c">get_safe_upload_path → uploads/{tenant}/</div></div></div>
-      <div class="step"><div class="num">4</div><div class="body"><div class="t">PDF 切块</div><div class="c">MultimodalPipeline.process()</div></div></div>
-      <div class="step"><div class="num">5</div><div class="body"><div class="t">向量化</div><div class="c">BGE-M3 embedder → 向量</div></div></div>
-      <div class="step ok"><div class="num">6</div><div class="body"><div class="t">持久化（绿色 = 落盘）</div><div class="c">Chroma.from_texts(persist_directory=chroma_db/{tenant}).persist()</div></div></div>
-      <div class="step"><div class="num">7</div><div class="body"><div class="t">返回 JSON</div><div class="c">{success, chunks, tenant_id}</div></div></div>
+    <div class="scene-title">二、<b>上传 / 入库链路</b>：每步都标了真实 <code style="color:var(--green)">file:function</code></div>
+    <div class="flow">
+      <div class="step"><div class="num">1</div><div class="body"><div class="t">上传请求</div><div class="c">POST /api/documents/upload</div><div class="f">→ documents.py:20  upload_document()</div></div></div>
+      <div class="step"><div class="num">2</div><div class="body"><div class="t">鉴权（Depends）</div><div class="c">解 JWT → 拿 tenant_id</div><div class="f">→ auth.py:79  require_user() → get_user_from_token()</div></div></div>
+      <div class="step danger"><div class="num">3</div><div class="body"><div class="t">安全落盘（红=把关）</div><div class="c">写入 uploads/{tenant}/</div><div class="f">→ security/middleware.py:114  get_safe_upload_path() → sanitize_filename():70 + is_safe_path():102</div></div></div>
+      <div class="step"><div class="num">4</div><div class="body"><div class="t">PDF 切块</div><div class="c">图文提取 + OCR + 分块</div><div class="f">→ processing/multimodal_pipeline.py:29  MultimodalPipeline.process()</div></div></div>
+      <div class="step"><div class="num">5</div><div class="body"><div class="t">向量化</div><div class="c">chunk → 向量</div><div class="f">→ retrieval/embedder_factory.py:35  create_embedder() → DirectEmbed:9</div></div></div>
+      <div class="step ok"><div class="num">6</div><div class="body"><div class="t">持久化（绿=落盘）</div><div class="c">写 chroma_db/{tenant}</div><div class="f">→ Chroma.from_texts(persist_directory=...).persist()  [langchain]</div></div></div>
+      <div class="step"><div class="num">7</div><div class="body"><div class="t">返回 JSON</div><div class="c">{success, chunks, tenant_id}</div><div class="f">→ upload_document() return</div></div></div>
     </div>
   </section>
 
   <!-- 3 查询 -->
   <section class="scene">
-    <div class="scene-title">三、<b>查询 / 问答链路</b>：一个提问如何变成带引用的法律意见</div>
-    <div class="flow" id="flow-query">
-      <div class="step"><div class="num">1</div><div class="body"><div class="t">用户提问</div><div class="c">JWT → tenant_id</div></div></div>
-      <div class="step"><div class="num">2</div><div class="body"><div class="t">载入管道</div><div class="c">_build_pipeline → chroma_db/{tenant}</div></div></div>
-      <div class="step"><div class="num">3</div><div class="body"><div class="t">QueryRewriter 改写</div><div class="c">LLM 改写问题，提升召回</div></div></div>
-      <div class="step"><div class="num">4</div><div class="body"><div class="t">相似检索</div><div class="c">Chroma top-k 召回</div></div></div>
-      <div class="step warn"><div class="num">5</div><div class="body"><div class="t">BGE-Reranker 精排（橙色 = 精度关键）</div><div class="c">Cross-Encoder 重排候选</div></div></div>
-      <div class="step"><div class="num">6</div><div class="body"><div class="t">生成答案</div><div class="c">DeepSeek + CitationTracker 带引用</div></div></div>
-      <div class="step"><div class="num">7</div><div class="body"><div class="t">返回带 source 引用的 JSON</div><div class="c">{answer, sources:[...]}</div></div></div>
+    <div class="scene-title">三、<b>查询 / 问答链路</b>：每步都标了真实 <code style="color:var(--green)">file:function</code></div>
+    <div class="flow">
+      <div class="step"><div class="num">1</div><div class="body"><div class="t">用户提问</div><div class="c">JWT → tenant_id</div><div class="f">→ chat.py:179  chat()（Depends require_user）</div></div></div>
+      <div class="step"><div class="num">2</div><div class="body"><div class="t">载入管道</div><div class="c">按 tenant 载入 Chroma + 实例化组件</div><div class="f">→ chat.py:162  _build_pipeline() → QueryRewriter / QueryCache / CitationTracker</div></div></div>
+      <div class="step"><div class="num">3</div><div class="body"><div class="t">QueryRewriter 改写</div><div class="c">LLM 改写问题，提升召回</div><div class="f">→ retrieval/query_rewriter.py:29  QueryRewriter.rewrite()</div></div></div>
+      <div class="step"><div class="num">4</div><div class="body"><div class="t">相似检索</div><div class="c">稠密 + 稀疏 + RRF 融合</div><div class="f">→ retrieval/hybrid_retriever.py:238  HybridRetriever.retrieve()</div></div></div>
+      <div class="step warn"><div class="num">5</div><div class="body"><div class="t">BGE-Reranker 精排（橙=精度关键）</div><div class="c">Cross-Encoder 重排候选</div><div class="f">→ retrieval/hybrid_retriever.py:42  Reranker.rerank()</div></div></div>
+      <div class="step"><div class="num">6</div><div class="body"><div class="t">生成答案</div><div class="c">DeepSeek + [N] 引用</div><div class="f">→ chat.py:85  call_llm() + citation.py:55  CitationTracker.format_context()</div></div></div>
+      <div class="step"><div class="num">7</div><div class="body"><div class="t">返回带 source 引用的 JSON</div><div class="c">{answer, citations:[...]}</div><div class="f">→ chat() return</div></div></div>
     </div>
   </section>
 
-  <!-- 4 考点 -->
+  <!-- 4 调用关系 -->
   <section class="scene">
-    <div class="scene-title">四、<b>两个最常考的考点</b>（面试 / 白板默写必中）</div>
+    <div class="scene-title">四、<b>文件间调用关系</b>：API 是入口，业务函数散落各层，最终落到存储</div>
+    <div class="tree">
+<div class="step codeline"><span class="t-main">app/main.py</span>  ·  FastAPI 装配入口（include_router ×9）</div>
+<div class="step codeline"><span class="t-ctrl">├─ auth_router        app/api/auth.py</span></div>
+<div class="step codeline">│   ├─ register()         → <span class="t-tenant">tenant/auth.py:104</span> 写 SQLite 用户</div>
+<div class="step codeline">│   ├─ login()            → <span class="t-tenant">tenant/auth.py:137</span> 校验密码</div>
+<div class="step codeline">│   └─ require_user()     → get_user_from_token() 解 JWT 拿 tenant_id</div>
+<div class="step codeline"><span class="t-ctrl">├─ documents_router   app/api/documents.py</span></div>
+<div class="step codeline">│   └─ upload_document()   ← 入库链路入口</div>
+<div class="step codeline">│        ├─ require_user()                  [auth.py:79]</div>
+<div class="step codeline">│        ├─ <span class="t-sec">get_safe_upload_path()</span>          [security/middleware.py:114]</div>
+<div class="step codeline">│        │    ├─ sanitize_filename()        [middleware.py:70]</div>
+<div class="step codeline">│        │    └─ is_safe_path()            [middleware.py:102]  防 ../ 穿越</div>
+<div class="step codeline">│        ├─ <span class="t-svc">MultimodalPipeline.process()</span>    [processing/multimodal_pipeline.py:29]</div>
+<div class="step codeline">│        ├─ <span class="t-svc">create_embedder()</span>              [retrieval/embedder_factory.py:35]</div>
+<div class="step codeline">│        └─ <span class="t-model">Chroma.from_texts().persist()</span>  [langchain]  落盘 chroma_db/{tenant}</div>
+<div class="step codeline"><span class="t-ctrl">├─ chat_router        app/api/chat.py</span></div>
+<div class="step codeline">│   └─ chat()   ← 查询链路入口</div>
+<div class="step codeline">│        ├─ _build_pipeline()               [chat.py:162]</div>
+<div class="step codeline">│        ├─ <span class="t-svc">QueryRewriter.rewrite()</span>         [query_rewriter.py:29]</div>
+<div class="step codeline">│        ├─ <span class="t-svc">MemorySystem.get_context()</span>      [memory/memory_manager.py:135]</div>
+<div class="step codeline">│        ├─ <span class="t-svc">HybridRetriever.retrieve()</span>      [hybrid_retriever.py:238]</div>
+<div class="step codeline">│        │    ├─ _dense_search()           [hybrid_retriever.py:155]  Chroma</div>
+<div class="step codeline">│        │    ├─ _sparse_search()          [hybrid_retriever.py:163]  BM25</div>
+<div class="step codeline">│        │    └─ _rrf_fuse()               [hybrid_retriever.py:171]</div>
+<div class="step codeline">│        ├─ <span class="t-tenant">Reranker.rerank()</span>               [hybrid_retriever.py:42]  BGE 精排</div>
+<div class="step codeline">│        ├─ <span class="t-svc">CitationTracker.*</span>               [citation.py:32]</div>
+<div class="step codeline">│        ├─ <span class="t-svc">QueryCache.get()/set()</span>          [cache.py:22]</div>
+<div class="step codeline">│        ├─ call_llm()                      [chat.py:85]  → DeepSeek</div>
+<div class="step codeline">│        └─ <span class="t-svc">mem.add()/trigger_background_jobs()</span>  [memory_manager.py:69/157]</div>
+<div class="step codeline"><span class="t-ctrl">└─ monitoring_router  observability/monitoring.py</span>  (record_query:126 / TraceContext:41)</div>
+    </div>
+  </section>
+
+  <!-- 5 考点 -->
+  <section class="scene">
+    <div class="scene-title">五、<b>两个最常考的考点</b>（面试 / 白板默写必中）</div>
     <div class="takeaways">
       <div class="tw">
         <h4>① 租户隔离：怎么"按租户目录落盘"</h4>
-        <p>根目录 + <code>tenant_id</code> 拼子目录：<code>uploads/{tid}/</code> 和 <code>chroma_db/{tid}/</code> 是互相独立的物理文件夹。安全靠 <code>get_safe_upload_path</code>（tenant_id 只留 <code>[a-zA-Z0-9_-]</code> + 文件名清洗）再加 <code>is_safe_path</code> 防 <code>../</code> 路径穿越 —— 没有这层，目录隔离反而成漏洞。</p>
+        <p>根目录 + <code>tenant_id</code> 拼子目录：<code>uploads/{tid}/</code> 与 <code>chroma_db/{tid}/</code> 是互相独立的物理文件夹。安全靠 <code>get_safe_upload_path()</code>（middleware.py:114，tenant_id 只留 <code>[a-zA-Z0-9_-]</code> + 文件名清洗）再加 <code>is_safe_path()</code>（:102）防 <code>../</code> 穿越 —— 没有这层，目录隔离反而成漏洞。</p>
       </div>
       <div class="tw">
-        <h4>② 为什么用 hybrid + reranker，而不是纯语义</h4>
-        <p>法律术语要<b>精确匹配</b>避免漏检，所以 BM25 关键字 + 向量双路召回；向量负责"语义相似"，再用 <code>BAAI/bge-reranker-base</code> Cross-Encoder 精排提精度。这是真实现（非嘴上 hybrid），不可用时优雅降级。</p>
+        <h4>② 为什么 hybrid + reranker，而不是纯语义</h4>
+        <p>法律术语要<b>精确匹配</b>避免漏检，所以 BM25 关键字 + 向量双路召回（HybridRetriever.retrieve :238）；向量负责"语义相似"，再用 <code>Reranker.rerank()</code>（:42，BAAI/bge-reranker-base Cross-Encoder）精排提精度。真实实现，不可用时优雅降级。</p>
       </div>
     </div>
   </section>
@@ -185,92 +222,87 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,"Segoe UI",
 <script>
 const scenes = [...document.querySelectorAll('.scene')];
 const capEl = document.querySelector('#caption span');
-const sceneNames = ['标题','MVC 三层','上传入库','查询问答','关键考点'];
+const sceneNames = ['标题','MVC 三层','上传入库','查询问答','调用关系','关键考点'];
 
 const CAP = {
-  0:{_: '欢迎观看 legal-doc-rag 架构速览。我会用你熟悉的 MVC 三层，带你走通两条数据流，最后记两个考点。'},
-  1:{_: '项目本质是经典 MVC：View 是 API 返回的 JSON；Controller 是 app/api 下五个路由，只收请求、做鉴权、调服务；Service 是 retrieval/processing/memory/security/tenant 五个业务模块；Model 是 Chroma、SQLite、uploads、cache、memory_db。关键：每个 Model 按 tenant_id 子目录物理隔离。'},
+  0:{_: '欢迎看 legal-doc-rag 架构速览（含函数映射版）。我会把抽象数据流对到每个文件的具体函数，最后给你一棵树看文件间调用关系。'},
+  1:{_: '项目本质是 MVC：View=API 返回的 JSON；Controller=app/api 下各路由，只收请求、做鉴权、调服务；Service=retrieval/processing/memory/security/tenant；Model=Chroma、SQLite、uploads、cache、memory_db。关键：每个 Model 按 tenant_id 子目录物理隔离。'},
   2:[
-    '第 1 步：客户端 POST /api/documents/upload 发起上传。',
-    '第 2 步：中间件解 JWT，拿出 tenant_id，后续所有落盘都按它分目录。',
-    '第 3 步（红色=安全把关）：get_safe_upload_path 把文件和租户 id 清洗后写到 uploads/{tenant}/，并防 ../ 路径穿越。',
-    '第 4 步：MultimodalPipeline 把 PDF 切成 chunks。',
-    '第 5 步：BGE-M3 embedder 把每个 chunk 转成向量。',
-    '第 6 步（绿色=落盘）：Chroma.from_texts 写入 chroma_db/{tenant} 并 persist()，向量索引真正落到磁盘。',
-    '第 7 步：返回 {success, chunks, tenant_id}，上传完成。'
+    '第1步：客户端 POST /api/documents/upload，由 documents.py:20 的 upload_document() 接收。',
+    '第2步：FastAPI 的 Depends(require_user) 触发 auth.py:79，内部 get_user_from_token() 解 JWT 取出 tenant_id。',
+    '第3步（红=安全把关）：security/middleware.py:114 get_safe_upload_path() 调 sanitize_filename()+is_safe_path()，把文件写到 uploads/{tenant}/，防 ../ 穿越。',
+    '第4步：processing/multimodal_pipeline.py:29 MultimodalPipeline.process() 调 pdf_extractor + OCREngine + 文本分块器，产出 chunks。',
+    '第5步：retrieval/embedder_factory.py:35 create_embedder() 返回 DirectEmbed，调 /embeddings API 把每个 chunk 转成向量。',
+    '第6步（绿=落盘）：Chroma.from_texts(persist_directory=chroma_db/{tenant}).persist() 把向量索引写入该租户目录。',
+    '第7步：upload_document() return {success, chunks, tenant_id}，上传完成。'
   ],
   3:[
-    '第 1 步：用户提问，从 JWT 取出 tenant_id。',
-    '第 2 步：_build_pipeline 按 tenant_id 载入 chroma_db/{tenant}，没建库直接优雅返回空。',
-    '第 3 步：QueryRewriter 用 LLM 改写问题，提升召回率。',
-    '第 4 步：Chroma 做相似检索，召回 top-k 候选。',
-    '第 5 步（橙色=精度关键）：BGE-Reranker 这个 Cross-Encoder 对候选做精排，法律问答靠它提精度。',
-    '第 6 步：DeepSeek 结合重排结果 + CitationTracker 生成带引用的答案。',
-    '第 7 步：返回 {answer, sources:[...]}，每条答案都能溯源到原文。'
+    '第1步：用户提问，chat.py:179 chat() 由 Depends(require_user) 拿到 tenant_id。',
+    '第2步：chat.py:162 _build_pipeline() 按 tenant 载入 Chroma，并实例化 QueryRewriter / QueryCache / CitationTracker。',
+    '第3步：query_rewriter.py:29 QueryRewriter.rewrite() 调 LLM 把问题改写成更利于检索的形式。',
+    '第4步：hybrid_retriever.py:238 HybridRetriever.retrieve() 内部跑稠密(Chroma)+稀疏(BM25)+RRF 融合。',
+    '第5步（橙=精度关键）：hybrid_retriever.py:42 Reranker.rerank() 用 BGE Cross-Encoder 对候选精排。',
+    '第6步：chat.py:85 call_llm()(httpx 调 DeepSeek) + citation.py:55 CitationTracker.format_context() 拼出带 [N] 引用的上下文。',
+    '第7步：chat() return {answer, citations:[...]}，每条答案都能溯源到原文。'
   ],
-  4:{_: '两个最常考点：① 租户隔离 = 根目录 + tenant_id 拼子目录，安全靠 get_safe_upload_path 清洗 + is_safe_path 防 ../ 穿越；② 用 hybrid + reranker 而非纯语义 —— 法律术语要精确匹配避免漏检，向量找语义相似，BGE 精排提精度。记住这两点，架构就吃透了。'}
+  4:{_: '这就是真实的文件间调用关系：app/main.py 用 include_router 装配 9 个路由；API 路由是入口，require_user 统一鉴权，业务函数分散在 retrieval / processing / memory / security / tenant，最终落到 Chroma / SQLite / 磁盘。把这一棵树记住，数据流就和具体函数对上号了。'},
+  5:{_: '两个最常考点：① 租户隔离 = 根目录 + tenant_id 拼子目录，安全靠 get_safe_upload_path()(middleware.py:114) 清洗 + is_safe_path()( :102) 防 ../ 穿越；② hybrid+reranker 而非纯语义 —— 法律术语要精确匹配避免漏检，向量找语义相似，BGE 精排提精度。记住这两点，架构就吃透了。'}
 };
 
 let si = 0, stepIdx = -1, playing = true, elapsed = 0, timer = null;
 
-// 进度点
 const prog = document.getElementById('progress');
-scenes.forEach((_,i)=>{const d=document.createElement('div');d.className='dot';d.onclick=()=>gotoScene(i);prog.appendChild(d);});
+scenes.forEach(()=>{const d=document.createElement('div');d.className='dot';d.onclick=()=>gotoScene(scenes.indexOf(d.__s));prog.appendChild(d);});
+[...prog.children].forEach((d,i)=>d.__s=scenes[i]);
 
 function setDots(){document.querySelectorAll('.dot').forEach((d,i)=>d.classList.toggle('on',i===si));}
-function setName(){document.getElementById('sceneName').textContent = (si+1)+'/'+scenes.length+' · '+sceneNames[si];}
+function setName(){document.getElementById('sceneName').textContent=(si+1)+'/'+scenes.length+' · '+sceneNames[si];}
 
-function showCaption(text){
-  capEl.textContent = text;
-  capEl.classList.remove('show'); void capEl.offsetWidth; capEl.classList.add('show');
-}
-
+function showCaption(text){capEl.textContent=text;capEl.classList.remove('show');void capEl.offsetWidth;capEl.classList.add('show');}
 function renderCaption(){
-  const c = CAP[si];
-  if(Array.isArray(c)){ showCaption(c[Math.max(0,stepIdx)] || c[0]); }
-  else { showCaption(c._); }
+  const c=CAP[si];
+  if(Array.isArray(c)) showCaption(c[Math.max(0,stepIdx)]||c[0]);
+  else showCaption(c._);
 }
 
 function gotoScene(i, resetPlay=true){
   scenes[si]?.classList.remove('active');
-  si = Math.max(0, Math.min(scenes.length-1, i));
+  si=Math.max(0,Math.min(scenes.length-1,i));
   scenes[si].classList.add('active');
-  // 重置本场景步骤高亮
-  const steps = scenes[si].querySelectorAll('.step');
-  steps.forEach(s=>s.classList.remove('current'));
-  stepIdx = steps.length ? 0 : -1;
+  const steps=scenes[si].querySelectorAll('.step');
+  steps.forEach(s=>{s.classList.remove('current');s.classList.remove('done');});
+  stepIdx=steps.length?0:-1;
   if(steps.length) steps[0].classList.add('current');
-  setDots(); setName(); renderCaption();
-  if(resetPlay && !playing){ /* keep paused */ }
+  setDots();setName();renderCaption();
 }
 
 function tick(){
-  elapsed++; document.getElementById('time').textContent = '0:'+String(elapsed).padStart(2,'0');
-  const steps = scenes[si].querySelectorAll('.step');
+  elapsed++;document.getElementById('time').textContent='0:'+String(elapsed).padStart(2,'0');
+  const steps=scenes[si].querySelectorAll('.step');
   if(steps.length){
-    if(stepIdx < steps.length-1){
+    if(stepIdx<steps.length-1){
       steps[stepIdx].classList.remove('current');
+      steps[stepIdx].classList.add('done');
       stepIdx++;
       steps[stepIdx].classList.add('current');
       renderCaption();
       return;
     }
-    // 本场景步骤走完
-    if(si < scenes.length-1){ gotoScene(si+1); return; }
-    pause(); return;
-  } else {
-    if(si < scenes.length-1){ gotoScene(si+1); return; }
-    pause(); return;
+    if(si<scenes.length-1){gotoScene(si+1);return;}
+    pause();return;
+  }else{
+    if(si<scenes.length-1){gotoScene(si+1);return;}
+    pause();return;
   }
 }
 
-function play(){ playing=true; document.getElementById('playBtn').textContent='⏸ 暂停'; timer=setInterval(tick,3400); }
-function pause(){ playing=false; document.getElementById('playBtn').textContent='▶ 播放'; clearInterval(timer); }
+function play(){playing=true;document.getElementById('playBtn').textContent='⏸ 暂停';timer=setInterval(tick,3600);}
+function pause(){playing=false;document.getElementById('playBtn').textContent='▶ 播放';clearInterval(timer);}
 
-document.getElementById('playBtn').onclick=()=> playing?pause():play();
-document.getElementById('prevBtn').onclick=()=>{ pause(); gotoScene(si-1); };
-document.getElementById('nextBtn').onclick=()=>{ pause(); gotoScene(si+1); };
-document.getElementById('restartBtn').onclick=()=>{ elapsed=0; gotoScene(0); play(); };
+document.getElementById('playBtn').onclick=()=>playing?pause():play();
+document.getElementById('prevBtn').onclick=()=>{pause();gotoScene(si-1);};
+document.getElementById('nextBtn').onclick=()=>{pause();gotoScene(si+1);};
+document.getElementById('restartBtn').onclick=()=>{elapsed=0;gotoScene(0);play();};
 
 gotoScene(0);
 play();
