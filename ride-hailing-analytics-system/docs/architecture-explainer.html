@@ -604,7 +604,7 @@ function highlightStep(i){
   updateTime();
 }
 function updatePlayBtn(){document.getElementById('playBtn').textContent = playing ? '⏸ 暂停' : '▶ 播放(带声)';}
-function pause(){ playing=false; updatePlayBtn(); try{ speechSynthesis.pause(); }catch(e){} }
+function pause(){ playing=false; updatePlayBtn(); clearTimeout(fallbackTimer); try{ speechSynthesis.pause(); }catch(e){} }
 
 let treeTimers=[];
 function clearTreeTimers(){ treeTimers.forEach(t=>clearTimeout(t)); treeTimers=[]; }
@@ -637,18 +637,21 @@ if('onvoiceschanged' in speechSynthesis) speechSynthesis.onvoiceschanged = refre
 
 function speakStep(text, done){
   const token = ++narrToken;
-  try{ speechSynthesis.cancel(); }catch(e){}
   clearTimeout(fallbackTimer);
-  const u = new SpeechSynthesisUtterance(text);
-  u.lang='zh-CN';
-  const v = zhVoices.find(v=>v.lang && v.lang.toLowerCase().startsWith('zh')) || zhVoices[0];
-  if(v) u.voice=v;
-  u.rate=1.0; u.pitch=1.0;
-  u.onend   = ()=>{ if(token===narrToken && playing) done(); };
-  u.onerror = ()=>{ if(token===narrToken && playing) done(); };
-  // 兜底：若语音 onend 未触发，按文本长度估算推进
-  fallbackTimer = setTimeout(()=>{ if(token===narrToken && playing) done(); }, Math.max(2800, text.length*170)+1200);
-  speechSynthesis.speak(u);
+  // 兜底定时器：无论语音是否可用，都按文本长度估算推进（保证一定能翻幕）
+  fallbackTimer = setTimeout(()=>{ if(token===narrToken && playing) done(); }, Math.max(2800, text.length*180)+1400);
+  try{
+    if(!('speechSynthesis' in window)) return;   // 无语音能力：静默，靠定时器
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang='zh-CN';
+    const v = zhVoices.find(v=>v.lang && v.lang.toLowerCase().startsWith('zh')) || zhVoices[0];
+    if(v) u.voice=v;
+    u.rate=1.0; u.pitch=1.0;
+    u.onend   = ()=>{ if(token===narrToken && playing) done(); };
+    u.onerror = ()=>{ if(token===narrToken && playing) done(); };
+    speechSynthesis.speak(u);
+  }catch(e){ /* 语音失败，定时器仍会推进 */ }
 }
 
 function startSceneNarr(){
