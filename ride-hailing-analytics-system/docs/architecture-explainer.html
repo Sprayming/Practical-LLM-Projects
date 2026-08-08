@@ -57,7 +57,7 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,"Segoe UI",
 .step.codeline.current,.step.codeline.done{opacity:1}
 .step.codeline.current{background:rgba(88,166,255,.12);box-shadow:0 0 0 1px rgba(88,166,255,.4)}
 /* 调用关系树：进入该幕时整棵 ASCII 树可见并淡入（默认 opacity:0 防首屏闪） */
-.scene.active .tree .step.codeline{opacity:1;animation:treeRowIn .45s ease both}
+.step.codeline.grow{opacity:1;animation:treeRowIn .45s ease both}
 @keyframes treeRowIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
 .t-main{color:var(--t-main);font-weight:700}
 .t-ctrl{color:var(--t-ctrl)}
@@ -606,7 +606,17 @@ function highlightStep(i){
 function updatePlayBtn(){document.getElementById('playBtn').textContent = playing ? '⏸ 暂停' : '▶ 播放(带声)';}
 function pause(){ playing=false; updatePlayBtn(); try{ speechSynthesis.pause(); }catch(e){} }
 
+let treeTimers=[];
+function clearTreeTimers(){ treeTimers.forEach(t=>clearTimeout(t)); treeTimers=[]; }
+function revealTree(sceneEl, stepMs=150){
+  clearTreeTimers();
+  const rows = sceneEl.querySelectorAll('.tree .step.codeline');
+  rows.forEach(r=>{ r.classList.remove('grow'); });
+  rows.forEach((r,i)=>{ const t=setTimeout(()=>{ r.classList.add('grow'); }, 120 + i*stepMs); treeTimers.push(t); });
+}
+
 function gotoScene(i, autoplay){
+  clearTreeTimers();
   scenes[si]?.classList.remove('active');
   si=Math.max(0,Math.min(scenes.length-1,i));
   scenes[si].classList.add('active');
@@ -615,6 +625,7 @@ function gotoScene(i, autoplay){
   stepIdx=steps.length?0:-1;
   if(steps.length) steps[0].classList.add('current');
   setDots();setName();renderCaption();renderCode();updateTime();
+  if(si===4) revealTree(scenes[si], 150);
   if(autoplay) startSceneNarr();
 }
 
