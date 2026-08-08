@@ -183,51 +183,99 @@ async def chat(request: Request, req: ChatRequest, user: dict = Depends(require_
     trace.begin_span("total")
     trace.set_input(req.message)
 
-    #1.检查向量库
-    if vector_store is None:
-        err_msg = {"answer": "请先上传文档", "citations": [], "token_usage": 0}
-        #无论是流式还是非流式，错误时都返回JSON格式
-        return JSONResponse(content=err_msg)
 
-    #2.检查query查询重写
-    queries = qr.rewrite(req.message, num_variants=1) if qr else [req.message]
-    query = queries[0] if queries else req.message
+async def chat(request: Request, req: ChatRequest, user: dict = Depends(require_user)):
+    """处理聊天请求的入口函数"""
+    # 初始化管道和追踪
+    pipeline = _build_pipeline(user["tenant_id"])
+    trace = TraceContext()
+    trace.begin_span("total")
+    trace.set_input(req.message)
 
-    #3.获取记忆以及上下文
-    mem_ctx = mem.get_context(query) if mem else ""
-    cached = cache.get(query) if cache else None
+    # 检查向量库
+    if not pipeline.vector_store:
+        return _handle_vector_store_error()
 
-    #4.命中缓存的处理：流式还是非流式返回
-    if cached:
-        content = cached if isinstance(cached, str) else cached.get("answer", str(cached))
-        if req.stream:
-            #流式缓存：逐字返回类似于打字机
-            async def _cached_stream(): 
-                yield f"data: {json.dumps({'type': 'token', 'content': content})}\n\n"
-                yield f"data: {json.dumps({'type': 'done', 'citations': [], 'token_usage': 0})}\n\n"
-            return StreamingResponse(_cached_stream(), media_type="text/event-stream")
-        else:
-            #非流式缓存：直接返回
-            return JSONResponse(content={"answer": content, "citations": [], "token_usage": 0})
+    # 处理查询
+    query = _process_query(req.message, pipeline.qr)
+    
+    # 检查缓存
+    cached_result = _check_cache(query, pipeline.cache, req.stream)
+    if cached_result:
+        return cached_result
 
-    #5.RAG检索
-    all_texts = []
-    try:
-        all_data = vector_store._collection.get()
-        all_texts = all_data.get("documents", []) or []
-    except Exception:
-        pass
+    # 获取上下文
+    context = _get_context(query, pipeline, req.message, req.history)
+    
+    # 处理响应
+    if req.stream:
+        return await _handle_streaming_response(context, req, pipeline, trace)
+    else:
+        return await _handle_non_streaming_response(context, req, pipeline, trace)
 
-    retriever = HybridRetriever(vector_store, all_texts, k=10)
+def _handle_vector_store_error():
+    """处理向量库不存在的情况"""
+    return JSONResponse(content={"answer": "请先上传文档", "citations": [], "token_usage": 0})
+
+def _process_query(message, qr):
+    """处理查询重写"""
+    queries = qr.rewrite(message, num_variants=1) if qr else [message]
+    return queries[0] if queries else message
+
+def _check_cache(query, cache, is_stream):
+    """检查缓存并返回结果"""
+    if not cache:
+        return None
+        
+    cached = cache.get(query)
+    if not cached:
+        return None
+        
+    content = cached if isinstance(cached, str) else cached.get("answer", str(cached))
+    if is_stream:
+        return _create_streaming_response(content)
+    return JSONResponse(content={"answer": content, "citations": [], "token_usage": 0})
+
+def _create_streaming_response(content):
+    """创建流式响应"""
+    async def stream_generator():
+        yield f"data: {json.dumps({'type': 'token', 'content': content})}\n\n"
+        yield f"data: {json.dumps({'type': 'done', 'citations': [], 'token_usage': 0})}\n\n"
+    return StreamingResponse(stream_generator(), media_type="text/event-stream")
+
+def _get_context(query, pipeline, message, history):
+    """获取RAG上下文和记忆上下文"""
+    # 获取记忆上下文
+    mem_ctx = pipeline.mem.get_context(query) if pipeline.mem else ""
+    
+    # RAG检索
+    all_texts = _get_all_texts(pipeline.vector_store)
+    retriever = HybridRetriever(pipeline.vector_store, all_texts, k=10)
     docs = retriever.retrieve(query)
     docs = _get_reranker().rerank(query, docs, top_k=5)
+    
+    # 格式化上下文
+    ct = ContextTracker()
     ct.add_sources(docs)
     context = ct.format_context()
+    
+    # 构建提示模板
+    return _build_prompt(context, mem_ctx, history, query)
 
-    #6.LLM生成,拼接Prompt
+def _get_all_texts(vector_store):
+    """获取所有文本"""
+    try:
+        all_data = vector_store._collection.get()
+        return all_data.get("documents", []) or []
+    except Exception:
+        return []
+
+def _build_prompt(context, mem_ctx, history, query):
+    """构建提示模板"""
     history_text = ""
-    for m in (req.history or [])[-4:]:
+    for m in (history or [])[-4:]:
         history_text += f"{m.get('role', 'user')}: {m.get('content', '')[:200]} " + chr(10)
+    
     PROMPT_TEMPLATE = """你是一个法律专家助手。回答基于提供的文本。
 
     参考文本:
@@ -242,181 +290,375 @@ async def chat(request: Request, req: ChatRequest, user: dict = Depends(require_
     问题: {question}
 
     要求: 使用 [N] 引用相关文本片段。如果文本不包含答案，请明确说明。"""
-
-    prompt = PROMPT_TEMPLATE.format(
+    
+    return PROMPT_TEMPLATE.format(
         context=context,
         memory=mem_ctx,
         history=history_text,
         question=query
     )
 
-
-    # ==========================================
-    # 7. 核心分流：根据 req.stream 走不同的大模型调用逻辑
-    # ==========================================
-    
-    if req.stream:
-        # 【流式响应分支】
-        async def generate() -> AsyncGenerator[str, None]:
-            full_answer = ""
-            start_time = time.time()  # Record start time for metrics
-            last_yield_time = time.time() # 记录最后一次 yield 的时间
-            try:
-                # 👉 使用 httpx 异步流式请求
-                async with httpx.AsyncClient(timeout=60, verify=True) as client:
-                    async with client.stream("POST",
-                        f"{cfg.LLM_BASE_URL}/chat/completions",
-                        headers={"Authorization": f"Bearer {cfg.LLM_API_KEY}", "Content-Type": "application/json"},
-                        json={"model": cfg.LLM_MODEL, "messages": [{"role": "user", "content": prompt}], "stream": True, "temperature": 0.1, "max_tokens": 1024}
-                    ) as resp:
-                        async for line in resp.aiter_lines():
-                            if line and line.startswith("data: "):
-                                data_str = line[6:]
-                                if data_str == "[DONE]":break
-                                try:
-                                    chunk = json.loads(data_str)
-                                    token = chunk["choices"][0].get("delta", {}).get("content", "")
-                                    if token:
-                                        full_answer += token
-                                        yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
-                                        last_yield_time = time.time() # 更新最后一次 yield 的时间
-                                except json.JSONDecodeError:
-                                    continue
-
-                                #检查是否需要发送心跳检测，防止连接超时断连
-                                current_time = time.time()
-                                if current_time - last_yield_time > 30:
-                                    yield f"data: {json.dumps({'type': 'token', 'content': ''})}\n\n"
-                                    last_yield_time = time.time() # 更新最后一次 yield 的时间
-                           
-            except Exception as e:
-                yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
-                return
-                
-            # 流式结束后，处理引用、缓存和记忆
-            sources = ct.get_sources()
-            citations = [{"source": s.source if hasattr(s, 'source') else "", "content": s.page_content[:200] if hasattr(s, 'page_content') else str(s)[:200]} for s in sources]
-            
-            # if cache:
-            #     try: cache.set(query, full_answer)
-            #     except Exception as e:
-            #         _log.error(f"内存更新失败: {str(e)}") # 👉 记录异常日志以及具体的错误
-            # if mem:
-            #     try:
-            #         mem.add("user", req.message)
-            #         mem.add("assistant", full_answer)
-            #         mem.trigger_background_jobs(call_llm)  # 👉 传入异步函数引用
-            #     except Exception as e:
-            #          _log.error(f"内存更新失败: {str(e)}") # 👉 记录异常日志以及具体的错误
-
-         
-            # 1. 处理缓存
-            if cache:
-                try:
-                    cache.set(query, full_answer)
-                except IOError as e:
-                    # 磁盘IO错误（如磁盘满、权限问题）
-                    _log.error(f"缓存写入IO错误: {str(e)}")
-                    # 可以考虑发送告警通知运维
-                except MemoryError as e:
-                    # 内存不足错误
-                    _log.error(f"缓存内存不足: {str(e)}")
-                    # 可以考虑清理其他缓存或降级处理
-                except Exception as e:
-                    # 其他未知错误
-                    _log.error(f"缓存写入失败: {str(e)}")
-                    # 记录完整的错误堆栈
-                    _log.exception("缓存写入详细错误")
-
-            # 2. 处理记忆系统
-            if mem:
-                try:
-                    # 先保存用户输入
-                    mem.add("user", req.message)
-                    # 再保存助手回答
-                    mem.add("assistant", full_answer)
-                    # 触发后台任务（如记忆摘要、向量化等）
-                    mem.trigger_background_jobs(call_llm)
-                except MemoryError as e:
-                    # 内存系统错误（如数据库连接失败）
-                    _log.error(f"记忆系统错误: {str(e)}")
-                    # 可以考虑降级处理，比如暂时禁用记忆功能
-                except Exception as e:
-                    # 其他未知错误
-                    _log.error(f"记忆系统更新失败: {str(e)}")
-                    # 记录完整的错误堆栈
-                    _log.exception("记忆系统详细错误")
-
-                # Record metrics for streaming response
-                record_query(
-                    duration_ms=(time.time() - start_time) * 1000,
-                    token_usage=0,  # Token usage not easily available in streaming
-                    success=True,
-                    source="api_stream"
-                )
-
-            yield f"data: {json.dumps({'type': 'done', 'citations': citations, 'token_usage': 0})}\n\n"
-            
-        return StreamingResponse(generate(), media_type="text/event-stream")
+async def _handle_streaming_response(context, req, pipeline, trace):
+    """处理流式响应"""
+    async def generate():
+        full_answer = ""
+        start_time = time.time()
+        last_yield_time = time.time()
         
-    else:
-        # 【非流式响应分支】
-        trace.begin_span("llm")
-        token_usage = 0
         try:
-            # 👉 使用 httpx 异步非流式请求
             async with httpx.AsyncClient(timeout=60, verify=True) as client:
-                r = await client.post(
+                async with client.stream("POST",
                     f"{cfg.LLM_BASE_URL}/chat/completions",
                     headers={"Authorization": f"Bearer {cfg.LLM_API_KEY}", "Content-Type": "application/json"},
-                    json={"model": cfg.LLM_MODEL, "messages": [{"role": "user", "content": prompt}], "temperature": 0.1, "max_tokens": 1024}
-                )
-                r.raise_for_status()
-                data = r.json()
-                answer = data["choices"][0]["message"]["content"]
-                token_usage = data.get("usage", {}).get("total_tokens", 0)
+                    json={"model": cfg.LLM_MODEL, "messages": [{"role": "user", "content": context}], "stream": True, "temperature": 0.1, "max_tokens": 1024}
+                ) as resp:
+                    async for line in resp.aiter_lines():
+                        if line and line.startswith("data: "):
+                            data_str = line[6:]
+                            if data_str == "[DONE]": break
+                            
+                            try:
+                                chunk = json.loads(data_str)
+                                token = chunk["choices"][0].get("delta", {}).get("content", "")
+                                if token:
+                                    full_answer += token
+                                    yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+                                    last_yield_time = time.time()
+                            except json.JSONDecodeError:
+                                continue
+                            
+                            # 心跳检测
+                            if time.time() - last_yield_time > 30:
+                                yield f"data: {json.dumps({'type': 'token', 'content': ''})}\n\n"
+                                last_yield_time = time.time()
         except Exception as e:
-            return JSONResponse(content={"answer": f"LLM调用异常: {str(e)}", "citations": [], "token_usage": 0})
-            
-        # 非流式结束后，处理引用、缓存和记忆
-        sources = ct.get_sources()
-        citations = [{"source": s.source if hasattr(s, 'source') else "", "content": s.page_content[:200] if hasattr(s, 'page_content') else str(s)[:200]} for s in sources]
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+            return
         
-        # if cache:
-        #     try: cache.set(query, answer)
-        #     except Exception as e:
-        #         _log.error(f"内存更新失败: {str(e)}") # 👉 记录异常日志以及具体的错误
-        if cache:
-            try:
-                cache.set(query, answer)
-            except IOError as e:
-                _log.error(f"缓存IO错误: {str(e)}")
-            except Exception as e:
-                _log.error(f"缓存写入失败: {str(e)}")
-
-        if mem:
-            try:
-                mem.add("user", req.message)
-                mem.add("assistant", answer)
-                mem.trigger_background_jobs(call_llm)
-            except MemoryError as e:
-                _log.error(f"内存错误: {str(e)}")
-            except Exception as e:
-                _log.error(f"内存更新失败: {str(e)}")
-
-        trace.end_span()
-        trace.set_output(str(answer)[:500])
-        trace.set_tokens(token_usage)
-        trace.print_summary()
-        _log.query(req.message, len(answer), token_usage, trace.total_duration_ms(), False)
-
-        # Record metrics for monitoring
+        # 处理缓存和记忆
+        await _handle_post_processing(req.message, full_answer, pipeline)
+        
+        # 处理引用和结束信号
+        citations = _get_citations(pipeline.ct)
+        yield f"data: {json.dumps({'type': 'done', 'citations': citations, 'token_usage': 0})}\n\n"
+        
+        # 记录指标
         record_query(
-            duration_ms=trace.total_duration_ms(),
-            token_usage=token_usage,
+            duration_ms=(time.time() - start_time) * 1000,
+            token_usage=0,
             success=True,
-            source="api"
+            source="api_stream"
         )
+    
+    return StreamingResponse(generate(), media_type="text/event-stream")
 
-        # 👉 必须使用 JSONResponse 返回，保证与流式分支的返回类型兼容
-        return JSONResponse(content={"answer": answer, "citations": citations, "token_usage": token_usage})
+async def _handle_non_streaming_response(context, req, pipeline, trace):
+    """处理非流式响应"""
+    trace.begin_span("llm")
+    token_usage = 0
+    
+    try:
+        async with httpx.AsyncClient(timeout=60, verify=True) as client:
+            r = await client.post(
+                f"{cfg.LLM_BASE_URL}/chat/completions",
+                headers={"Authorization": f"Bearer {cfg.LLM_API_KEY}", "Content-Type": "application/json"},
+                json={"model": cfg.LLM_MODEL, "messages": [{"role": "user", "content": context}], "temperature": 0.1, "max_tokens": 1024}
+            )
+            r.raise_for_status()
+            data = r.json()
+            answer = data["choices"][0]["message"]["content"]
+            token_usage = data.get("usage", {}).get("total_tokens", 0)
+    except Exception as e:
+        return JSONResponse(content={"answer": f"LLM调用异常: {str(e)}", "citations": [], "token_usage": 0})
+    
+    # 处理缓存和记忆
+    await _handle_post_processing(req.message, answer, pipeline)
+    
+    # 处理追踪和日志
+    trace.end_span()
+    trace.set_output(str(answer)[:500])
+    trace.set_tokens(token_usage)
+    trace.print_summary()
+    _log.query(req.message, len(answer), token_usage, trace.total_duration_ms(), False)
+    
+    # 记录指标
+    record_query(
+        duration_ms=trace.total_duration_ms(),
+        token_usage=token_usage,
+        success=True,
+        source="api"
+    )
+    
+    return JSONResponse(content={"answer": answer, "citations": _get_citations(pipeline.ct), "token_usage": token_usage})
+
+async def _handle_post_processing(message, answer, pipeline):
+    """处理缓存和记忆"""
+    # 处理缓存
+    if pipeline.cache:
+        try:
+            pipeline.cache.set(_get_query(message), answer)
+        except Exception as e:
+            _log.error(f"缓存写入失败: {str(e)}")
+    
+    # 处理记忆
+    if pipeline.mem:
+        try:
+            pipeline.mem.add("user", message)
+            pipeline.mem.add("assistant", answer)
+            pipeline.mem.trigger_background_jobs(call_llm)
+        except Exception as e:
+            _log.error(f"记忆更新失败: {str(e)}")
+
+def _get_citations(context_tracker):
+    """获取引用列表"""
+    sources = context_tracker.get_sources()
+    return [{"source": s.source if hasattr(s, 'source') else "", 
+             "content": s.page_content[:200] if hasattr(s, 'page_content') else str(s)[:200]} 
+            for s in sources]
+
+
+
+# async def chat(request: Request, req: ChatRequest, user: dict = Depends(require_user)):
+#     embedder, vector_store, qr, cache, ct = _build_pipeline(user["tenant_id"])
+#     mem = _get_memory(user["tenant_id"], embedder) if embedder else None
+#     trace = TraceContext()
+#     trace.begin_span("total")
+#     trace.set_input(req.message)
+
+#     #1.检查向量库
+#     if vector_store is None:
+#         err_msg = {"answer": "请先上传文档", "citations": [], "token_usage": 0}
+#         #无论是流式还是非流式，错误时都返回JSON格式
+#         return JSONResponse(content=err_msg)
+
+#     #2.检查query查询重写
+#     queries = qr.rewrite(req.message, num_variants=1) if qr else [req.message]
+#     query = queries[0] if queries else req.message
+
+#     #3.获取记忆以及上下文
+#     mem_ctx = mem.get_context(query) if mem else ""
+#     cached = cache.get(query) if cache else None
+
+#     #4.命中缓存的处理：流式还是非流式返回
+#     if cached:
+#         content = cached if isinstance(cached, str) else cached.get("answer", str(cached))
+#         if req.stream:
+#             #流式缓存：逐字返回类似于打字机
+#             async def _cached_stream(): 
+#                 yield f"data: {json.dumps({'type': 'token', 'content': content})}\n\n"
+#                 yield f"data: {json.dumps({'type': 'done', 'citations': [], 'token_usage': 0})}\n\n"
+#             return StreamingResponse(_cached_stream(), media_type="text/event-stream")
+#         else:
+#             #非流式缓存：直接返回
+#             return JSONResponse(content={"answer": content, "citations": [], "token_usage": 0})
+
+#     #5.RAG检索
+#     all_texts = []
+#     try:
+#         all_data = vector_store._collection.get()
+#         all_texts = all_data.get("documents", []) or []
+#     except Exception:
+#         pass
+
+#     retriever = HybridRetriever(vector_store, all_texts, k=10)
+#     docs = retriever.retrieve(query)
+#     docs = _get_reranker().rerank(query, docs, top_k=5)
+#     ct.add_sources(docs)
+#     context = ct.format_context()
+
+#     #6.LLM生成,拼接Prompt
+#     history_text = ""
+#     for m in (req.history or [])[-4:]:
+#         history_text += f"{m.get('role', 'user')}: {m.get('content', '')[:200]} " + chr(10)
+#     PROMPT_TEMPLATE = """你是一个法律专家助手。回答基于提供的文本。
+
+#     参考文本:
+#     {context}
+
+#     记忆上下文:
+#     {memory}
+
+#     对话历史:
+#     {history}
+
+#     问题: {question}
+
+#     要求: 使用 [N] 引用相关文本片段。如果文本不包含答案，请明确说明。"""
+
+#     prompt = PROMPT_TEMPLATE.format(
+#         context=context,
+#         memory=mem_ctx,
+#         history=history_text,
+#         question=query
+#     )
+
+
+#     # ==========================================
+#     # 7. 核心分流：根据 req.stream 走不同的大模型调用逻辑
+#     # ==========================================
+    
+#     if req.stream:
+#         # 【流式响应分支】
+#         async def generate() -> AsyncGenerator[str, None]:
+#             full_answer = ""
+#             start_time = time.time()  # Record start time for metrics
+#             last_yield_time = time.time() # 记录最后一次 yield 的时间
+#             try:
+#                 # 👉 使用 httpx 异步流式请求
+#                 async with httpx.AsyncClient(timeout=60, verify=True) as client:
+#                     async with client.stream("POST",
+#                         f"{cfg.LLM_BASE_URL}/chat/completions",
+#                         headers={"Authorization": f"Bearer {cfg.LLM_API_KEY}", "Content-Type": "application/json"},
+#                         json={"model": cfg.LLM_MODEL, "messages": [{"role": "user", "content": prompt}], "stream": True, "temperature": 0.1, "max_tokens": 1024}
+#                     ) as resp:
+#                         async for line in resp.aiter_lines():
+#                             if line and line.startswith("data: "):
+#                                 data_str = line[6:]
+#                                 if data_str == "[DONE]":break
+#                                 try:
+#                                     chunk = json.loads(data_str)
+#                                     token = chunk["choices"][0].get("delta", {}).get("content", "")
+#                                     if token:
+#                                         full_answer += token
+#                                         yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+#                                         last_yield_time = time.time() # 更新最后一次 yield 的时间
+#                                 except json.JSONDecodeError:
+#                                     continue
+
+#                                 #检查是否需要发送心跳检测，防止连接超时断连
+#                                 current_time = time.time()
+#                                 if current_time - last_yield_time > 30:
+#                                     yield f"data: {json.dumps({'type': 'token', 'content': ''})}\n\n"
+#                                     last_yield_time = time.time() # 更新最后一次 yield 的时间
+                           
+#             except Exception as e:
+#                 yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+#                 return
+                
+#             # 流式结束后，处理引用、缓存和记忆
+#             sources = ct.get_sources()
+#             citations = [{"source": s.source if hasattr(s, 'source') else "", "content": s.page_content[:200] if hasattr(s, 'page_content') else str(s)[:200]} for s in sources]
+            
+#             # if cache:
+#             #     try: cache.set(query, full_answer)
+#             #     except Exception as e:
+#             #         _log.error(f"内存更新失败: {str(e)}") # 👉 记录异常日志以及具体的错误
+#             # if mem:
+#             #     try:
+#             #         mem.add("user", req.message)
+#             #         mem.add("assistant", full_answer)
+#             #         mem.trigger_background_jobs(call_llm)  # 👉 传入异步函数引用
+#             #     except Exception as e:
+#             #          _log.error(f"内存更新失败: {str(e)}") # 👉 记录异常日志以及具体的错误
+
+         
+#             # 1. 处理缓存
+#             if cache:
+#                 try:
+#                     cache.set(query, full_answer)
+#                 except IOError as e:
+#                     # 磁盘IO错误（如磁盘满、权限问题）
+#                     _log.error(f"缓存写入IO错误: {str(e)}")
+#                     # 可以考虑发送告警通知运维
+#                 except MemoryError as e:
+#                     # 内存不足错误
+#                     _log.error(f"缓存内存不足: {str(e)}")
+#                     # 可以考虑清理其他缓存或降级处理
+#                 except Exception as e:
+#                     # 其他未知错误
+#                     _log.error(f"缓存写入失败: {str(e)}")
+#                     # 记录完整的错误堆栈
+#                     _log.exception("缓存写入详细错误")
+
+#             # 2. 处理记忆系统
+#             if mem:
+#                 try:
+#                     # 先保存用户输入
+#                     mem.add("user", req.message)
+#                     # 再保存助手回答
+#                     mem.add("assistant", full_answer)
+#                     # 触发后台任务（如记忆摘要、向量化等）
+#                     mem.trigger_background_jobs(call_llm)
+#                 except MemoryError as e:
+#                     # 内存系统错误（如数据库连接失败）
+#                     _log.error(f"记忆系统错误: {str(e)}")
+#                     # 可以考虑降级处理，比如暂时禁用记忆功能
+#                 except Exception as e:
+#                     # 其他未知错误
+#                     _log.error(f"记忆系统更新失败: {str(e)}")
+#                     # 记录完整的错误堆栈
+#                     _log.exception("记忆系统详细错误")
+
+#                 # Record metrics for streaming response
+#                 record_query(
+#                     duration_ms=(time.time() - start_time) * 1000,
+#                     token_usage=0,  # Token usage not easily available in streaming
+#                     success=True,
+#                     source="api_stream"
+#                 )
+
+#             yield f"data: {json.dumps({'type': 'done', 'citations': citations, 'token_usage': 0})}\n\n"
+            
+#         return StreamingResponse(generate(), media_type="text/event-stream")
+        
+#     else:
+#         # 【非流式响应分支】
+#         trace.begin_span("llm")
+#         token_usage = 0
+#         try:
+#             # 👉 使用 httpx 异步非流式请求
+#             async with httpx.AsyncClient(timeout=60, verify=True) as client:
+#                 r = await client.post(
+#                     f"{cfg.LLM_BASE_URL}/chat/completions",
+#                     headers={"Authorization": f"Bearer {cfg.LLM_API_KEY}", "Content-Type": "application/json"},
+#                     json={"model": cfg.LLM_MODEL, "messages": [{"role": "user", "content": prompt}], "temperature": 0.1, "max_tokens": 1024}
+#                 )
+#                 r.raise_for_status()
+#                 data = r.json()
+#                 answer = data["choices"][0]["message"]["content"]
+#                 token_usage = data.get("usage", {}).get("total_tokens", 0)
+#         except Exception as e:
+#             return JSONResponse(content={"answer": f"LLM调用异常: {str(e)}", "citations": [], "token_usage": 0})
+            
+#         # 非流式结束后，处理引用、缓存和记忆
+#         sources = ct.get_sources()
+#         citations = [{"source": s.source if hasattr(s, 'source') else "", "content": s.page_content[:200] if hasattr(s, 'page_content') else str(s)[:200]} for s in sources]
+        
+#         # if cache:
+#         #     try: cache.set(query, answer)
+#         #     except Exception as e:
+#         #         _log.error(f"内存更新失败: {str(e)}") # 👉 记录异常日志以及具体的错误
+#         if cache:
+#             try:
+#                 cache.set(query, answer)
+#             except IOError as e:
+#                 _log.error(f"缓存IO错误: {str(e)}")
+#             except Exception as e:
+#                 _log.error(f"缓存写入失败: {str(e)}")
+
+#         if mem:
+#             try:
+#                 mem.add("user", req.message)
+#                 mem.add("assistant", answer)
+#                 mem.trigger_background_jobs(call_llm)
+#             except MemoryError as e:
+#                 _log.error(f"内存错误: {str(e)}")
+#             except Exception as e:
+#                 _log.error(f"内存更新失败: {str(e)}")
+
+#         trace.end_span()
+#         trace.set_output(str(answer)[:500])
+#         trace.set_tokens(token_usage)
+#         trace.print_summary()
+#         _log.query(req.message, len(answer), token_usage, trace.total_duration_ms(), False)
+
+#         # Record metrics for monitoring
+#         record_query(
+#             duration_ms=trace.total_duration_ms(),
+#             token_usage=token_usage,
+#             success=True,
+#             source="api"
+#         )
+
+#         # 👉 必须使用 JSONResponse 返回，保证与流式分支的返回类型兼容
+#         return JSONResponse(content={"answer": answer, "citations": citations, "token_usage": token_usage})
