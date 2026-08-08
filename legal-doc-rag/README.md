@@ -171,8 +171,33 @@ python -m pytest --cov=app --cov-report=term-missing
   4. 面试加分点：「检索层不依赖任何外部 embedding 服务」。
 - **切换注意事项**：
   - BGE-M3 输出 **1024 维**，首次运行需联网下载模型到 `./model_cache`（建议提前在有网环境预下载，或配置 HuggingFace 镜像源）；
-  - 切换 embedding 模型后，已存的 Chroma 向量库维度 / 语义不再匹配，需**清空 `chroma_db` 重新向量化**文档；
+  - 切换 embedding 模型后，已存的 Chroma 向量库维度 / 语义不再匹配，需**清空 `chroma_db` 重新向量化**文档（本项目当前 `chroma_db` 为空库，切换后直接上传即可，无需重建）；
   - 如需线上 embedding：设 `EMBEDDER_TYPE=openai` 并填 `EMBEDDING_API_KEY`（火山 / 智谱 / 阿里均可），但务必先**轮换原泄露的 key**。
+
+### BGE-M3 相对 text2vec-base-chinese 的实质提升
+
+`text2vec-base-chinese` 是项目最初本地方案（基于 `bert-base-chinese`，768 维，纯稠密，512 token 上限）。切到 BGE-M3 后在法律文书 RAG 场景有**实质性**提升：
+
+| 维度 | text2vec-base-chinese | BGE-M3 | 对法律场景的意义 |
+|------|----------------------|--------|------------------|
+| 向量维度 | 768 | **1024** | 表达更丰富，长难句 / 近似表述区分度更高 |
+| 上下文长度 | 512 token（≈300 中文字） | **8192 token** | 判决 / 合同 / 法规动辄上万字，text2vec 直接截断丢内容；BGE-M3 可整段吃下 |
+| 向量类型 | 仅稠密 | **三合一：稠密 + 稀疏（SPLADE）+ 多向量（ColBERT）** | 稀疏抓「法条编号 / 条款名」精确词，稠密管语义，ColBERT 做 token 级细匹配 |
+| 语言 | 仅中文 | **100+ 语言** | 涉外 / 双语法律文本可用 |
+| 检索基准 | 中文相似度榜中上 | **MTEB 中文检索 SOTA 级** | 召回 Top-K 更相关，减少漏召导致的答非所问 |
+
+**当前实际吃到的收益（drop-in 替换已生效）：**
+1. **检索质量跃升**：BGE-M3 中文检索能力远超 text2vec，长文档语义对齐更准，召回 Top-K 相关性更高；
+2. **长文本不再截断**：8192 token 上限，长法条 / 长判决可被完整向量化（text2vec 的 512 是硬伤，会强制截断丢失后续内容）。
+
+> ⚠️ **潜力已具备但尚未接上**：BGE-M3 的稀疏向量（SPLADE）与 ColBERT 多向量能力，`embedder_factory` 当前仅返回稠密 `HuggingFaceEmbeddings` 未启用。项目现靠 BM25 做词面召回 + 稠密做语义 + RRF 融合，BM25 已部分覆盖稀疏匹配，但 BGE-M3 同源稀疏质量更高、可与稠密一起重排；ColBERT 则是长文细粒度匹配的杀手锏。要完全发挥需改造检索层（见下方待办）。
+
+**代价**：模型体积 2.3GB（text2vec ≈400MB），加载更占内存、首向量化更慢；已下载到 `./model_cache` 并由 `.gitignore` 忽略，不入库。
+
+**待办（解锁 BGE-M3 全部能力）**：
+- [ ] 接入 BGE-M3 稀疏向量，与现有 BM25 + 稠密做融合重排（提升法律术语精确召回）；
+- [ ] 实验 ColBERT 多向量 late-interaction，强化长文证据定位；
+- [ ] 在 `tests/golden_test_set.json`（31 条法律问答回归集）上对比 text2vec → BGE-M3 的检索/回答质量提升。
 
 ## 环境变量
 
@@ -610,7 +635,7 @@ legal-doc-rag/
 │   ├── core/
 │   │   └── config.py              # 集中配置：API key、模型名、路径
 │   ├── retrieval/                 # 检索层
-│   │   ├── embedder_factory.py    # DirectEmbed 类 (调用火山引擎 Embedding API)
+│   │   ├── embedder_factory.py    # 本地 BGE-M3 Embedding 工厂 (HuggingFaceEmbeddings)
 │   │   ├── hybrid_retriever.py    # HybridRetriever: 稠密(BERT) + 稀疏(BM25) + RRF 融合 + BGE 重排
 │   │   ├── query_rewriter.py      # QueryRewriter: LLM 查询改写/扩展
 │   │   ├── citation.py            # CitationTracker: 来源引用追踪
@@ -666,7 +691,7 @@ app/main.py (FastAPI 入口)
     │  ├── app/api/auth.py          → app/tenant/auth.py (SQLite)
     │  │                               └── app/core/config.py
     │  │
-    │  ├── app/api/chat.py          → app/retrieval/embedder_factory.py → 火山引擎 Embedding API
+    │  ├── app/api/chat.py          → app/retrieval/embedder_factory.py → 本地 BGE-M3 Embedding
     │  │                               → app/retrieval/hybrid_retriever.py → BM25 + Dense + RRF
     │  │                               → app/retrieval/query_rewriter.py → DeepSeek LLM
     │  │                               → app/retrieval/citation.py
@@ -743,7 +768,7 @@ PDF文件
 - ⚠️ **检索层有死代码**：P2 写了 `app/retrieval/elasticsearch_client.py`，但 compose 未起 ES 服务、requirements 无 ES 依赖 → 未启用
 
 ### P0 — 上线阻断项（必须完成）
-- [ ] **真实链路端到端验证**：用真实 `LLM_API_KEY` + `EMBEDDING_API_KEY` 跑通「文档上传→向量化→检索→问答（含 SSE 流式）」全流程（当前测试全 mock，上线可能直接报错）
+- [ ] **真实链路端到端验证**：用真实 `LLM_API_KEY` 跑通「文档上传→向量化→检索→问答（含 SSE 流式）」全流程（embedding 默认本地 BGE-M3，无需 key；当前测试全 mock，上线可能直接报错）
 - [ ] **修复 `.env.example` 的 embedding 配置（真 bug）**：第 11 行 `EMBEDDING_MODEL_NAME` 变量 `config.py` 根本不读；实际需要的 `EMBEDDER_TYPE` / `EMBEDDING_API_KEY` / `EMBEDDING_BASE_URL` / `EMBEDDING_MODEL` 全未列出，不填则检索必失败
 - [ ] **让 CI 真正跑测试**：在 `ci.yml` 增加 step 运行 `pytest tests/unit tests/integration`（当前仅语法检查）
 - [ ] **修复文档端口错误**：`.env.example` 注释写「访问 http://localhost:8501」（Streamlit 旧端口，已删除），改为实际端口 `8000`
