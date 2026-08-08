@@ -196,7 +196,7 @@ python -m pytest --cov=app --cov-report=term-missing
 
 **待办（解锁 BGE-M3 全部能力）**：
 - [x] 接入 BGE-M3 稀疏向量，与现有 BM25 + 稠密做融合重排（提升法律术语精确召回）；
-  - 实现：`app/retrieval/bge_m3_embedder.py` 自计算 SPLADE 权重（确定性 `gather`，不经 FlagEmbedding 的 `scatter_reduce`），`sparse_store.py` 落盘/加载，`HybridRetriever._sparse_search_bge` 与 BM25 + 稠密做 RRF 加权融合。回归测试 `tests/unit/test_bge_m3_sparse.py` 覆盖非空/确定性/特殊 token 过滤。
+  - 实现：`app/retrieval/bge_m3_embedder.py` 自计算 SPLADE 权重。BGE-M3 稀疏头是 `Linear(H,1)` 逐位置标量门控，本模块按 `input_ids` 取每个 token 的**最大门控权重（amax 聚合）**组装为 `{token_id: weight}`（确定性 Python 实现，等效于 FlagEmbedding 的 `scatter_reduce(amax)`，但规避了其在 CPU 下偶发整条丢值的 bug）；`sparse_store.py` 落盘/加载，`HybridRetriever._sparse_search_bge` 与 BM25 + 稠密做 RRF 加权融合。回归测试 `tests/unit/test_bge_m3_sparse.py` 覆盖非空/确定性/特殊 token 过滤。
 - [ ] 实验 ColBERT 多向量 late-interaction，强化长文证据定位；
 - [ ] 在 `tests/golden_test_set.json`（31 条法律问答回归集）上对比 text2vec → BGE-M3 的检索/回答质量提升。
 
