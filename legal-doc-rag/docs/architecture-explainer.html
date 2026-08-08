@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>legal-doc-rag 架构速览 · 讲解视频（含函数映射）</title>
+<title>legal-doc-rag 架构速览 · 讲解视频（含真实源码）</title>
 <style>
 :root{
   --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --txt:#e6edf3; --muted:#8b949e;
@@ -21,7 +21,7 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,"Segoe UI",
 .title .sub{color:var(--muted);font-size:19px;letter-spacing:1px}
 .title .tag{margin-top:26px;color:var(--accent);font-size:15px;border:1px solid #21304a;padding:6px 16px;border-radius:20px}
 
-.scene-title{font-size:25px;font-weight:600;margin-bottom:26px;letter-spacing:1px;align-self:flex-start;max-width:1120px;width:100%}
+.scene-title{font-size:25px;font-weight:600;margin-bottom:26px;letter-spacing:1px;align-self:flex-start;max-width:1280px;width:100%}
 .scene-title b{color:var(--accent)}
 
 /* MVC */
@@ -73,6 +73,17 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,"Segoe UI",
 .tw p{font-size:14.5px;color:#c9d4e0;line-height:1.7}
 .tw code{background:#0b1220;border:1px solid #2a3340;border-radius:5px;padding:1px 7px;color:#7ee787;font-size:12.5px}
 
+/* Split: flow (left) + live code panel (right) — 仅 2/3 幕使用 */
+.split{display:flex;gap:22px;width:100%;max-width:1280px;align-items:stretch}
+.split .flow{max-width:none;flex:1 1 auto}
+.codepanel{flex:0 0 500px;display:flex;flex-direction:column;background:#0b1220;border:1px solid #2a3340;border-radius:12px;overflow:hidden;max-height:64vh}
+.cp-head{background:#11192a;padding:9px 14px;font-size:12.5px;border-bottom:1px solid #2a3340;font-family:"SFMono-Regular",Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cp-head .lbl{color:var(--accent);margin-right:8px}
+.cp-head .file{color:var(--t-ctrl)}
+.cp-head .fn{color:var(--green)}
+.cp-code{margin:0;padding:14px 16px;overflow:auto;flex:1;font-family:"SFMono-Regular",Consolas,monospace;font-size:11.5px;line-height:1.62;color:#c9d4e0;white-space:pre;tab-size:2}
+.cp-hint{color:var(--muted);font-size:11px;padding:6px 14px;border-top:1px solid #2a3340;background:#0e1626}
+
 #caption{position:fixed;left:0;right:0;bottom:62px;display:flex;justify-content:center;padding:0 56px;pointer-events:none}
 #caption span{display:none;max-width:1060px;background:rgba(13,17,23,.94);border:1px solid #2a3340;border-radius:12px;padding:13px 22px;font-size:16px;line-height:1.6;text-align:center;color:#e6edf3}
 #caption span.show{display:block;animation:fade .4s}
@@ -95,7 +106,7 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,"Segoe UI",
   <section class="scene title active">
     <h1>legal-doc-rag 架构速览</h1>
     <div class="sub">对照 MVC 三层 · 数据流 ↔ 真实函数 · 文件间调用关系</div>
-    <div class="tag">自动讲解视频 · 含中文语音旁白，约 3 分钟一遍过，点击 ▶ 播放(带声) 即可听</div>
+    <div class="tag">自动讲解视频 · 含中文语音旁白 + 右侧实时源码面板，约 3 分钟一遍过，点击 ▶ 播放(带声)</div>
   </section>
 
   <!-- 1 MVC -->
@@ -128,29 +139,43 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,"Segoe UI",
 
   <!-- 2 入库 -->
   <section class="scene">
-    <div class="scene-title">二、<b>上传 / 入库链路</b>：每步都标了真实 <code style="color:var(--green)">file:function</code></div>
-    <div class="flow">
-      <div class="step"><div class="num">1</div><div class="body"><div class="t">上传请求</div><div class="c">POST /api/documents/upload</div><div class="f">→ documents.py:20  upload_document()</div></div></div>
-      <div class="step"><div class="num">2</div><div class="body"><div class="t">鉴权（Depends）</div><div class="c">解 JWT → 拿 tenant_id</div><div class="f">→ auth.py:79  require_user() → get_user_from_token()</div></div></div>
-      <div class="step danger"><div class="num">3</div><div class="body"><div class="t">安全落盘（红=把关）</div><div class="c">写入 uploads/{tenant}/</div><div class="f">→ security/middleware.py:114  get_safe_upload_path() → sanitize_filename():70 + is_safe_path():102</div></div></div>
-      <div class="step"><div class="num">4</div><div class="body"><div class="t">PDF 切块</div><div class="c">图文提取 + OCR + 分块</div><div class="f">→ processing/multimodal_pipeline.py:29  MultimodalPipeline.process()</div></div></div>
-      <div class="step"><div class="num">5</div><div class="body"><div class="t">向量化</div><div class="c">chunk → 向量</div><div class="f">→ retrieval/embedder_factory.py:35  create_embedder() → DirectEmbed:9</div></div></div>
-      <div class="step ok"><div class="num">6</div><div class="body"><div class="t">持久化（绿=落盘）</div><div class="c">写 chroma_db/{tenant}</div><div class="f">→ Chroma.from_texts(persist_directory=...).persist()  [langchain]</div></div></div>
-      <div class="step"><div class="num">7</div><div class="body"><div class="t">返回 JSON</div><div class="c">{success, chunks, tenant_id}</div><div class="f">→ upload_document() return</div></div></div>
+    <div class="scene-title">二、<b>上传 / 入库链路</b>：右侧面板同步显示每步真实 <code style="color:var(--green)">file:function</code> 源码</div>
+    <div class="split">
+      <div class="flow">
+        <div class="step"><div class="num">1</div><div class="body"><div class="t">上传请求</div><div class="c">POST /api/documents/upload</div><div class="f">→ documents.py:20  upload_document()</div></div></div>
+        <div class="step"><div class="num">2</div><div class="body"><div class="t">鉴权（Depends）</div><div class="c">解 JWT → 拿 tenant_id</div><div class="f">→ auth.py:79  require_user() → get_user_from_token()</div></div></div>
+        <div class="step danger"><div class="num">3</div><div class="body"><div class="t">安全落盘（红=把关）</div><div class="c">写入 uploads/{tenant}/</div><div class="f">→ security/middleware.py:114  get_safe_upload_path() → sanitize_filename():70 + is_safe_path():102</div></div></div>
+        <div class="step"><div class="num">4</div><div class="body"><div class="t">PDF 切块</div><div class="c">图文提取 + OCR + 分块</div><div class="f">→ processing/multimodal_pipeline.py:29  MultimodalPipeline.process()</div></div></div>
+        <div class="step"><div class="num">5</div><div class="body"><div class="t">向量化</div><div class="c">chunk → 向量</div><div class="f">→ retrieval/embedder_factory.py:35  create_embedder() → DirectEmbed:9</div></div></div>
+        <div class="step ok"><div class="num">6</div><div class="body"><div class="t">持久化（绿=落盘）</div><div class="c">写 chroma_db/{tenant}</div><div class="f">→ Chroma.from_texts(persist_directory=...).persist()  [langchain]</div></div></div>
+        <div class="step"><div class="num">7</div><div class="body"><div class="t">返回 JSON</div><div class="c">{success, chunks, tenant_id}</div><div class="f">→ upload_document() return</div></div></div>
+      </div>
+      <div class="codepanel">
+        <div class="cp-head"><span class="lbl">实时源码 ▸</span><span class="file"></span> · <span class="fn"></span></div>
+        <pre class="cp-code"></pre>
+        <div class="cp-hint">上方为讲解对应函数的真实源码（非伪代码）</div>
+      </div>
     </div>
   </section>
 
   <!-- 3 查询 -->
   <section class="scene">
-    <div class="scene-title">三、<b>查询 / 问答链路</b>：每步都标了真实 <code style="color:var(--green)">file:function</code></div>
-    <div class="flow">
-      <div class="step"><div class="num">1</div><div class="body"><div class="t">用户提问</div><div class="c">JWT → tenant_id</div><div class="f">→ chat.py:179  chat()（Depends require_user）</div></div></div>
-      <div class="step"><div class="num">2</div><div class="body"><div class="t">载入管道</div><div class="c">按 tenant 载入 Chroma + 实例化组件</div><div class="f">→ chat.py:162  _build_pipeline() → QueryRewriter / QueryCache / CitationTracker</div></div></div>
-      <div class="step"><div class="num">3</div><div class="body"><div class="t">QueryRewriter 改写</div><div class="c">LLM 改写问题，提升召回</div><div class="f">→ retrieval/query_rewriter.py:29  QueryRewriter.rewrite()</div></div></div>
-      <div class="step"><div class="num">4</div><div class="body"><div class="t">相似检索</div><div class="c">稠密 + 稀疏 + RRF 融合</div><div class="f">→ retrieval/hybrid_retriever.py:238  HybridRetriever.retrieve()</div></div></div>
-      <div class="step warn"><div class="num">5</div><div class="body"><div class="t">BGE-Reranker 精排（橙=精度关键）</div><div class="c">Cross-Encoder 重排候选</div><div class="f">→ retrieval/hybrid_retriever.py:42  Reranker.rerank()</div></div></div>
-      <div class="step"><div class="num">6</div><div class="body"><div class="t">生成答案</div><div class="c">DeepSeek + [N] 引用</div><div class="f">→ chat.py:85  call_llm() + citation.py:55  CitationTracker.format_context()</div></div></div>
-      <div class="step"><div class="num">7</div><div class="body"><div class="t">返回带 source 引用的 JSON</div><div class="c">{answer, citations:[...]}</div><div class="f">→ chat() return</div></div></div>
+    <div class="scene-title">三、<b>查询 / 问答链路</b>：右侧面板同步显示每步真实 <code style="color:var(--green)">file:function</code> 源码</div>
+    <div class="split">
+      <div class="flow">
+        <div class="step"><div class="num">1</div><div class="body"><div class="t">用户提问</div><div class="c">JWT → tenant_id</div><div class="f">→ chat.py:179  chat()（Depends require_user）</div></div></div>
+        <div class="step"><div class="num">2</div><div class="body"><div class="t">载入管道</div><div class="c">按 tenant 载入 Chroma + 实例化组件</div><div class="f">→ chat.py:162  _build_pipeline() → QueryRewriter / QueryCache / CitationTracker</div></div></div>
+        <div class="step"><div class="num">3</div><div class="body"><div class="t">QueryRewriter 改写</div><div class="c">LLM 改写问题，提升召回</div><div class="f">→ retrieval/query_rewriter.py:29  QueryRewriter.rewrite()</div></div></div>
+        <div class="step"><div class="num">4</div><div class="body"><div class="t">相似检索</div><div class="c">稠密 + 稀疏 + RRF 融合</div><div class="f">→ retrieval/hybrid_retriever.py:238  HybridRetriever.retrieve()</div></div></div>
+        <div class="step warn"><div class="num">5</div><div class="body"><div class="t">BGE-Reranker 精排（橙=精度关键）</div><div class="c">Cross-Encoder 重排候选</div><div class="f">→ retrieval/hybrid_retriever.py:42  Reranker.rerank()</div></div></div>
+        <div class="step"><div class="num">6</div><div class="body"><div class="t">生成答案</div><div class="c">DeepSeek + [N] 引用</div><div class="f">→ chat.py:85  call_llm() + citation.py:55  CitationTracker.format_context()</div></div></div>
+        <div class="step"><div class="num">7</div><div class="body"><div class="t">返回带 source 引用的 JSON</div><div class="c">{answer, citations:[...]}</div><div class="f">→ chat() return</div></div></div>
+      </div>
+      <div class="codepanel">
+        <div class="cp-head"><span class="lbl">实时源码 ▸</span><span class="file"></span> · <span class="fn"></span></div>
+        <pre class="cp-code"></pre>
+        <div class="cp-hint">上方为讲解对应函数的真实源码（非伪代码）</div>
+      </div>
     </div>
   </section>
 
@@ -207,6 +232,267 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,"Segoe UI",
 
 </div>
 
+<!-- 真实源码片段库：type=text/plain 不会被 JS 执行，textContent 原样取出（含 \n \x00 等转义字符） -->
+<div id="codeStore" style="display:none">
+<script type="text/plain" id="code-2-0" data-file="app/api/documents.py" data-fn="upload_document()">
+@router.post("/upload")
+async def upload_document(
+    file: UploadFile = File(...),
+    user: dict = Depends(require_user),   # 每个请求先过鉴权，拿到 tenant_id
+):
+    tenant_id = user["tenant_id"]
+    ...
+    file_path = get_safe_upload_path(cfg.UPLOAD_DIR, tenant_id, file.filename)
+    with open(file_path, "wb") as f:
+        f.write(content)                   # PDF 原始文件落到 uploads/<tenant_id>/
+    pipeline = MultimodalPipeline()
+    chunks = pipeline.process(file_path)   # → List[MultimodalChunk]
+    if not chunks:
+        raise HTTPException(400, "No text extracted from PDF")
+    texts = [c.text for c in chunks]        # 每个 chunk 的纯文本
+    embedder = create_embedder()
+    persist_dir = os.path.join(cfg.CHROMA_PERSIST_DIR, tenant_id)
+    vector_store = Chroma.from_texts(
+        texts=texts,
+        embedding=embedder,
+        metadatas=[{"source": file.filename, "chunk": i} for i in range(len(texts))],
+        persist_directory=persist_dir,
+    )
+    vector_store.persist()                  # ← 写 chroma_db/<tenant_id>/
+</script>
+
+<script type="text/plain" id="code-2-1" data-file="app/api/auth.py" data-fn="require_user() / get_user_from_token()">
+def get_user_from_token(token: str) -> dict:
+    try:
+        payload = jwt.decode(token, cfg.JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.PyJWTError:
+        raise HTTPException(401, "Invalid or expired token")
+    return {"username": payload.get("sub", ""),
+            "tenant_id": payload.get("tenant_id", ""),
+            "role": payload.get("role", "user")}
+
+def require_user(authorization: str = Header(...)):
+    """FastAPI 依赖：从 Authorization 头解析并校验 JWT。"""
+    token = authorization.replace("Bearer ", "").strip()
+    if not token:
+        raise HTTPException(401, "Missing token")
+    return get_user_from_token(token)
+</script>
+
+<script type="text/plain" id="code-2-2" data-file="app/security/middleware.py" data-fn="安全落盘三件套">
+def get_safe_upload_path(upload_dir, tenant_id, filename):
+    safe_tenant = re.sub(r'[^a-zA-Z0-9_-]', '', tenant_id)  # ① 清洗 tenant_id
+    safe_filename = sanitize_filename(filename)
+    upload_dir = os.path.join(upload_dir, safe_tenant)
+    os.makedirs(upload_dir, exist_ok=True)
+    file_path = os.path.join(upload_dir, safe_filename)
+    if not is_safe_path(upload_dir, file_path):            # ③ 终极校验
+        raise ValueError(f"Unsafe file path detected: {filename}")
+    return file_path
+
+def sanitize_filename(filename):
+    filename = filename.replace("\x00", "")        # 去空字节
+    filename = os.path.basename(filename)           # 丢目录前缀（防 ../../）
+    filename = filename.lstrip(".")                # 去前导点
+    filename = re.sub(r'[<>:"|?*]', '_', filename) # 替换非法字符
+    if len(filename) > 255:                        # 限长 255
+        name, ext = os.path.splitext(filename)
+        filename = name[:255 - len(ext)] + ext
+    return filename or "unnamed"
+
+def is_safe_path(base_dir, target_path) -> bool:
+    base = Path(base_dir).resolve()               # 解析符号链接、.. 到真实绝对路径
+    target = Path(target_path).resolve()
+    return target.is_relative_to(base)            # target 必须仍在 base 之下
+</script>
+
+<script type="text/plain" id="code-2-3" data-file="app/processing/multimodal_pipeline.py" data-fn="MultimodalPipeline.process()">
+class MultimodalPipeline:
+    def __init__(self):
+        self._ocr = OCREngine()
+        self._splitter = RecursiveCharacterTextSplitter(
+            chunk_size=500, chunk_overlap=50,
+            separators=["\n\n", "\n", "。", "；", "，", " "])  # 中文按句/段断
+
+    def _process_pdf(self, pdf_path):
+        pages = extract_pdf_pages(pdf_path)        # 每页 {text, images, page_number}
+        chunks = []
+        for page in pages:
+            ocr_texts = [self._ocr.recognize(img["bytes"]) for img in page["images"]]
+            caption_texts = [VisionCaptioner(...).caption(img["bytes"], ...)
+                             for img in page["images"]]
+            combined = page["text"]
+            if caption_texts: combined += "\n" + "\n".join(caption_texts)  # 图片描述
+            if ocr_texts:     combined += "\n[图片文字]\n" + "\n".join(ocr_texts)  # OCR
+            if not combined.strip(): continue
+            for st in self._splitter.split_text(combined):     # 切 500 字块
+                chunks.append(MultimodalChunk(text=st, page_number=page["page_number"]))
+        return chunks
+</script>
+
+<script type="text/plain" id="code-2-4" data-file="app/retrieval/embedder_factory.py" data-fn="create_embedder() / DirectEmbed">
+class DirectEmbed:
+    def embed_documents(self, texts):
+        resp = requests.post(f"{self.base_url}/embeddings",
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            json={"model": self.model, "input": texts}, timeout=120)
+        resp.raise_for_status()
+        data = resp.json()
+        # 按 index 排序，保证与输入顺序一致（否则文本↔向量错位）
+        return [item["embedding"] for item in sorted(data["data"], key=lambda x: x["index"])]
+
+def create_embedder():
+    et = os.getenv("EMBEDDER_TYPE", "openai")
+    if et == "openai":
+        return DirectEmbed(
+            model=os.getenv("EMBEDDING_MODEL", "ep-m-20251117205847-trwgz"),
+            api_key=os.getenv("EMBEDDING_API_KEY", ""),
+            base_url=os.getenv("EMBEDDING_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"))
+    elif et == "huggingface":
+        return HuggingFaceEmbeddings(model_name=os.getenv("HF_MODEL_NAME", "BAAI/bge-m3"))
+</script>
+
+<script type="text/plain" id="code-2-5" data-file="app/api/documents.py" data-fn="Chroma.from_texts().persist()">
+    persist_dir = os.path.join(cfg.CHROMA_PERSIST_DIR, tenant_id)
+    vector_store = Chroma.from_texts(
+        texts=texts,
+        embedding=embedder,
+        metadatas=[{"source": file.filename, "chunk": i} for i in range(len(texts))],
+        persist_directory=persist_dir,   # ← 物理隔离：每个租户独立库
+    )
+    vector_store.persist()               # 落盘 chroma_db/<tenant_id>/
+</script>
+
+<script type="text/plain" id="code-2-6" data-file="app/api/documents.py" data-fn="upload_document() return">
+    return {
+        "success": True,
+        "filename": file.filename,
+        "chunks": len(texts),
+        "tenant_id": tenant_id,
+    }
+</script>
+
+<script type="text/plain" id="code-3-0" data-file="app/api/chat.py" data-fn="chat() 入口">
+@router.post("")
+@limiter.limit("100/minute")
+async def chat(request, req: ChatRequest, user = Depends(require_user)):
+    embedder, vector_store, qr, cache, ct = _build_pipeline(user["tenant_id"])
+    mem = _get_memory(user["tenant_id"], embedder) if embedder else None
+    # 1. 没建库直接返回提示
+    if vector_store is None:
+        return JSONResponse(content={"answer": "请先上传文档",
+                                     "citations": [], "token_usage": 0})
+    # 2. 查询改写（LLM 把问题改得更利于检索）
+    queries = qr.rewrite(req.message, num_variants=1) if qr else [req.message]
+    query = queries[0] if queries else req.message
+</script>
+
+<script type="text/plain" id="code-3-1" data-file="app/api/chat.py" data-fn="_build_pipeline()">
+def _build_pipeline(tenant_id):
+    embedder = create_embedder()
+    persist_dir = os.path.join(cfg.CHROMA_PERSIST_DIR, tenant_id)
+    if not os.path.exists(persist_dir):
+        return None, None, None, None, None     # 该租户还没上传
+    vector_store = Chroma(embedding_function=embedder, persist_directory=persist_dir)
+    query_rewriter = QueryRewriter(api_key=cfg.LLM_API_KEY, base_url=cfg.LLM_BASE_URL)
+    cache = QueryCache(cache_dir=os.path.join("cache", tenant_id))
+    citation_tracker = CitationTracker()
+    return embedder, vector_store, query_rewriter, cache, citation_tracker
+</script>
+
+<script type="text/plain" id="code-3-2" data-file="app/retrieval/query_rewriter.py" data-fn="QueryRewriter.rewrite()">
+def rewrite(self, query, context="", num_variants=2):
+    if not self.api_key: return [query]
+    prompt = f"""你是一个法律检索专家。请将用户的问题改写成更适合向量检索的形式。
+    原问题：{query}
+    要求：1. 保持原意 2. 补充法律术语关键词 3. 复合问题拆分 4. 每变体≤50字
+    输出格式（JSON 数组）：["改写后的查询1","改写后的查询2"]"""
+    try:
+        resp = requests.post(f"{self.base_url}/chat/completions",
+            json={"model": "deepseek-chat",
+                  "messages": [{"role": "user", "content": prompt}],
+                  "temperature": 0.1, "max_tokens": 200}, timeout=10)
+        if resp.status_code == 200:
+            variants = json.loads(resp.json()["choices"][0]["message"]["content"].strip())
+            all_q = [query] + [v for v in variants if v.strip() != query]  # 去重+保留原查询
+            return all_q[:num_variants + 1]
+    except Exception:
+        pass
+    return [query]   # API 挂了回退原查询，不阻断主流程
+</script>
+
+<script type="text/plain" id="code-3-3" data-file="app/retrieval/hybrid_retriever.py" data-fn="HybridRetriever.retrieve()">
+def retrieve(self, query, top_k=None):
+    k = top_k or self.k
+    dense = self._dense_search(query)         # ① Chroma 向量相似度
+    sparse = self._sparse_search(query)       # ② BM25 关键词
+    es = self._elasticsearch_search(query)    # ③ ES（可选）
+    fused = self._rrf_fuse(dense, sparse, es) # ④ RRF 融合（按排名倒数加分）
+    if self.reranker and self.reranker.available:
+        fused = self.reranker.rerank(query, fused, k)  # ⑤ BGE 精排
+    else:
+        fused = fused[:k]
+    return fused
+
+def _dense_search(self, query):
+    results = self.dense_store.similarity_search_with_score(query, k=self.k*3)
+    return [(doc, 1.0 - score/2.0) for doc, score in results]  # 距离→相似度
+</script>
+
+<script type="text/plain" id="code-3-4" data-file="app/retrieval/hybrid_retriever.py" data-fn="Reranker.rerank()">
+class Reranker:
+    def __init__(self, model_name="BAAI/bge-reranker-base"):
+        self.model = None; self.available = False
+        try:
+            from sentence_transformers import CrossEncoder
+            self.model = CrossEncoder(model_name, device="cpu")
+            self.available = True
+        except Exception as e:
+            logger.warning("Reranker unavailable (skip): {}", e)  # 失败优雅降级
+
+    def rerank(self, query, documents, top_k=5):
+        if not self.available or not documents:
+            return documents[:top_k]
+        # 把 (query, doc) 拼一起喂交叉编码器，比各自编码再算余弦更准
+        pairs = [[query, d.page_content[:512]] for d in documents]
+        scores = self.model.predict(pairs)
+        scored = sorted(zip(documents, scores), key=lambda x: x[1], reverse=True)
+        return [d for d, _ in scored[:top_k]]
+</script>
+
+<script type="text/plain" id="code-3-5" data-file="app/retrieval/citation.py + chat.py" data-fn="format_context() + call_llm()">
+# citation.py —— 给每段来源打 [N] 标记
+def format_context(self) -> str:
+    parts = []
+    for i, src in enumerate(self._sources):
+        marker = f"[{i+1}]"                     # 对应 Prompt "用 [N] 引用"
+        ref = f"{src.filename}"
+        if src.page_number: ref += f" 第{src.page_number}页"
+        parts.append(f"{marker} {ref}\n{src.content}")
+    return "\n\n".join(parts)
+
+# chat.py —— 把 context 拼进 Prompt 再调 LLM
+prompt = PROMPT_TEMPLATE.format(context=context, memory=mem_ctx,
+                                history=history_text, question=query)
+# call_llm(prompt) -> DeepSeek 返回带 [1][2] 引用的答案
+</script>
+
+<script type="text/plain" id="code-3-6" data-file="app/api/chat.py" data-fn="chat() return">
+    sources = ct.get_sources()
+    citations = [{"source": s.source if hasattr(s,'source') else "",
+                  "content": s.page_content[:200] if hasattr(s,'page_content') else str(s)[:200]}
+                 for s in sources]
+    # 收尾：写缓存（下次同问秒回）+ 写记忆（多轮上下文）
+    if cache: cache.set(query, answer)
+    if mem:
+        mem.add("user", req.message); mem.add("assistant", answer)
+        mem.trigger_background_jobs(call_llm)
+    return JSONResponse(content={"answer": answer,
+                                 "citations": citations,
+                                 "token_usage": token_usage})
+</script>
+</div>
+
 <div id="caption"><span></span></div>
 
 <div id="controls">
@@ -225,27 +511,27 @@ const capEl = document.querySelector('#caption span');
 const sceneNames = ['标题','MVC 三层','上传入库','查询问答','调用关系','关键考点'];
 
 const CAP = {
-  0:{_: '欢迎看 legal-doc-rag 架构速览（含函数映射版）。我会把抽象数据流对到每个文件的具体函数，最后给你一棵树看文件间调用关系。'},
+  0:{_: '欢迎看 legal-doc-rag 架构速览（含真实源码版）。右侧面板会把讲解到的每个函数，原样贴出真实源码。我会把抽象数据流对到具体函数，最后给你一棵树看文件间调用关系。'},
   1:{_: '项目本质是 MVC：View=API 返回的 JSON；Controller=app/api 下各路由，只收请求、做鉴权、调服务；Service=retrieval/processing/memory/security/tenant；Model=Chroma、SQLite、uploads、cache、memory_db。关键：每个 Model 按 tenant_id 子目录物理隔离。'},
   2:[
-    '第1步：客户端 POST /api/documents/upload，由 documents.py:20 的 upload_document() 接收。',
-    '第2步：FastAPI 的 Depends(require_user) 触发 auth.py:79，内部 get_user_from_token() 解 JWT 取出 tenant_id。',
-    '第3步（红=安全把关）：security/middleware.py:114 get_safe_upload_path() 调 sanitize_filename()+is_safe_path()，把文件写到 uploads/{tenant}/，防 ../ 穿越。',
-    '第4步：processing/multimodal_pipeline.py:29 MultimodalPipeline.process() 调 pdf_extractor + OCREngine + 文本分块器，产出 chunks。',
-    '第5步：retrieval/embedder_factory.py:35 create_embedder() 返回 DirectEmbed，调 /embeddings API 把每个 chunk 转成向量。',
-    '第6步（绿=落盘）：Chroma.from_texts(persist_directory=chroma_db/{tenant}).persist() 把向量索引写入该租户目录。',
-    '第7步：upload_document() return {success, chunks, tenant_id}，上传完成。'
+    '第1步：客户端 POST /api/documents/upload，由 documents.py:20 的 upload_document() 接收。右侧看它怎么拿 tenant_id、安全落盘、切块、向量化、persist。',
+    '第2步：FastAPI 的 Depends(require_user) 触发 auth.py:79，内部 get_user_from_token() 解 JWT 取出 tenant_id。右侧是它的真实实现。',
+    '第3步（红=安全把关）：security/middleware.py:114 get_safe_upload_path() 调 sanitize_filename()+is_safe_path()，把文件写到 uploads/{tenant}/，防 ../ 穿越。右侧是安全三件套源码。',
+    '第4步：processing/multimodal_pipeline.py:29 MultimodalPipeline.process() 调 pdf_extractor + OCREngine + 文本分块器，把 文本+OCR+图片描述 合并切 500 字块。右侧看 process/_process_pdf。',
+    '第5步：retrieval/embedder_factory.py:35 create_embedder() 返回 DirectEmbed，调 /embeddings API 把每个 chunk 转成向量，并按 index 排序保证顺序。右侧看源码。',
+    '第6步（绿=落盘）：Chroma.from_texts(persist_directory=chroma_db/{tenant}).persist() 把向量索引写入该租户目录。右侧是 persist 那几行。',
+    '第7步：upload_document() return {success, chunks, tenant_id}，上传完成。右侧是 return 代码。'
   ],
   3:[
-    '第1步：用户提问，chat.py:179 chat() 由 Depends(require_user) 拿到 tenant_id。',
-    '第2步：chat.py:162 _build_pipeline() 按 tenant 载入 Chroma，并实例化 QueryRewriter / QueryCache / CitationTracker。',
-    '第3步：query_rewriter.py:29 QueryRewriter.rewrite() 调 LLM 把问题改写成更利于检索的形式。',
-    '第4步：hybrid_retriever.py:238 HybridRetriever.retrieve() 内部跑稠密(Chroma)+稀疏(BM25)+RRF 融合。',
-    '第5步（橙=精度关键）：hybrid_retriever.py:42 Reranker.rerank() 用 BGE Cross-Encoder 对候选精排。',
-    '第6步：chat.py:85 call_llm()(httpx 调 DeepSeek) + citation.py:55 CitationTracker.format_context() 拼出带 [N] 引用的上下文。',
-    '第7步：chat() return {answer, citations:[...]}，每条答案都能溯源到原文。'
+    '第1步：用户提问，chat.py:179 chat() 由 Depends(require_user) 拿到 tenant_id。右侧看入口如何判空库、改写查询。',
+    '第2步：chat.py:162 _build_pipeline() 按 tenant 载入 Chroma，并实例化 QueryRewriter / QueryCache / CitationTracker。右侧看它怎么重建向量库。',
+    '第3步：query_rewriter.py:29 QueryRewriter.rewrite() 调 LLM 把问题改写成更利于检索的形式，失败回退原查询。右侧看 rewrite 实现。',
+    '第4步：hybrid_retriever.py:238 HybridRetriever.retrieve() 内部跑稠密(Chroma)+稀疏(BM25)+RRF 融合。右侧看 retrieve 与 _dense_search。',
+    '第5步（橙=精度关键）：hybrid_retriever.py:42 Reranker.rerank() 用 BGE Cross-Encoder 对候选精排，失败优雅降级。右侧看 rerank。',
+    '第6步：chat.py:85 call_llm()(httpx 调 DeepSeek) + citation.py:55 CitationTracker.format_context() 拼出带 [N] 引用的上下文。右侧看 format_context。',
+    '第7步：chat() return {answer, citations:[...]}，每条答案都能溯源到原文。右侧看 return 与缓存/记忆写入。'
   ],
-  4:{_: '这就是真实的文件间调用关系：app/main.py 用 include_router 装配 9 个路由；API 路由是入口，require_user 统一鉴权，业务函数分散在 retrieval / processing / memory / security / tenant，最终落到 Chroma / SQLite / 磁盘。把这一棵树记住，数据流就和具体函数对上号了。'},
+  4:{_: '这就是真实的文件间调用关系：app/main.py 用 include_router 装配 9 个路由；API 路由是入口，require_user 统一鉴权，业务函数分散在 retrieval / processing / memory / security / tenant，最终落到 Chroma / SQLite / 磁盘。把这棵树记住，数据流就和具体函数对上号了。'},
   5:{_: '两个最常考点：① 租户隔离 = 根目录 + tenant_id 拼子目录，安全靠 get_safe_upload_path()(middleware.py:114) 清洗 + is_safe_path()( :102) 防 ../ 穿越；② hybrid+reranker 而非纯语义 —— 法律术语要精确匹配避免漏检，向量找语义相似，BGE 精排提精度。记住这两点，架构就吃透了。'}
 };
 
@@ -266,10 +552,34 @@ function renderCaption(){
   if(Array.isArray(c)) showCaption(c[Math.max(0,stepIdx)]||c[0]);
   else showCaption(c._);
 }
+
+// 实时源码面板：根据当前 (幕, 步) 从 #codeStore 取出真实代码
+const CODE_MAP = {
+  2:['2-0','2-1','2-2','2-3','2-4','2-5','2-6'],
+  3:['3-0','3-1','3-2','3-3','3-4','3-5','3-6']
+};
+function renderCode(){
+  const cp = scenes[si]?.querySelector('.codepanel');
+  if(!cp) return;                       // 只有 2/3 幕有面板
+  const head = cp.querySelector('.cp-head');
+  const pre  = cp.querySelector('.cp-code');
+  const keys = CODE_MAP[si];
+  if(!keys) return;
+  const key = keys[Math.max(0, stepIdx)] || keys[0];
+  const el = document.getElementById('code-'+key);
+  if(el){
+    head.querySelector('.file').textContent = el.dataset.file;
+    head.querySelector('.fn').textContent   = el.dataset.fn;
+    pre.textContent = el.textContent;
+    pre.scrollTop = 0;
+  }
+}
+
 function highlightStep(i){
   const steps=scenes[si].querySelectorAll('.step');
   steps.forEach((s,j)=>{ s.classList.remove('current'); s.classList.toggle('done', j<i); });
   if(steps[i]) steps[i].classList.add('current');
+  renderCode();                          // 每步同步刷新源码面板
 }
 function updatePlayBtn(){document.getElementById('playBtn').textContent = playing ? '⏸ 暂停' : '▶ 播放(带声)';}
 function pause(){ playing=false; updatePlayBtn(); audio.pause(); }
@@ -282,7 +592,7 @@ function gotoScene(i, autoplay){
   steps.forEach(s=>{s.classList.remove('current');s.classList.remove('done');});
   stepIdx=steps.length?0:-1;
   if(steps.length) steps[0].classList.add('current');
-  setDots();setName();renderCaption();
+  setDots();setName();renderCaption();renderCode();
   if(autoplay) startSceneAudio();
 }
 
