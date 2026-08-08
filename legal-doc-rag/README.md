@@ -731,7 +731,8 @@ app/main.py (FastAPI 入口)
    ├── app/retrieval/hybrid_retriever.py:
    │   ├── 稠密检索: ChromaDB.similarity_search_with_score()
    │   ├── 稀疏检索: BM25Okapi.get_scores()
-   │   └── RRF 融合 + 可选 BGE 重排
+   │   ├── BGE-M3 稀疏检索: SPLADE 词汇权重（自计算，dot-product 打分）
+   │   └── RRF 融合（稠密 + BM25 + BGE-M3 稀疏 + 可选 ES）+ 可选 BGE 重排
    ├── app/retrieval/citation.py: 记录来源引用
    ├── app/memory/memory_manager.py: 加载短期/长期记忆
    ├── 调用 DeepSeek LLM (stream=True) 生成回答

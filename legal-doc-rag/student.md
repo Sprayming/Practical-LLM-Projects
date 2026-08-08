@@ -10,7 +10,7 @@
 |------|------|------|
 | **工程完整度** | 强 | 混合检索 / 三层记忆 / 多租户 / 真 JWT+限流+TLS / 单测+集成+评测三层测试 / Docker / 观测，比多数面试 RAG demo 扎实 |
 | **业务贴合度** | 强（优势） | 上传法规/合同/文书 → 带引用问答，直接对应法务「法规检索 + 合同审查 + 出具带出处意见」 |
-| **检索真实性** | 强 | BM25 + Dense + RRF 召回 + `BGE-Reranker` 真 Cross-Encoder 精排（懒加载 + 优雅降级），不是嘴上 hybrid |
+| **检索真实性** | 强 | BM25 + Dense + **BGE-M3 稀疏(SPLADE)** + RRF 召回 + `BGE-Reranker` 真 Cross-Encoder 精排（懒加载 + 优雅降级），不是嘴上 hybrid |
 | **多模态真实性** | 中 | PyMuPDF + OCR（PaddleOCR）+ 视觉描述管线存在，但重（CPU/模型依赖），部分部署会退化成纯文字 |
 | **评测真实性** | ⚠️ 框架有、跑得少 | 31 条 golden 集 + RAGAS 框架已落地，但真实 RAGAS 评分默认 skip（需 key），别声称"评测充分" |
 | **安全** | ⚠️ 有历史债 | 真 JWT / 限流 / TLS 已补；但 Volces embedding key 曾硬编码进源码 = 已泄露，部署前必须轮换 |
@@ -53,7 +53,7 @@
 ```
 POST /api/chat（Bearer）→ [安全] JWT 校验 + 限流
   → 取短期记忆（Redis）→ query_rewrite（查询改写）
-  → hybrid_retrieve：BM25（关键词）+ Dense（向量）→ RRF 融合召回 50
+  → hybrid_retrieve：BM25（关键词）+ Dense（向量）+ **BGE-M3 稀疏(SPLADE)** → RRF 融合召回 50
   → Cross-Encoder（BGE-Reranker）精排 Top-5 → 引用拼接（citation）
   → 拼 prompt → LLM（DeepSeek，原始 HTTP /chat/completions）流式 SSE
   → 落三层记忆（短期原文 / 中期摘要 / 长期向量 + 遗忘曲线）→ 返回
@@ -301,7 +301,7 @@ class Reranker:
 | 1 | 接收提问 | `chat()` | `app/api/chat.py:179` |
 | 2 | 载入管道 | `_build_pipeline()` | `chat.py:162` |
 | 3 | 查询改写 | `QueryRewriter.rewrite()` | `retrieval/query_rewriter.py:29` |
-| 4 | 混合检索 | `HybridRetriever.retrieve()`（内含 `_dense_search` / `_sparse_search` / `_rrf_fuse`） | `retrieval/hybrid_retriever.py:238` / `:155` / `:163` / `:171` |
+| 4 | 混合检索 | `HybridRetriever.retrieve()`（内含 `_dense_search` / `_sparse_search`(BM25) / `_sparse_search_bge`(BGE-M3 稀疏) / `_rrf_fuse`） | `retrieval/hybrid_retriever.py:290` / `:159` / `:167` / `:175` / `:211` |
 | 5 | 精排 | `Reranker.rerank()`（BGE Cross-Encoder） | `hybrid_retriever.py:42` |
 | 6 | 生成+引用 | `call_llm()` + `CitationTracker.format_context()` | `chat.py:85` / `citation.py:55` |
 | 7 | 返回带引用 JSON | `chat()` return | `chat.py:422` |
@@ -330,10 +330,11 @@ app/main.py                         FastAPI 装配入口（include_router ×9）
 │        ├─ _build_pipeline()               [chat.py:162]
 │        ├─ QueryRewriter.rewrite()         [query_rewriter.py:29]
 │        ├─ MemorySystem.get_context()      [memory/memory_manager.py:135]
-│        ├─ HybridRetriever.retrieve()      [hybrid_retriever.py:238]
-│        │    ├─ _dense_search()           [hybrid_retriever.py:155]  Chroma
-│        │    ├─ _sparse_search()          [hybrid_retriever.py:163]  BM25
-│        │    └─ _rrf_fuse()               [hybrid_retriever.py:171]
+│        ├─ HybridRetriever.retrieve()      [hybrid_retriever.py:290]
+│        │    ├─ _dense_search()           [hybrid_retriever.py:159]  Chroma
+│        │    ├─ _sparse_search()          [hybrid_retriever.py:167]  BM25
+│        │    ├─ _sparse_search_bge()      [hybrid_retriever.py:175]  BGE-M3 稀疏(SPLADE)
+│        │    └─ _rrf_fuse()               [hybrid_retriever.py:211]
 │        ├─ Reranker.rerank()               [hybrid_retriever.py:42]  BGE 精排
 │        ├─ CitationTracker.*               [citation.py:32]
 │        ├─ QueryCache.get()/set()          [cache.py:22]

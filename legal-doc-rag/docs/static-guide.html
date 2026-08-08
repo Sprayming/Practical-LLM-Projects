@@ -120,7 +120,7 @@ def is_safe_path(base_dir, target_path) -&gt; bool:
   <div class="step"><span class="n">1</span><b>入口</b> <code>chat.py:179 chat()</code> 由 <code>require_user</code> 拿 <code>tenant_id</code>，判空库后改写查询。</div>
   <div class="step"><span class="n">2</span><b>建管道</b> <code>chat.py:162 _build_pipeline()</code> 按 tenant 载入 Chroma，实例化 <code>QueryRewriter / QueryCache / CitationTracker</code>。</div>
   <div class="step"><span class="n">3</span><b>查询改写</b> <code>query_rewriter.py:29 QueryRewriter.rewrite()</code> 调 LLM 改写，失败回退原查询。</div>
-  <div class="step"><span class="n">4</span><b>混合检索</b> <code>hybrid_retriever.py:238 HybridRetriever.retrieve()</code> 跑 稠密(Chroma)+稀疏(BM25)+RRF 融合。</div>
+  <div class="step"><span class="n">4</span><b>混合检索</b> <code>hybrid_retriever.py:290 HybridRetriever.retrieve()</code> 跑 稠密(Chroma)+BM25 稀疏+BGE-M3 稀疏(SPLADE)+RRF 融合。</div>
   <div class="step orange"><span class="n">5</span><b>精排</b> <code>hybrid_retriever.py:42 Reranker.rerank()</code> 用 BGE Cross-Encoder 精排，失败优雅降级。</div>
   <div class="step"><span class="n">6</span><b>拼上下文</b> <code>chat.py:85 call_llm()(httpx 调 DeepSeek)</code> + <code>citation.py:55 CitationTracker.format_context()</code> 打 [N] 引用。</div>
   <div class="step"><span class="n">7</span><b>返回</b> <code>return {answer, citations:[...]}</code>，每条答案可溯源。</div>
@@ -132,18 +132,19 @@ def is_safe_path(base_dir, target_path) -&gt; bool:
     dense  = self._dense_search(query)    # ① Chroma 向量相似度
     sparse = self._sparse_search(query)   # ② BM25 关键词
     es     = self._elasticsearch_search(query)  # ③ ES（可选）
-    fused  = self._rrf_fuse(dense, sparse, es)  # ④ RRF 融合
+    bge    = self._sparse_search_bge(query)      # ④ BGE-M3 稀疏(SPLADE)
+    fused  = self._rrf_fuse(dense, sparse, es, bge)  # ⑤ RRF 融合
     if self.reranker and self.reranker.available:
-        fused = self.reranker.rerank(query, fused, k)  # ⑤ BGE 精排
+        fused = self.reranker.rerank(query, fused, k)  # ⑥ BGE 精排
     return fused
 
-def _rrf_fuse(self, dense_results, sparse_results, es_results=None):
+def _rrf_fuse(self, dense_results, sparse_results, es_results=None, bge_sparse_results=None):
     doc_map = {}
     for rank,(doc,_) in enumerate(dense_results):
         key = doc.page_content[:200]
         if key not in doc_map: doc_map[key]=doc; doc_map[key].metadata["rrf_score"]=0.0
         doc_map[key].metadata["rrf_score"] += self.dense_weight/(self.rrf_k+rank+1)
-    # sparse / es 同法累加（只按排名给分，不依赖分数绝对值）
+    # BM25 / ES / BGE-M3 稀疏 同法累加（只按排名给分，不依赖分数绝对值）
     return sorted(doc_map.values(), key=lambda d:d.metadata["rrf_score"], reverse=True)</code></pre>
 <p class="note">RRF 本质：不比较向量分和 BM25 分（量纲不同），只按"排名"加分 <code>1/(60+rank)</code>，三路都靠前的自然总分最高。</p>
 
@@ -193,7 +194,8 @@ def _rrf_fuse(self, dense_results, sparse_results, es_results=None):
 │       ├─ HybridRetriever.retrieve()[retrieval/hybrid_retriever]
 │       │   ├─ _dense_search()  (Chroma 向量)
 │       │   ├─ _sparse_search() (BM25)
-│       │   ├─ _rrf_fuse()      (RRF 融合)
+│       │   ├─ _sparse_search_bge() (BGE-M3 稀疏 SPLADE)
+│       │   ├─ _rrf_fuse()      (RRF 融合：稠密+BM25+BGE-M3)
 │       │   └─ Reranker.rerank() (BGE 交叉编码器精排)
 │       ├─ CitationTracker.format_context() [retrieval/citation]
 │       └─ call_llm()  (httpx 调 DeepSeek，流式/非流式)
