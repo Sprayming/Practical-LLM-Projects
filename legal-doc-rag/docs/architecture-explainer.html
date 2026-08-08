@@ -95,7 +95,7 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,"Segoe UI",
   <section class="scene title active">
     <h1>legal-doc-rag 架构速览</h1>
     <div class="sub">对照 MVC 三层 · 数据流 ↔ 真实函数 · 文件间调用关系</div>
-    <div class="tag">自动讲解视频 · 建议静音看字幕，约 3 分钟一遍过</div>
+    <div class="tag">自动讲解视频 · 含中文语音旁白，约 3 分钟一遍过，点击 ▶ 播放(带声) 即可听</div>
   </section>
 
   <!-- 1 MVC -->
@@ -249,10 +249,12 @@ const CAP = {
   5:{_: '两个最常考点：① 租户隔离 = 根目录 + tenant_id 拼子目录，安全靠 get_safe_upload_path()(middleware.py:114) 清洗 + is_safe_path()( :102) 防 ../ 穿越；② hybrid+reranker 而非纯语义 —— 法律术语要精确匹配避免漏检，向量找语义相似，BGE 精排提精度。记住这两点，架构就吃透了。'}
 };
 
-let si = 0, stepIdx = -1, playing = true, elapsed = 0, timer = null;
+let si = 0, stepIdx = -1, playing = false, elapsed = 0;
+let autoBlocked = false;
+const audio = new Audio();
 
 const prog = document.getElementById('progress');
-scenes.forEach(()=>{const d=document.createElement('div');d.className='dot';d.onclick=()=>gotoScene(scenes.indexOf(d.__s));prog.appendChild(d);});
+scenes.forEach(()=>{const d=document.createElement('div');d.className='dot';d.onclick=()=>gotoScene(scenes.indexOf(d.__s), true);prog.appendChild(d);});
 [...prog.children].forEach((d,i)=>d.__s=scenes[i]);
 
 function setDots(){document.querySelectorAll('.dot').forEach((d,i)=>d.classList.toggle('on',i===si));}
@@ -264,8 +266,14 @@ function renderCaption(){
   if(Array.isArray(c)) showCaption(c[Math.max(0,stepIdx)]||c[0]);
   else showCaption(c._);
 }
+function highlightStep(i){
+  const steps=scenes[si].querySelectorAll('.step');
+  steps.forEach((s,j)=>{ s.classList.remove('current'); s.classList.toggle('done', j<i); });
+  if(steps[i]) steps[i].classList.add('current');
+}
+function updatePlayBtn(){document.getElementById('playBtn').textContent = playing ? '⏸ 暂停' : '▶ 播放(带声)';}
 
-function gotoScene(i, resetPlay=true){
+function gotoScene(i, autoplay){
   scenes[si]?.classList.remove('active');
   si=Math.max(0,Math.min(scenes.length-1,i));
   scenes[si].classList.add('active');
@@ -274,38 +282,61 @@ function gotoScene(i, resetPlay=true){
   stepIdx=steps.length?0:-1;
   if(steps.length) steps[0].classList.add('current');
   setDots();setName();renderCaption();
+  if(autoplay) startSceneAudio();
 }
 
-function tick(){
-  elapsed++;document.getElementById('time').textContent='0:'+String(elapsed).padStart(2,'0');
-  const steps=scenes[si].querySelectorAll('.step');
-  if(steps.length){
-    if(stepIdx<steps.length-1){
-      steps[stepIdx].classList.remove('current');
-      steps[stepIdx].classList.add('done');
-      stepIdx++;
-      steps[stepIdx].classList.add('current');
-      renderCaption();
-      return;
-    }
-    if(si<scenes.length-1){gotoScene(si+1);return;}
-    pause();return;
-  }else{
-    if(si<scenes.length-1){gotoScene(si+1);return;}
-    pause();return;
+// 每幕/每步对应的中文旁白音频（与 CAP 讲解词一一对应）
+const AUDIO = {
+ 0:['docs/audio/scene0.mp3'],
+ 1:['docs/audio/scene1.mp3'],
+ 2:['docs/audio/scene2_0.mp3','docs/audio/scene2_1.mp3','docs/audio/scene2_2.mp3','docs/audio/scene2_3.mp3','docs/audio/scene2_4.mp3','docs/audio/scene2_5.mp3','docs/audio/scene2_6.mp3'],
+ 3:['docs/audio/scene3_0.mp3','docs/audio/scene3_1.mp3','docs/audio/scene3_2.mp3','docs/audio/scene3_3.mp3','docs/audio/scene3_4.mp3','docs/audio/scene3_5.mp3','docs/audio/scene3_6.mp3'],
+ 4:['docs/audio/scene4.mp3'],
+ 5:['docs/audio/scene5.mp3']
+};
+
+function startSceneAudio(){
+  const clips = AUDIO[si];
+  if(!clips || !clips.length){ playing=true; updatePlayBtn(); return; }
+  playing=true; updatePlayBtn();
+  if(clips.length===1){
+    audio.src=clips[0]; audio.play().catch(onAutoBlock);
+  } else {
+    stepIdx=0; highlightStep(0); renderCaption();
+    audio.src=clips[0]; audio.play().catch(onAutoBlock);
   }
 }
+function onClipEnded(){
+  if(!playing) return;
+  const clips=AUDIO[si];
+  const steps=scenes[si].querySelectorAll('.step');
+  if(clips.length===1){ advanceSceneOrStop(); return; }
+  if(stepIdx < steps.length-1){
+    stepIdx++; highlightStep(stepIdx); renderCaption();
+    audio.src=clips[stepIdx]; audio.play().catch(onAutoBlock);
+  } else { advanceSceneOrStop(); }
+}
+function advanceSceneOrStop(){
+  if(si<scenes.length-1) gotoScene(si+1, true);
+  else { playing=false; updatePlayBtn(); document.getElementById('playBtn').textContent='↺ 重播'; }
+}
+function onAutoBlock(){
+  playing=false; updatePlayBtn(); autoBlocked=true;
+  showCaption('浏览器拦截了自动播放：点一下 ▶ 播放(带声) 或页面任意处，即可听到语音旁白');
+}
+audio.addEventListener('ended', onClipEnded);
+audio.addEventListener('timeupdate', ()=>{ document.getElementById('time').textContent='0:'+String(Math.floor(audio.currentTime)).padStart(2,'0'); });
 
-function play(){playing=true;document.getElementById('playBtn').textContent='⏸ 暂停';timer=setInterval(tick,3600);}
-function pause(){playing=false;document.getElementById('playBtn').textContent='▶ 播放';clearInterval(timer);}
+function play(){ startSceneAudio(); }
+function pause(){ playing=false; updatePlayBtn(); audio.pause(); }
 
-document.getElementById('playBtn').onclick=()=>playing?pause():play();
-document.getElementById('prevBtn').onclick=()=>{pause();gotoScene(si-1);};
-document.getElementById('nextBtn').onclick=()=>{pause();gotoScene(si+1);};
-document.getElementById('restartBtn').onclick=()=>{elapsed=0;gotoScene(0);play();};
+document.getElementById('playBtn').onclick=()=>{ if(playing){ pause(); } else { startSceneAudio(); } };
+document.getElementById('prevBtn').onclick=()=>{ const w=playing; pause(); gotoScene(si-1,false); if(w) startSceneAudio(); };
+document.getElementById('nextBtn').onclick=()=>{ const w=playing; pause(); gotoScene(si+1,false); if(w) startSceneAudio(); };
+document.getElementById('restartBtn').onclick=()=>{ elapsed=0; audio.currentTime=0; gotoScene(0,true); };
+document.addEventListener('pointerdown', ()=>{ if(autoBlocked){ autoBlocked=false; startSceneAudio(); } }, true);
 
-gotoScene(0);
-play();
+gotoScene(0, true);
 </script>
 </body>
 </html>
