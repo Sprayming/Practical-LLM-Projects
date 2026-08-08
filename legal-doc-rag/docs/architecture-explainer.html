@@ -58,7 +58,10 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,"Segoe UI",
 .tree{width:100%;max-width:1080px;background:#0b1220;border:1px solid #2a3340;border-radius:12px;padding:18px 20px;overflow:auto;max-height:62vh}
 .step.codeline{opacity:0;background:transparent;border:none;padding:2px 8px;border-radius:4px;font-size:12.5px;font-family:"SFMono-Regular",Consolas,monospace;white-space:pre;line-height:1.65;transition:opacity .35s}
 .step.codeline.current,.step.codeline.done{opacity:1}
-.step.codeline.current{background:rgba(88,166,255,.12);box-shadow:0 0 0 1px rgba(88,166,255,.4)}
+.step.codeline.current{opacity:1;background:rgba(88,166,255,.12);box-shadow:0 0 0 1px rgba(88,166,255,.4)}
+/* 调用关系树：进入该幕时整棵 ASCII 树可见并淡入（默认 opacity:0 防首屏闪） */
+.scene.active .tree .step.codeline{opacity:1;animation:treeRowIn .45s ease both}
+@keyframes treeRowIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
 .t-main{color:var(--t-main);font-weight:700}
 .t-ctrl{color:var(--t-ctrl)}
 .t-svc{color:var(--t-svc)}
