@@ -21,6 +21,7 @@ import httpx
 import asyncio
 import threading
 from typing import Dict, Any, AsyncGenerator
+from types import SimpleNamespace
 from fastapi import Request
 from app.core.limiter import limiter
 
@@ -140,14 +141,15 @@ def _get_memory(tenant_id, embedder):
             persist_dir=pd,
             tenant_id=tenant_id
         )
-        _memory_cache.put(tenant_id, memory_system)
+        _memory_cache[tenant_id] = memory_system
     return memory_system
 
 # 可以在应用启动时添加一个定时任务
 async def cleanup_cache():
     while True:
         await asyncio.sleep(7200)  # 每2小时清理一次
-        _memory_cache.cleanup()
+        if hasattr(_memory_cache, "cleanup"):
+            _memory_cache.cleanup()
 
 
 _reranker = None
@@ -162,28 +164,28 @@ def _get_reranker():
 def _build_pipeline(tenant_id: str):
     try:
         embedder = create_embedder()
+        mem = _get_memory(tenant_id, embedder) if embedder else None
         persist_dir = os.path.join(cfg.CHROMA_PERSIST_DIR, tenant_id)
         if not os.path.exists(persist_dir):
-            return None, None, None, None, None
+            return None
         vector_store = Chroma(embedding_function=embedder, persist_directory=persist_dir)
         query_rewriter = QueryRewriter(api_key=cfg.LLM_API_KEY, base_url=cfg.LLM_BASE_URL)
         cache = QueryCache(cache_dir=os.path.join("cache", tenant_id))
         citation_tracker = CitationTracker()
-        return embedder, vector_store, query_rewriter, cache, citation_tracker
+        return SimpleNamespace(
+            embedder=embedder,
+            vector_store=vector_store,
+            qr=query_rewriter,
+            cache=cache,
+            ct=citation_tracker,
+            mem=mem,
+        )
     except Exception as e:
         _log.error(f"管道构建失败: {str(e)}")
-        return None, None, None, None, None
+        return None
 
 @router.post("")
 @limiter.limit("100/minute")
-async def chat(request: Request, req: ChatRequest, user: dict = Depends(require_user)):
-    embedder, vector_store, qr, cache, ct = _build_pipeline(user["tenant_id"])
-    mem = _get_memory(user["tenant_id"], embedder) if embedder else None
-    trace = TraceContext()
-    trace.begin_span("total")
-    trace.set_input(req.message)
-
-
 async def chat(request: Request, req: ChatRequest, user: dict = Depends(require_user)):
     """处理聊天请求的入口函数"""
     # 初始化管道和追踪
@@ -193,7 +195,7 @@ async def chat(request: Request, req: ChatRequest, user: dict = Depends(require_
     trace.set_input(req.message)
 
     # 检查向量库
-    if not pipeline.vector_store:
+    if not pipeline or not pipeline.vector_store:
         return _handle_vector_store_error()
 
     # 处理查询
@@ -266,9 +268,8 @@ def _get_context(query, pipeline, message, history, tenant_id=None):
     docs = _get_reranker().rerank(query, docs, top_k=5)
     
     # 格式化上下文
-    ct = ContextTracker()
-    ct.add_sources(docs)
-    context = ct.format_context()
+    pipeline.ct.add_sources(docs)
+    context = pipeline.ct.format_context()
     
     # 构建提示模板
     return _build_prompt(context, mem_ctx, history, query)
