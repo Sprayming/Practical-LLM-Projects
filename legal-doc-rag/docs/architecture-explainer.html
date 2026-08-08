@@ -249,9 +249,9 @@ const CAP = {
   5:{_: '两个最常考点：① 租户隔离 = 根目录 + tenant_id 拼子目录，安全靠 get_safe_upload_path()(middleware.py:114) 清洗 + is_safe_path()( :102) 防 ../ 穿越；② hybrid+reranker 而非纯语义 —— 法律术语要精确匹配避免漏检，向量找语义相似，BGE 精排提精度。记住这两点，架构就吃透了。'}
 };
 
-let si = 0, stepIdx = -1, playing = false, elapsed = 0;
-let autoBlocked = false;
+let si = 0, stepIdx = -1, playing = false, started = false, elapsed = 0, fallbackTimer = null;
 const audio = new Audio();
+audio.preload = 'auto';
 
 const prog = document.getElementById('progress');
 scenes.forEach(()=>{const d=document.createElement('div');d.className='dot';d.onclick=()=>gotoScene(scenes.indexOf(d.__s), true);prog.appendChild(d);});
@@ -272,6 +272,7 @@ function highlightStep(i){
   if(steps[i]) steps[i].classList.add('current');
 }
 function updatePlayBtn(){document.getElementById('playBtn').textContent = playing ? '⏸ 暂停' : '▶ 播放(带声)';}
+function pause(){ playing=false; updatePlayBtn(); audio.pause(); }
 
 function gotoScene(i, autoplay){
   scenes[si]?.classList.remove('active');
@@ -287,56 +288,64 @@ function gotoScene(i, autoplay){
 
 // 每幕/每步对应的中文旁白音频（与 CAP 讲解词一一对应）
 const AUDIO = {
- 0:['docs/audio/scene0.mp3'],
- 1:['docs/audio/scene1.mp3'],
- 2:['docs/audio/scene2_0.mp3','docs/audio/scene2_1.mp3','docs/audio/scene2_2.mp3','docs/audio/scene2_3.mp3','docs/audio/scene2_4.mp3','docs/audio/scene2_5.mp3','docs/audio/scene2_6.mp3'],
- 3:['docs/audio/scene3_0.mp3','docs/audio/scene3_1.mp3','docs/audio/scene3_2.mp3','docs/audio/scene3_3.mp3','docs/audio/scene3_4.mp3','docs/audio/scene3_5.mp3','docs/audio/scene3_6.mp3'],
- 4:['docs/audio/scene4.mp3'],
- 5:['docs/audio/scene5.mp3']
+ 0:['audio/scene0.mp3'],
+ 1:['audio/scene1.mp3'],
+ 2:['audio/scene2_0.mp3','audio/scene2_1.mp3','audio/scene2_2.mp3','audio/scene2_3.mp3','audio/scene2_4.mp3','audio/scene2_5.mp3','audio/scene2_6.mp3'],
+ 3:['audio/scene3_0.mp3','audio/scene3_1.mp3','audio/scene3_2.mp3','audio/scene3_3.mp3','audio/scene3_4.mp3','audio/scene3_5.mp3','audio/scene3_6.mp3'],
+ 4:['audio/scene4.mp3'],
+ 5:['audio/scene5.mp3']
 };
 
 function startSceneAudio(){
   const clips = AUDIO[si];
-  if(!clips || !clips.length){ playing=true; updatePlayBtn(); return; }
-  playing=true; updatePlayBtn();
+  started = true;
+  playing = true; updatePlayBtn();
+  if(!clips || !clips.length){ return; }
   if(clips.length===1){
-    audio.src=clips[0]; audio.play().catch(onAutoBlock);
+    audio.src=clips[0]; audio.play().catch(()=>{});
   } else {
     stepIdx=0; highlightStep(0); renderCaption();
-    audio.src=clips[0]; audio.play().catch(onAutoBlock);
+    audio.src=clips[0]; audio.play().catch(()=>{});
   }
 }
 function onClipEnded(){
   if(!playing) return;
+  clearTimeout(fallbackTimer);
   const clips=AUDIO[si];
   const steps=scenes[si].querySelectorAll('.step');
   if(clips.length===1){ advanceSceneOrStop(); return; }
   if(stepIdx < steps.length-1){
     stepIdx++; highlightStep(stepIdx); renderCaption();
-    audio.src=clips[stepIdx]; audio.play().catch(onAutoBlock);
+    audio.src=clips[stepIdx]; audio.play().catch(()=>{});
   } else { advanceSceneOrStop(); }
 }
 function advanceSceneOrStop(){
   if(si<scenes.length-1) gotoScene(si+1, true);
   else { playing=false; updatePlayBtn(); document.getElementById('playBtn').textContent='↺ 重播'; }
 }
-function onAutoBlock(){
-  playing=false; updatePlayBtn(); autoBlocked=true;
-  showCaption('浏览器拦截了自动播放：点一下 ▶ 播放(带声) 或页面任意处，即可听到语音旁白');
-}
+// 兜底：若 ended 事件因故没触发（如某些浏览器/解码问题），按音频时长+余量推进
+audio.addEventListener('loadedmetadata', ()=>{
+  if(playing){
+    clearTimeout(fallbackTimer);
+    const dur = isFinite(audio.duration) && audio.duration > 0 ? audio.duration : 6;
+    fallbackTimer = setTimeout(()=>{ if(playing && !audio.ended) onClipEnded(); }, dur*1000 + 1200);
+  }
+});
 audio.addEventListener('ended', onClipEnded);
 audio.addEventListener('timeupdate', ()=>{ document.getElementById('time').textContent='0:'+String(Math.floor(audio.currentTime)).padStart(2,'0'); });
 
-function play(){ startSceneAudio(); }
-function pause(){ playing=false; updatePlayBtn(); audio.pause(); }
+function togglePlay(){ if(playing) pause(); else startSceneAudio(); }
 
-document.getElementById('playBtn').onclick=()=>{ if(playing){ pause(); } else { startSceneAudio(); } };
+document.getElementById('playBtn').onclick = togglePlay;
 document.getElementById('prevBtn').onclick=()=>{ const w=playing; pause(); gotoScene(si-1,false); if(w) startSceneAudio(); };
 document.getElementById('nextBtn').onclick=()=>{ const w=playing; pause(); gotoScene(si+1,false); if(w) startSceneAudio(); };
-document.getElementById('restartBtn').onclick=()=>{ elapsed=0; audio.currentTime=0; gotoScene(0,true); };
-document.addEventListener('pointerdown', ()=>{ if(autoBlocked){ autoBlocked=false; startSceneAudio(); } }, true);
+document.getElementById('restartBtn').onclick=()=>{ elapsed=0; gotoScene(0,true); };
+// 仅在「点击视频画面」（而非控制条）时作为首次启动手势，且与按钮互不冲突
+document.getElementById('stage').addEventListener('click', ()=>{ if(!started) startSceneAudio(); });
 
-gotoScene(0, true);
+// 初始化：只渲染第 0 幕 + 显示字幕，不在加载时自动播放（避免被浏览器拦截）
+gotoScene(0, false);
+updatePlayBtn();
 </script>
 </body>
 </html>
