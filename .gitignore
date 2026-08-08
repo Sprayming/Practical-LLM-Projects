@@ -45,3 +45,6 @@ uploads/
 legal-doc-rag/docs/architecture-explainer.html
 legal-doc-rag/docs/audio/
 ride-hailing-analytics-system/docs/architecture-explainer.html
+
+# WorkBuddy local memory (AI work logs, kept locally only; NOT pushed to GitHub)
+.workbuddy/memory/
