@@ -130,3 +130,52 @@ POST /api/chat（Bearer）→ [安全] JWT 校验 + 限流
 | 整洁度 | 2026-08-05（续） | Webhook 重试真正生效；整体测试 44 passed / 1 skipped |
 
 > 详见 `README.md` 的「面试常见问题」「踩过的坑」「更新日志」三节，里面 Q1–Q8 与 17 个实战坑是高频素材。
+
+---
+
+## 七、架构速记图（MVC 对照 + 双数据流）
+
+> 如果你学过 MVC，直接把项目对齐三层：**Controller = app/api/\***（只收 HTTP、鉴权、调服务）；**Service = retrieval/processing/memory/security/tenant**（业务逻辑）；**Model = Chroma 向量库 / SQLite / uploads / cache / memory_db**（持久化）；**View = API 返回的 JSON**。下面三张图已生成为 SVG（`docs/images/*.svg`），任何 Markdown 预览器 / GitHub / VS Code 都能直接显示；同时保留第二节 ASCII 版供离线速读。
+
+### 图 1 · MVC 三层对照
+
+![图 1 · MVC 三层对照](docs/images/mvc.svg)
+
+> 每个 Model 组件都按 `{tenant_id}` 子目录物理隔离（如 `chroma_db/<tenant_id>/`），不是"共享库 + 租户字段"。
+
+### 图 2 · 数据流一：上传 / 入库（写进去）
+
+![图 2 · 上传/入库数据流](docs/images/ingestion.svg)
+
+- **红色 = security 把关**：`get_safe_upload_path` 把 `tenant_id` 只留 `[a-zA-Z0-9_-]`、清洗文件名，再用 `is_safe_path`（resolve 后判断仍在 base 内）防 `../` 穿越。
+- 关键 API：`app/api/documents.py:39`（落盘路径）、`:56`（建 Chroma 并 persist）。
+
+### 图 3 · 数据流二：查询 / 问答（读出来）
+
+![图 3 · 查询/问答数据流](docs/images/query.svg)
+
+- **橙色 = 重排环节**：语义召回后精排，避免"相关但不准"的法条；reranker 不可用时优雅降级（RRF 结果直接当 Top-K）。
+- 关键 API：`app/api/chat.py:162`（`_build_pipeline` 载入 `chroma_db/<tenant>` + QueryCache + QueryRewriter + CitationTracker）。
+
+### 自测默写卡（先想再核对）
+
+1. **用 MVC 类比，Controller / Service / Model / View 分别是什么？**
+   Controller = `app/api/*` 路由（documents/chat/auth/admin/feedback.py），只管收 HTTP、鉴权、调服务；Service = retrieval / processing / memory / security / tenant（业务逻辑）；Model = Chroma 向量库、SQLite、uploads、cache、memory_db（持久化）；View = API 返回的 JSON。
+
+2. **上传一个 PDF 后，数据经过哪些步骤才落盘？**
+   `POST /upload` → `require_user` 解 JWT 得 `tenant_id` → `get_safe_upload_path` 写到 `uploads/<tenant>/<safe>.pdf` → `MultimodalPipeline` 切块 → BGE-M3 embedder 向量化 → `Chroma.from_texts(persist_directory=chroma_db/<tenant>).persist()`。返回 `{success, chunks, tenant_id}`。
+
+3. **查询时，一条用户问题如何变成带引用的答案？**
+   JWT→`tenant_id` → `_build_pipeline` 载入 `chroma_db/<tenant>` → `QueryRewriter`(LLM) 改写 → Chroma 相似检索 top-k → `BGE-Reranker` 精排 → DeepSeek 生成 + `CitationTracker` → 返回带 `source` 引用的 JSON。
+
+4. **"按租户目录落盘"具体怎么实现？为什么不会串租户或越权？**
+   根目录（`UPLOAD_DIR` / `CHROMA_PERSIST_DIR`）+ `tenant_id` 拼子目录，每个租户独立文件夹。安全靠 `get_safe_upload_path`：`tenant_id` 只留 `[a-zA-Z0-9_-]`、文件名清洗、`is_safe_path` 用 `resolve` 后判断仍在 base 内，防 `../` 穿越。
+
+5. **检索为什么是 hybrid + reranker，而不是纯语义向量？**
+   法律术语要精确匹配（BM25/关键词）避免语义漂移漏掉关键法条；向量召回语义相似片段；再用 BGE Cross-Encoder 重排提升 top-k 精度，且不可用时优雅降级——这是 RAG 不胡说的关键一环。
+
+6. **三层记忆系统存什么、按什么隔离？**
+   会话/短期、用户长期偏好、知识库级记忆；按 `tenant_id` 目录（`memory_db/<tenant>`）与 Redis 前缀（`tenant:{id}:memory`）做物理 + 前缀隔离。
+
+> 能流畅答出上面 6 张卡 = 吃透。建议配合第三节"白板默写"一起练。
+
