@@ -40,6 +40,9 @@ class FakeTokenizer:
         return {"input_ids": torch.tensor(ids), "attention_mask": torch.tensor(masks)}
 
 
+HIDDEN = 8  # 模拟编码器隐藏维度（真实 BGE-M3 为 1024）
+
+
 class FakeTransformer(nn.Module):
     def __init__(self):
         super().__init__()
@@ -47,11 +50,9 @@ class FakeTransformer(nn.Module):
 
     def forward(self, input_ids=None, attention_mask=None, **kw):
         B, S = input_ids.shape
-        h = torch.zeros(B, S, VOCAB)
-        # 在每个位置，把该位置真实 token 对应的隐藏置为正值 -> identity 投影后权重为正
-        for b in range(B):
-            for s in range(S):
-                h[b, s, int(input_ids[b, s])] = 1.5
+        # 每个位置都给一个正值的隐藏向量 -> 经稀疏头（Linear(H,1)）后门控权重为正，
+        # 等价于真实 BGE-M3 逐位置标量门控。权重与 token 无关，便于断言非空/确定性。
+        h = torch.full((B, S, HIDDEN), 1.5)
         return type("O", (), {"last_hidden_state": h})()
 
 
@@ -59,9 +60,10 @@ class FakeInner(nn.Module):
     def __init__(self):
         super().__init__()
         self.model = FakeTransformer()
-        self.sparse_linear = nn.Linear(VOCAB, VOCAB, bias=False)
+        # BGE-M3 真实稀疏头：Linear(HIDDEN -> 1) 逐位置标量门控（不是投影到词表维度）
+        self.sparse_linear = nn.Linear(HIDDEN, 1, bias=False)
         with torch.no_grad():
-            nn.init.eye_(self.sparse_linear.weight)  # identity 投影
+            nn.init.ones_(self.sparse_linear.weight)  # 门控恒为正
         self.training = False
 
     def eval(self):

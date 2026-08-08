@@ -13,9 +13,11 @@ BGE-M3 嵌入器：同时提供稠密(dense, 1024 维) 与稀疏(sparse, SPLADE 
     该路径在 CPU 下偶发整条稀疏向量丢失（全 0 → 字典为空），且 token 权重
     组装与内部张量形状强耦合，难以通过 monkeypatch 稳定修复。
   - 这里改为：直接取模型自身的 XLM-RoBERTa 编码器 last_hidden_state，
-    经 `sparse_linear` 投影后对每个位置做确定性的 `gather`（取该位置真实 token
-    对应的权重），再组装为 {token_id: weight}。结果 100% 可复现、不再丢值，
-    且与 FlagEmbedding 正确行为在数学上等价。
+    经 `sparse_linear`（BGE-M3 的稀疏头是 Linear(H->1) 逐位置标量门控）得到每个
+    位置的门控权重，再按 `input_ids` 把每个 token id 在其序列中的最大门控权重
+    （等价于 FlagEmbedding 的 scatter_reduce(reduce="amax")）聚合为词表维度的
+    {token_id: weight}。结果 100% 可复现、不再丢值，且与 FlagEmbedding 正确行为
+    在数学上等价。
 
 模型**进程内单例**加载，避免稠密与稀疏各加载一份 2.3GB 权重。
 """
@@ -93,10 +95,10 @@ def encode_sparse_direct(
 ) -> List[Dict[str, float]]:
     """确定性地计算 BGE-M3 SPLADE 稀疏权重字典列表。
 
-    绕过 FlagEmbedding 的 `_sparse_embedding`（内部 scatter_reduce 在 CPU 下偶发
-    整条稀疏向量丢失，且 token 权重组装与内部形状耦合）。这里直接使用模型自身的
-    XLM-RoBERTa 编码器 + sparse_linear 投影，用确定性的 gather 取每个 token 的真实
-    权重，再组装为 {token_id: weight}。结果 100% 可复现，不依赖库的稀疏实现。
+    绕过 FlagEmbedding 的 `_sparse_embedding`（内部 scatter_reduce(reduce="amax") 在
+    CPU 下偶发整条稀疏向量丢失）。这里直接使用模型自身的 XLM-RoBERTa 编码器 +
+    逐位置标量门控 `sparse_linear`，按 token id 取最大门控权重（=amax）聚合成词表
+    维度稀疏向量，再组装为 {token_id: weight}。结果 100% 可复现，不依赖库的稀疏实现。
 
     参数:
         model: BGEM3FlagModel 实例
@@ -136,24 +138,33 @@ def encode_sparse_direct(
             with torch.no_grad():
                 out = transformer(input_ids=input_ids, attention_mask=attention_mask)
                 hidden = out.last_hidden_state  # (B, S, H)
-                token_weights = torch.relu(sparse_linear(hidden))  # (B, S, V)
-                # 对每个位置取「真实 token」对应的权重（确定性，等价于正确的 SPLADE）
-                gathered = token_weights.gather(
-                    -1, input_ids.unsqueeze(-1)
-                ).squeeze(-1)  # (B, S)
+                # BGE-M3 的稀疏头是逐 token 位置的标量门控：Linear(H -> 1)。
+                # 真正 SPLADE 词表向量 = 按 input_ids 把每个位置的门控权重聚合到词表维度
+                # （FlagEmbedding 用 scatter_reduce(reduce="amax")，CPU 下曾偶发丢值）。
+                # 这里用确定性方式：对每个 token id 取其在序列中的最大门控权重（=amax），
+                # 数学上等价且 100% 可复现，不依赖库的 scatter_reduce。
+                gate = torch.relu(sparse_linear(hidden)).squeeze(-1)  # (B, S)
 
-            gathered_np = gathered.cpu().numpy()
+            gate_np = gate.cpu().numpy()
             ids_np = input_ids.cpu().numpy()
+            mask_np = attention_mask.cpu().numpy()
 
-            for b in range(gathered_np.shape[0]):
+            for b in range(gate_np.shape[0]):
                 d: Dict[str, float] = {}
-                for w, idx in zip(gathered_np[b], ids_np[b]):
-                    if idx in unused:
+                seq_ids = ids_np[b]
+                seq_gate = gate_np[b]
+                seq_mask = mask_np[b]
+                for p in range(seq_ids.shape[0]):
+                    if seq_mask[p] == 0:  # 跳过 pad
                         continue
+                    idx = int(seq_ids[p])
+                    if idx in unused:  # 跳过特殊 token
+                        continue
+                    w = float(seq_gate[p])
                     if w > 0:
-                        s = str(int(idx))
+                        s = str(idx)
                         if w > d.get(s, 0.0):
-                            d[s] = float(w)
+                            d[s] = w
                 results.append(d)
     finally:
         if was_training:

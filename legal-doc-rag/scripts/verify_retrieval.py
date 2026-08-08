@@ -59,7 +59,7 @@ def main():
     vector_store = Chroma.from_texts(texts=DOCS, embedding=embedder, collection_name="verify")
 
     retriever = HybridRetriever(
-        vector_store=vector_store,
+        dense_store=vector_store,
         texts=DOCS,
         k=5,
         sparse_store=sparse_store,

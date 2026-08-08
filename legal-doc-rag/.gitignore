@@ -1,5 +1,6 @@
 ﻿# Generated data
 chroma_db/
+sparse_db/
 memory_db/
 model_cache/
 data/
