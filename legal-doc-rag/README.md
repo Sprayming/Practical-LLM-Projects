@@ -55,7 +55,8 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 |------|------|------|------|
 | POST | /api/auth/register | 注册（首个为超管） | 无 |
 | POST | /api/auth/login | 登录返回 Token | 无 |
-| POST | /api/documents/upload | 上传 PDF | Bearer |
+| POST | /api/documents/upload | 上传 PDF（**异步**：立即返回 task_id，后台索引） | Bearer |
+| GET | /api/documents/task/{task_id} | 查询上传索引任务的进度与状态 | Bearer |
 | GET | /api/documents | 文档列表 | Bearer |
 | DELETE | /api/documents/{filename} | 删除文档（超管） | Bearer |
 | POST | /api/chat | RAG 问答 | Bearer |
@@ -718,11 +719,10 @@ app/main.py (FastAPI 入口)
 `
 1. 用户上传 PDF
    POST /api/documents/upload
-   ├── app/api/documents.py: 接收文件 → 保存到 ./uploads/{tenant_id}/
-   ├── app/processing/multimodal_pipeline.py: 解析 PDF (PyMuPDF + OCR)
-   ├── app/retrieval/embedder_factory.py: 调用火山引擎 Embedding API 生成向量
-   ├── ChromaDB: 向量 + 元数据持久化到 ./chroma_db/{tenant_id}/
-   └── 返回上传结果
+   ├── app/api/documents.py: 接收文件 → 保存到 ./uploads/{tenant_id}/ → 立即返回 task_id（**异步，不阻塞**）
+   ├── 后台线程池执行：app/processing/multimodal_pipeline.py 解析 PDF (PyMuPDF + OCR) → embedder_factory 生成向量 → ChromaDB 持久化到 ./chroma_db/{tenant_id}/
+   ├── 进度查询：GET /api/documents/task/{task_id} 返回 pending/processing(extracting→embedding→building_index)/done/failed 及百分比
+   └── 索引完成后即可提问；索引中提问会返回"文档正在后台索引中"提示而非报错
 
 2. 用户提问
    POST /api/chat (SSE 流式)

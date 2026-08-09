@@ -24,6 +24,7 @@ from typing import Dict, Any, AsyncGenerator
 from types import SimpleNamespace
 from fastapi import Request
 from app.core.limiter import limiter
+from app.tasks.task_store import get_active_task_for_tenant
 
 _log = StructuredLogger("chat")
 
@@ -196,6 +197,18 @@ async def chat(request: Request, req: ChatRequest, user: dict = Depends(require_
 
     # 检查向量库
     if not pipeline or not pipeline.vector_store:
+        # 若该租户有文档正在后台索引，给出更友好的"进行中"提示
+        active = get_active_task_for_tenant(user["tenant_id"])
+        if active:
+            return JSONResponse(content={
+                "answer": (
+                    f"文档「{active['filename']}」正在后台索引中"
+                    f"（{active['stage']}，进度 {active['progress']}%），请稍候再问。"
+                ),
+                "citations": [],
+                "token_usage": 0,
+                "task_id": active["task_id"],
+            })
         return _handle_vector_store_error()
 
     # 处理查询
