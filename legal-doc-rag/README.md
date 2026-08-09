@@ -352,6 +352,28 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 
 ## 更新日志
 
+### 2026-08-08: 修复 chat 接口返回 null/500 的多个 bug（c3ce4f6）
+
+- **现象**：重启服务、换好 DeepSeek key 后，聊天接口仍返回 null 或 500，前端显示"API错误：请求失败"。
+- **根因**：`app/api/chat.py` 存在多处损坏——① 路由注册的 `chat` 是空壳函数（真实逻辑未被装饰器注册）；② 把元组当成对象访问属性；③ 引用了未定义的 `ContextTracker`；④ 对 `_memory_cache`（实为 dict）调用了 `.put()`。
+- **修复**：
+  1. 删除空壳 `chat`，使装饰器注册到真实实现。
+  2. `_build_pipeline` 改为返回 `SimpleNamespace`（含 `.vector_store/.qr/.cache/.ct/.mem`）。
+  3. `_get_context` 改用已导入的 `CitationTracker` 并复用 `pipeline.ct`。
+  4. `_memory_cache.put/.cleanup` 改为 dict 兼容；新增 `from types import SimpleNamespace`。
+  5. 索引未完成时返回"文档正在后台索引中（进度 X%）"。
+- **验证**：register / login / upload / chat 全链路 200。
+
+### 2026-08-08: 上传改为异步索引 + 新增任务轮询接口（f19ace2）
+
+- **动机**：大 PDF（如 581KB 民法典）在 CPU 上同步嵌入 >240s，阻塞主进程导致服务卡死。
+- **改动**：
+  1. 新增 `app/tasks/__init__.py` 与 `app/tasks/task_store.py`（进程内任务状态 + 单 worker 线程池，避免 torch 并发不安全）。
+  2. `app/api/documents.py`：`upload_document` 改为接收文件 → 安全落盘 → **立即返回 202 + `task_id`**；后台 `_run_indexing()` 执行抽取+嵌入+建索引+持久化稀疏向量；新增 `GET /api/documents/task/{task_id}` 轮询进度。
+  3. `app/api/chat.py`：索引中提问返回"文档正在后台索引中（进度 X%）"。
+- **文档同步**：README API 表新增 `GET /api/documents/task/{task_id}`，上传标注异步；`static-guide.html` / `student.md` / `architecture-explainer.html` 写入链路与调用树同步改为异步（提交 `14c93d0`）。
+- **验证**：上传秒回（0.03s/0.05s）、进度轮询可用、索引期间 `/health` 0.15s 响应、chat 返回民法典 1254 条引用。
+
 ### 2026-08-09: 修复上传后提示请先上传文档 + 聊天 JSON 解析网络错误
 
 #### Bug 1：已上传文档却提示"请先上传文档"
