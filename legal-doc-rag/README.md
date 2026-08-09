@@ -59,7 +59,8 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 | GET | /api/documents/task/{task_id} | 查询上传索引任务的进度与状态 | Bearer |
 | GET | /api/documents | 文档列表 | Bearer |
 | DELETE | /api/documents/{filename} | 删除文档（超管） | Bearer |
-| POST | /api/chat | RAG 问答 | Bearer |
+| POST | /api/chat | RAG 问答（stream 字段控制是否 SSE） | Bearer |
+| POST | /api/chat/stream | RAG 流式问答（SSE） | Bearer |
 | GET | /api/health | 健康检查 | 无 |
 
 ## 测试
@@ -351,8 +352,9 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 
 ## 更新日志
 
-### 2026-08-09: 修复「已上传文档却提示请先上传文档」
+### 2026-08-09: 修复上传后提示请先上传文档 + 聊天 JSON 解析网络错误
 
+#### Bug 1：已上传文档却提示"请先上传文档"
 - **现象**：用户在 Web 上传 PDF 成功（左侧"已上传文档"列表已显示），索引进行到约 40% 时/或重启服务后，聊天接口仍返回"请先上传文档"，无法提问。
 - **根因**：后台索引任务状态原先只存在 `app/tasks/task_store.py` 的**内存字典** `task_store._tasks` 里。一旦 uvicorn 进程重启（或崩溃），任务表被清空，但 `uploads/{tenant}/` 里的 PDF 文件还在、`chroma_db/{tenant}` 尚未建好，于是 `chat.py` 判空库直接返回"请先上传文档"——文档其实早上传了，只是索引被中断且状态丢失。
 - **修复**：
@@ -360,7 +362,18 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
   2. `app/main.py`：启动时扫描 `uploads/{tenant}/`，对已上传但未完成向量化的 PDF 自动重新提交后台索引（避免手动重传）。
   3. `app/api/chat.py`：向量库不可用时按状态返回不同提示——索引中/"文档正在后台索引中（进度 X%）"、索引失败/"请重新上传"、已上传未索引/"文档正在恢复索引"、未上传/"请先上传文档"。
   4. `app/frontend/index.html`：修复上传成功后显示 `(undefined 段已索引)`（异步接口不再返回 chunks，改为显示 task_id + "正在后台索引"）。
-- **验证**：重启服务后，已存在的民法典/证券法向量库可正常聊天；新上传文档走"秒回 task_id → 后台索引 → 轮询"链路，索引中提问返回友好提示而非报错。
+
+#### Bug 2：聊天返回"网络错误：Unexpected token 'd', data:{...} is not valid JSON"
+- **现象**：用户在对话框发送第二条消息时，界面报"网络错误"，控制台显示 JSON 解析失败，解析内容却是 SSE 流式数据（以 `data:` 开头）。
+- **根因**：前端 `sendMessage()` 先请求 `/api/chat/stream`，但后端此前**没有**这个路由；未匹配到 API 路由的请求落到 `StaticFiles(html=True)`，POST 被返回 405 Method Not Allowed。前端进入 fallback 后又请求 `/api/chat`，且未传 `stream` 字段，`ChatRequest.stream` 默认 `True`，于是后端返回 `StreamingResponse`（SSE），前端却用 `r2.json()` 解析，导致报错。
+- **修复**：
+  1. `app/api/chat.py`：新增 `POST /api/chat/stream` 路由 `chat_stream()`，强制 `stream=True` 并复用 `chat()` 的流式分支，使前端主链路有合法端点。
+  2. `app/frontend/index.html`：fallback 请求显式带上 `stream: false`，并把 `r2.json()` 改为先 `r2.text()` 再 `JSON.parse`，非 JSON 时截断文本展示，避免再次抛"网络错误"。
+- **验证**：
+  - `curl POST /api/chat/stream` 返回 200 + `text/event-stream`。
+  - `curl POST /api/chat` 且 `stream:false` 返回标准 JSON。
+  - 登录后连续发送多条消息不再报 JSON 解析错误。
+
 - **受影响文件**：`task_store.py` / `main.py` / `chat.py` / `frontend/index.html`，以及 `static-guide.html` / `student.md` / `architecture-explainer.html`（调用树与文案同步更新）。
 
 ### 2026-08-05: 测试套件修复 + 代码清理

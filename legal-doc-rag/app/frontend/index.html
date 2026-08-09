@@ -917,9 +917,11 @@ async function sendMessage() {
       var r2 = await fetch(API + "/api/chat", {
         method: "POST",
         headers: {"Content-Type": "application/json", "Authorization": "Bearer " + token},
-        body: JSON.stringify({message: msg, history: messages})
+        body: JSON.stringify({message: msg, history: messages, stream: false})
       });
-      var d2 = await r2.json();
+      var text2 = await r2.text();
+      var d2;
+      try { d2 = JSON.parse(text2); } catch(e) { throw new Error(text2.slice(0,120) || "请求失败"); }
       if (r2.ok) {
         addMessage("assistant", d2.answer, d2.citations, d2.token_usage);
         messages.push({role:"user",content:msg},{role:"assistant",content:d2.answer});

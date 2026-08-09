@@ -224,6 +224,15 @@ async def chat(request: Request, req: ChatRequest, user: dict = Depends(require_
     else:
         return await _handle_non_streaming_response(context, req, pipeline, trace)
 
+
+@router.post("/stream")
+@limiter.limit("100/minute")
+async def chat_stream(request: Request, req: ChatRequest, user: dict = Depends(require_user)):
+    """流式聊天接口（兼容前端 /api/chat/stream）。"""
+    req.stream = True
+    return await chat(request, req, user)
+
+
 def _handle_vector_store_error(tenant_id: str):
     """处理向量库不可用的情况，按状态给出不同提示。"""
     # 1. 有正在后台索引的任务
