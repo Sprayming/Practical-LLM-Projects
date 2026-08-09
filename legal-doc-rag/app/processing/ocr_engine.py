@@ -36,7 +36,18 @@ class OCREngine:
 
     def _init_paddleocr(self):
         from paddleocr import PaddleOCR
-        self._ocr = PaddleOCR(use_angle_cls=True, lang="ch", show_log=False, use_gpu=False)
+        try:
+            # PaddleOCR 3.x API（2024+）：用文档方向/扭转/文本行方向开关替代旧的
+            # use_angle_cls / use_gpu；lang 仍用于选择中英文模型。
+            self._ocr = PaddleOCR(
+                use_doc_orientation_classify=False,
+                use_doc_unwarping=False,
+                use_textline_orientation=True,
+                lang="ch",
+            )
+        except TypeError:
+            # 兼容旧版 2.x API
+            self._ocr = PaddleOCR(use_angle_cls=True, lang="ch", show_log=False, use_gpu=False)
         self._backend = "paddleocr"
 
     def _init_pytesseract(self):
@@ -54,7 +65,7 @@ class OCREngine:
                 tmp.write(image_bytes)
                 tmp_path = tmp.name
             try:
-                result = self._ocr.ocr(tmp_path, cls=True)
+                result = self._ocr.ocr(tmp_path)
                 texts = []
                 if result and result[0]:
                     for line in result[0]:
