@@ -85,6 +85,8 @@ POST /api/chat（Bearer）→ [安全] JWT 校验 + 限流
 每个技术选型能答 why / why not：
 
 - 为什么本地 **BGE-M3** 而非线上 embedding：零成本 / 零泄露 / 面试加分"检索不依赖外部服务"；但切换后需清空 `chroma_db` 重新向量化。
+  - **真实踩坑（2026-08-09）**：线上豆包 embedding 因账号触发「设定推理上限」被暂停，索引与检索全线 429，系统直接不可用——这正是"不依赖外部服务"的价值所在。已切回本地 BGE-M3：模型 2.2 GB 存于 `model_cache/bge-m3`，离线加载 ~13 s，索引 11 chunks 仅 14 s。
+  - 切换必须清库：豆包 **2560 维** vs BGE-M3 **1024 维**，维度不兼容，混用直接报错。
 - 为什么 **hybrid** 而非纯语义：低频法律术语语义易漏，BM25 兜底。
 - 为什么自己写 RAG 而非 LangChain：可控 / 可读 / 面试能讲清每一步；但承认 LangChain 生态省事。
 - SQLite → 多租户隔离怎么切；并发 / 水平扩展怎么讲（当前单实例）。
@@ -297,7 +299,7 @@ class Reranker:
 | 4 | 创建任务并持久化 | `create_task()` / `_save_tasks()` | `app/tasks/task_store.py:21` / `:55` |
 | 5 | 立即返回 task_id（202） | `upload_document()` return | `documents.py:57` |
 | 6 | PDF 切块 | `MultimodalPipeline.process()` | `processing/multimodal_pipeline.py:29` |
-| 7 | 向量化 | `create_embedder()` → `DirectEmbed` | `retrieval/embedder_factory.py:35` / `:9` |
+| 7 | 向量化 | `create_embedder()` → `BGEM3Embedder`（默认本地；`EMBEDDER_TYPE=openai` 时才走 `DirectEmbed`） | `retrieval/embedder_factory.py:83` / `bge_m3_embedder.py:180` |
 | 8 | 持久化 | `Chroma.from_texts(...).persist()` | langchain（落盘 `chroma_db/{tenant}`，后台线程） |
 | 9 | 后台索引（抽取+嵌入+建库） | `_run_indexing()`（线程池） | `documents.py:66` |
 | 10 | 启动恢复 | `_recover_incomplete_indexing()` | `app/main.py:91` |

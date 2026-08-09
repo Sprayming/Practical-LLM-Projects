@@ -173,10 +173,18 @@ python -m pytest --cov=app --cov-report=term-missing
   2. 中文法律文本语义效果优于 `text2vec-base-chinese`；
   3. 项目 `requirements-docker.txt` 已含 `sentence-transformers`，huggingface backend 已支持；
   4. 面试加分点：「检索层不依赖任何外部 embedding 服务」。
+- **落地状态（2026-08-09 已完成切换并验证）**：模型已下载至 `model_cache/bge-m3`（2.2 GB），
+  离线加载 ~13 s，稠密 1024 维 + BGE-M3 稀疏向量均正常；实测重新索引一份 PDF（11 chunks）耗时 ~14 s，
+  **全程零外部 API 调用**。
 - **切换注意事项**：
-  - BGE-M3 输出 **1024 维**，首次运行需联网下载模型到 `./model_cache`（建议提前在有网环境预下载，或配置 HuggingFace 镜像源）；
-  - 切换 embedding 模型后，已存的 Chroma 向量库维度 / 语义不再匹配，需**清空 `chroma_db` 重新向量化**文档（本项目当前 `chroma_db` 为空库，切换后直接上传即可，无需重建）；
-  - 如需线上 embedding：设 `EMBEDDER_TYPE=openai` 并填 `EMBEDDING_API_KEY`（火山 / 智谱 / 阿里均可），但务必先**轮换原泄露的 key**。
+  - BGE-M3 输出 **1024 维**，首次需联网下载模型；国内直连 `huggingface.co` 不通，**必须走镜像**
+    `HF_ENDPOINT=https://hf-mirror.com`；
+  - Windows 无符号链接权限时下载会报 `WinError 14007`，需 `HF_HUB_DISABLE_SYMLINKS=1`；
+  - `app/main.py` 顶部硬编码 `TRANSFORMERS_OFFLINE=1`（运行时不联网），因此 `HF_MODEL_NAME` 应填
+    **本地模型目录绝对路径**（如 `D:\git\legal-doc-rag\model_cache\bge-m3`），而非仓库名 `BAAI/bge-m3`；
+  - 切换 embedding 模型后，已存的 Chroma 向量库维度 / 语义不再匹配，必须**清空 `chroma_db` 并重新索引**
+    所有文档（豆包 2560 维 → BGE-M3 1024 维，混用会直接报维度错误）；
+  - 如需切回线上 embedding：设 `EMBEDDER_TYPE=openai` 并填 `EMBEDDING_API_KEY`，但务必先**轮换原泄露的 key**。
 
 ### BGE-M3 相对 text2vec-base-chinese 的实质提升
 
@@ -211,9 +219,13 @@ python -m pytest --cov=app --cov-report=term-missing
 | LLM_API_KEY | - | DeepSeek Key |
 | LLM_BASE_URL | https://api.deepseek.com/v1 | LLM 地址 |
 | LLM_MODEL | deepseek-v4-pro | 模型名 |
-| EMBEDDING_API_KEY | - | 豆包 Embedding Key |
+| EMBEDDER_TYPE | huggingface | 嵌入类型：`huggingface`=本地 BGE-M3（默认、推荐）／`openai`=线上 API |
+| HF_MODEL_NAME | BAAI/bge-m3 | 本地嵌入模型；因 `TRANSFORMERS_OFFLINE=1`，实际应填**本地目录绝对路径** |
+| HF_CACHE_DIR | ./model_cache | 本地模型缓存目录（已 gitignore） |
+| HF_ENDPOINT | - | HuggingFace 镜像，国内下载模型必填 `https://hf-mirror.com` |
+| HF_HUB_DISABLE_SYMLINKS | - | Windows 下载模型需设为 `1`，否则报 `WinError 14007` |
+| EMBEDDING_API_KEY | - | 豆包 Embedding Key（仅 `EMBEDDER_TYPE=openai` 时需要） |
 | EMBEDDING_BASE_URL | https://ark.cn-beijing.volces.com/api/v3 | Embedding 地址 |
-| EMBEDDER_TYPE | openai | 嵌入类型（openai/huggingface） |
 | ADMIN_RESET_KEY | - | 管理员重置密钥（登录界面「忘记密码？」使用，必须配置且保密） |
 
 ## Docker
@@ -354,6 +366,26 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 .env 文件不要放 .gitignore（或放 docker-compose 的 environment 里兜底）。
 
 ## 更新日志
+
+### 2026-08-09: Embedding 切回本地 BGE-M3（停用火山云）+ 修复 LLM 流式静默失败
+
+- **背景**：火山云账号 `2113587726` 触发 doubao-embedding「设定推理上限」，模型服务被暂停，
+  索引与检索请求全部返回 429（`SetLimitExceeded`），系统实质不可用。
+- **改动**：
+  1. **Embedding 切至本地 BGE-M3**：`.env` 设 `EMBEDDER_TYPE=huggingface`，火山云相关配置整段注释并写明停用原因；
+     模型经 `hf-mirror.com` 下载至 `model_cache/bge-m3`（2.2 GB，含 `pytorch_model.bin` / `sparse_linear.pt` / tokenizer）。
+     因 `main.py` 硬编码 `TRANSFORMERS_OFFLINE=1`，`HF_MODEL_NAME` 指向**本地绝对路径**以离线加载。
+  2. **清空并重建向量库**：豆包 2560 维 → BGE-M3 1024 维不兼容，删除 `chroma_db/<tenant>` 后重新索引
+     （原始 PDF 已另行备份至 `D:\legal-doc-backup\`，避免删除文档接口连带清除上传原件）。
+  3. **修复 `app/api/chat.py` 流式静默失败（真 bug）**：`generate()` 内 `client.stream(...)` **从不检查
+     HTTP 状态码**。当 LLM 返回 401/429 时响应体是普通 JSON 而非 SSE，`data: ` 循环取不到任何 token，
+     直接走到 `done` —— 前端表现为「提问后毫无反应」，且日志无任何报错，极难排查。
+     现补充状态码判断，按 401/403、429、缺 key、其他 4 类给出明确中文提示并回传 `error` 事件。
+- **验证**：本地模型离线加载 12.8 s；稠密 1024 维、稀疏向量正常；重新索引 11 chunks 耗时 14 s，零外部调用；
+  提问时前端正确显示「LLM API Key 无效或已过期」而非静默。
+- **已知遗留**：① DeepSeek key 已失效（401），需重新申请后填入 `.env` 的 `LLM_API_KEY`；
+  ② 无 OCR 引擎，扫描件 PDF 抽取为 `[Image]` 占位符，检索内容为空；
+  ③ Reranker 模型未预下载，离线环境下自动 skip（不影响主链路）。
 
 ### 2026-08-09: 登录界面新增「忘记密码？」入口 + 管理员重置密钥
 

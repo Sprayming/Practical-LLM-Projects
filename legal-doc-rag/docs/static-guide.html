@@ -69,7 +69,7 @@
   <div class="step"><span class="n">4</span><b>立即返回 task_id</b> 创建后台索引任务并<b>马上返回 202 + task_id</b>，不等待嵌入完成；大文档也不再阻塞主服务（核心改动）。</div>
   <div class="step"><span class="n">5</span><b>任务状态持久化</b> <code>app/tasks/task_store.py</code> 把任务写入 <code>data/tasks.json</code>，服务重启后自动恢复，避免"已上传却提示请先上传文档"。</div>
   <div class="step"><span class="n">6</span><b>后台抽取+切块</b> 线程池里的 <code>_run_indexing()</code> 调 <code>multimodal_pipeline.py:29 MultimodalPipeline.process()</code> 切 500 字块，进度 10→40%。</div>
-  <div class="step"><span class="n">7</span><b>后台向量化</b> <code>embedder_factory.py create_embedder()</code> 生成 Dense + BGE-M3 稀疏(SPLADE，按 <code>input_ids</code> 取 amax 聚合)，进度 40%。</div>
+  <div class="step"><span class="n">7</span><b>后台向量化</b> <code>embedder_factory.py create_embedder()</code> 生成 Dense + BGE-M3 稀疏(SPLADE，按 <code>input_ids</code> 取 amax 聚合)，进度 40%。<br><small>2026-08-09 起默认走<b>本地离线</b> <code>BGEM3Embedder</code>（<code>model_cache/bge-m3</code>，稠密 1024 维），不再调用火山云豆包 embedding（账号触发推理上限被暂停，全线 429）。切换需清空 <code>chroma_db</code>：豆包 2560 维与 BGE-M3 1024 维不兼容。</small></div>
   <div class="step green"><span class="n">8</span><b>后台落盘 + 轮询</b> <code>Chroma.from_texts(...).persist()</code> 写 <code>chroma_db/{tenant}</code>，任务置 <code>done</code>；前端用 <code>GET /api/documents/task/{task_id}</code> 查进度。</div>
   <div class="step orange"><span class="n">9</span><b>启动自愈</b> <code>app/main.py startup_event()</code> 扫描 <code>uploads/{tenant}/</code>，对未向量化的 PDF 自动重新提交索引任务。</div>
 </div>

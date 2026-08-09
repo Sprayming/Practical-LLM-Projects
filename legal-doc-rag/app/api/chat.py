@@ -383,6 +383,24 @@ async def _handle_streaming_response(context, req, pipeline, trace):
                     headers={"Authorization": f"Bearer {cfg.LLM_API_KEY}", "Content-Type": "application/json"},
                     json={"model": cfg.LLM_MODEL, "messages": [{"role": "user", "content": context}], "stream": True, "temperature": 0.1, "max_tokens": 1024}
                 ) as resp:
+                    # 必须先检查状态码：出错时响应体是普通 JSON 而非 SSE，
+                    # 下面的 `data: ` 循环会一个 token 都取不到，导致前端「提问后毫无反应」
+                    # 的静默失败（日志里也看不到任何报错）。
+                    if resp.status_code != 200:
+                        raw = (await resp.aread()).decode("utf-8", "replace")
+                        _log.error(f"LLM 流式调用失败 status={resp.status_code} body={raw[:500]}")
+                        if resp.status_code in (401, 403):
+                            hint = "LLM API Key 无效或已过期，请更新 .env 中的 LLM_API_KEY 后重启服务。"
+                        elif resp.status_code == 429:
+                            hint = "LLM 服务限流或额度不足，请稍后重试或检查账户余额。"
+                        elif not cfg.LLM_API_KEY:
+                            hint = "未配置 LLM_API_KEY，请在 .env 中填写后重启服务。"
+                        else:
+                            hint = f"LLM 服务返回错误（HTTP {resp.status_code}）：{raw[:200]}"
+                        yield f"data: {json.dumps({'type': 'token', 'content': '[系统] ' + hint})}\n\n"
+                        yield f"data: {json.dumps({'type': 'error', 'content': hint})}\n\n"
+                        return
+
                     async for line in resp.aiter_lines():
                         if line and line.startswith("data: "):
                             data_str = line[6:]
