@@ -1,41 +1,39 @@
 @echo off
-title 法律文书 RAG 系统
-cd /d "D:\git\legal-doc-rag"
-set "LOG=%~dp0start-rag.log"
-set "PORT=8000"
-echo [%date% %time%] === 启动脚本开始 === > "%LOG%"
+setlocal
+set PORT=8000
+set PY=C:\Users\11195\miniconda3\python.exe
+set DIR=D:\git\legal-doc-rag
+title Legal-DOC-RAG Server (port 8000)
 
-netstat -ano 2>nul | findstr /r ":%PORT% " >nul
-if %errorlevel% == 0 (
-    echo [错误] 端口 %PORT% 已被占用，请先关闭占用程序后重试。 >> "%LOG%"
-    echo [错误] 端口 %PORT% 已被占用!请先关闭占用程序后重试。
-    pause
-    exit /b 1
+cd /d "%DIR%"
+
+echo Starting Legal-DOC-RAG on port %PORT% ...
+echo Python: %PY%
+
+REM --- free port 8000 if something else is holding it ---
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr /i ":%PORT% "') do (
+    echo Port %PORT% is occupied by PID %%a, stopping it ...
+    taskkill /f /pid %%a >nul 2>&1
+)
+timeout /t 2 >nul
+
+REM --- launch uvicorn in its own window (stays open for logs/errors) ---
+echo Launching uvicorn (keep this window open while using the system) ...
+start "Legal-DOC-RAG uvicorn" cmd /k ""%PY%" -m uvicorn app.main:app --host 127.0.0.1 --port %PORT%"
+
+REM --- wait until the server answers on the root path ---
+for /L %%i in (1,1,40) do (
+    curl.exe -s -o nul http://localhost:%PORT%/
+    if not errorlevel 1 goto OPEN
+    timeout /t 2 >nul
 )
 
-echo [1/2] 正在启动后端 (http://localhost:%PORT%) ...
-echo 启动命令: C:\Users\11195\miniconda3\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port %PORT% >> "%LOG%"
-start "uvicorn" cmd /c "C:\Users\11195\miniconda3\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 & echo uvicorn 已退出，按任意键关闭 & pause"
+echo ERROR: server did not respond within 80 seconds.
+echo Check the uvicorn window for errors.
+pause
+exit /b 1
 
-echo [2/2] 等待服务就绪，最多 60 秒...
-set tries=0
-:wait
-timeout /t 2 /nobreak >nul
-curl.exe -s -o nul http://localhost:%PORT%/ >nul 2>&1
-if %errorlevel% == 0 goto ok
-set /a tries+=1
-if %tries% geq 30 (
-    echo [错误] 启动超时，请查看弹出的 uvicorn 窗口或 start-rag.log。 >> "%LOG%"
-    echo [错误] 启动超时!请查看 uvicorn 窗口报错或 start-rag.log。
-    pause
-    exit /b 1
-)
-goto wait
-
-:ok
-echo.
-echo ========================================
-echo   启动完成!正在打开 http://localhost:%PORT%
-echo ========================================
-start "" "http://localhost:%PORT%"
-exit /b 0
+:OPEN
+echo Server is up. Opening browser ...
+start http://localhost:%PORT%/
+echo Done.
