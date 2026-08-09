@@ -1,8 +1,8 @@
 @echo off
 setlocal
+set DIR=D:\git\legal-doc-rag
 set PORT=8000
 set PY=%DIR%\.ocr_venv\Scripts\python.exe
-set DIR=D:\git\legal-doc-rag
 title Legal-DOC-RAG Server (port 8000)
 
 cd /d "%DIR%"

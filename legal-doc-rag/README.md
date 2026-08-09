@@ -186,6 +186,8 @@ python -m pytest --cov=app --cov-report=term-missing
     所有文档（豆包 2560 维 → BGE-M3 1024 维，混用会直接报维度错误）；
   - 如需切回线上 embedding：设 `EMBEDDER_TYPE=openai` 并填 `EMBEDDING_API_KEY`，但务必先**轮换原泄露的 key**。
 
+> ⚠️ **常见误解澄清**：BGE-M3 是**纯文本** embedding 模型，本身不处理图片。若某份 PDF 是扫描件（无文字层，只有整页图片），PyMuPDF 抽不到文字，BGE-M3 就「没东西可向量化」，检索时自然搜不到——**这并非 BGE-M3 多模态能力不行，而是缺 OCR 引擎把图片转成文字**。本项目已接入 **PaddleOCR** 补齐这条链路（见下方「OCR 引擎」章节）：扫描件经 OCR 识别出文字后再走 BGE-M3 向量化，即可被正常检索。
+
 ### BGE-M3 相对 text2vec-base-chinese 的实质提升
 
 `text2vec-base-chinese` 是项目最初本地方案（基于 `bert-base-chinese`，768 维，纯稠密，512 token 上限）。切到 BGE-M3 后在法律文书 RAG 场景有**实质性**提升：
@@ -211,6 +213,49 @@ python -m pytest --cov=app --cov-report=term-missing
   - 实现：`app/retrieval/bge_m3_embedder.py` 自计算 SPLADE 权重。BGE-M3 稀疏头是 `Linear(H,1)` 逐位置标量门控，本模块按 `input_ids` 取每个 token 的**最大门控权重（amax 聚合）**组装为 `{token_id: weight}`（确定性 Python 实现，等效于 FlagEmbedding 的 `scatter_reduce(amax)`，但规避了其在 CPU 下偶发整条丢值的 bug）；`sparse_store.py` 落盘/加载，`HybridRetriever._sparse_search_bge` 与 BM25 + 稠密做 RRF 加权融合。回归测试 `tests/unit/test_bge_m3_sparse.py` 覆盖非空/确定性/特殊 token 过滤。
 - [ ] 实验 ColBERT 多向量 late-interaction，强化长文证据定位；
 - [ ] 在 `tests/golden_test_set.json`（31 条法律问答回归集）上对比 text2vec → BGE-M3 的检索/回答质量提升。
+
+## OCR 引擎（扫描件 / 图片识别）
+
+### 为什么需要 OCR
+BGE-M3 只吃文本。对**有文字层**的 PDF，PyMuPDF 直接抽取文字即可；但对**扫描件 / 纯图片 PDF**（无文字层，整页就是一张图），PyMuPDF 抽不到文字，必须先用 OCR 把图片里的文字识别出来，再交给 BGE-M3 向量化，否则这份文档在检索时完全搜不到。
+
+### 选型：PaddleOCR 3.7（默认）
+- 中文识别准确率行业第一梯队，对法律条文印刷体识别极准（实测一页 ~1100 中文字符，置信度 0.97+）；
+- 自带 PP-OCRv6 检测 + 识别模型，首次运行自动下载并缓存到 `~/.paddlex/official_models/`；
+- 支持中英文混合（`lang="ch"`），可识别整页扫描图与 PDF 内嵌图片。
+
+### 接入位置
+`app/processing/ocr_engine.py` 的 `OCREngine` 封装 OCR 后端，`app/processing/multimodal_pipeline.py` 的 `MultimodalPipeline.process()` 对每页依次做：
+1. PyMuPDF 抽文字层；
+2. 页面 / 内嵌图片交给 `OCREngine.recognize()` 做 OCR；
+3. 图文块统一分块 → BGE-M3 向量化。
+无文字层且 OCR 仍无效的页面会被跳过，避免写入 `[图片描述]` 之类的占位符垃圾 chunk。
+
+### ⚠️ PaddleOCR 3.x 与 2.x API 不兼容（已适配）
+老代码按 PaddleOCR 2.x 写，3.7 改动巨大，直接跑会抽不出文字（旧 `for line in result[0]: line[1][0]` 实际在遍历 dict 的 key 字符串，得到一堆单字母乱码）。已适配：
+- 构造参数：`use_angle_cls` / `use_gpu` 已废弃 → 改用 `use_doc_orientation_classify` / `use_doc_unwarping` / `use_textline_orientation` / `lang`（`_init_paddleocr` 带 2.x 兼容回退）；
+- `ocr()` 废弃，推荐 `predict()` 接口；
+- 识别结果 `OCRResult` 是类字典对象，文本在 `result[0]["rec_texts"]`（不再是 `line[1][0]`）。
+
+### 独立虚拟环境 `.ocr_venv`（离线安装）
+PaddleOCR 依赖链重（paddlepaddle / paddlex / opencv 等），且本项目主环境（miniconda）已装重包，**直接 `pip install paddleocr` 会触发包卸载冲突**。解决方案：建独立 venv 复用 miniconda 已装重包、只把 PaddleOCR 相关新包装进 venv：
+```bash
+# 1) 建 venv（复用 miniconda 已装重包）
+python -m venv .ocr_venv
+echo "C:\Users\11195\miniconda3\Lib\site-packages" > .ocr_venv/Lib/site-packages/zz_miniconda.pth
+# 2) 在 venv 内离线安装 PaddleOCR（首次需联网下载模型权重）
+.ocr_venv/Scripts/python.exe -m pip install paddleocr opencv-contrib-python
+```
+> `.ocr_venv/` 已加入 `.gitignore`，不入库。模型权重缓存于 `~/.paddlex/`（用户目录，跨项目复用）。
+> 启动脚本 `启动法律文书 RAG 系统.bat` 的 `PY` 已指向 `.ocr_venv/Scripts/python.exe`——**必须用它启动**，否则服务进程没有 paddleocr，扫描件仍进不了库。
+
+### 重索引扫描件
+改完抽取链路或新接入 OCR 后，用离线脚本重建索引（脱离 web 服务进程，避免后台线程被回收）：
+```bash
+# 需能 import paddleocr 的环境 + 离线加载本地 BGE-M3
+.ocr_venv/Scripts/python.exe -u reindex_docs.py
+```
+脚本遍历 `chroma_db` 下各租户 `uploads/` 的所有 PDF：有文字层直接抽，扫描件走 OCR；抽取为空则清理历史垃圾 chunk；已索引源先清后写（幂等，可重复跑）。
 
 ## 环境变量
 
@@ -238,7 +283,9 @@ Docker 数据通过符号链接指向 D:\DockerData\Docker，不占 C 盘空间�
 - legal-doc-rag-redis-1: Redis（port 6379）
 
 ### 一键启动
-start-rag.bat 自动检测 Docker Desktop 运行状态并拉起服务。
+- **Docker 方式**：`start-rag.bat` 自动检测 Docker Desktop 运行状态并拉起服务（Redis + App）。
+- **本地方式（推荐，含 OCR）**：双击 `启动法律文书 RAG 系统.bat`，它用 `.ocr_venv/Scripts/python.exe` 启动 uvicorn（port 8000）。**OCR 依赖 PaddleOCR，必须走这个脚本**——若用 miniconda 直接 `uvicorn` 启动，进程没有 paddleocr，扫描件 PDF 无法入库。
+- 重索引 / 重建向量库：`reindex_docs.py`（需 `.ocr_venv` 环境，详见「OCR 引擎」章节）。
 
 ## 面试常见问题
 
@@ -255,7 +302,7 @@ Bi-Encoder 离线向量化适合召回，Cross-Encoder 交互式计算适合精�
 faithfulness（忠实）+ answer_relevancy（切题）+ context_precision（精确）+ context_recall（召回）
 
 ### Q5: PDF 多模态解析？
-PyMuPDF 提取文字 + 图片坐标 -> pdf2image 转图 -> PaddleOCR 识别 -> 多尺度描述。
+`MultimodalPipeline` 对每页：① PyMuPDF 抽文字层；② 页面 / 内嵌图片交 `OCREngine`（PaddleOCR）识别文字；③ 图文统一分块 → BGE-M3 向量化。无文字层的扫描件靠 OCR 补齐（PaddleOCR 3.7，`predict()` + `rec_texts`），无需 pdf2image 中转。
 
 ### Q6: 记忆系统？
 三层：短期（Redis 原文）-> 中期（LLM 摘要）-> 长期（ChromaDB 向量 + 遗忘曲线）。
@@ -365,7 +412,29 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 **教训**: Windows 上 PowerShell 的 Add-Content / Out-File 默认用 GBK，Python 文件必须显式指定 UTF-8 编码。
 .env 文件不要放 .gitignore（或放 docker-compose 的 environment 里兜底）。
 
+### 18. PaddleOCR 3.7 API 巨变 + 主环境装包冲突（OCR 接入扫描件）
+**现象**：扫描件 PDF 上传后检索不到；老代码抽 OCR 结果得到一堆单字母乱码（如 `n a o t o e e e...`），0 个中文字符。
+**根因**：
+1. **API 不兼容**：PaddleOCR 3.7 相对老代码写的 2.x 改动巨大——构造参数 `use_angle_cls`/`use_gpu` 已移除（改 `use_doc_orientation_classify`/`use_doc_unwarping`/`use_textline_orientation`/`lang`）；`ocr()` 已废弃，推荐 `predict()`；识别结果 `OCRResult` 是**类字典对象**，文本在 `result[0]["rec_texts"]`，而老代码 `for line in result[0]: line[1][0]` 实际在遍历 dict 的 key 字符串、取单字符 → 乱码。
+2. **装包冲突**：在 miniconda 主环境 `pip install paddleocr` 会触发对 PyYAML 等重包的卸载，被沙箱「安全删除」保护拦截而失败。
+**解决**：
+- `ocr_engine.py` 的 `recognize()` 改用 `predict()` + `result[0]["rec_texts"]`；`_init_paddleocr` 用 3.7 新参数并带 2.x 兼容回退。实测一页 ~1100 中文字符、置信度 0.97+，识别极准。
+- 建独立 `.ocr_venv`，用 `.pth` 文件复用 miniconda 已装重包，只把 PaddleOCR 相关新包装进 venv 目录，规避卸载冲突。`.ocr_venv` 已入 `.gitignore`。
+- 启动 bat 的 `PY` 指向 `.ocr_venv/Scripts/python.exe`（**注意 `set DIR` 须在 `set PY` 之前，否则 `%DIR%` 展开为空**）。
+- 用 `.ocr_venv/Scripts/python.exe -u reindex_docs.py` 离线重建索引，扫描件即可被检索。
+
 ## 更新日志
+
+### 2026-08-09: 接入 PaddleOCR 3.7，扫描件 PDF 可被检索（OCR 链路打通）
+
+- **背景**：用户上传的《中华人民共和国劳动合同法》是扫描件（无文字层，整页为图片）。PyMuPDF 抽不到文字，BGE-M3 又只吃文本，导致该文档在检索时完全搜不到；且此前 RAG 只会参考第一个 PDF（RRF 去重 + 扫描件 `[Image]` 占位符双 bug）。
+- **改动**：
+  1. **`app/processing/ocr_engine.py` 适配 PaddleOCR 3.7**：`recognize()` 改用 `predict()` 接口，从 `result[0]["rec_texts"]` 取文本（2.x 的 `for line in result[0]: line[1][0]` 实际遍历 dict key 出乱码）；`_init_paddleocr` 用 3.7 新构造参数并带 2.x 兼容回退。
+  2. **独立虚拟环境 `.ocr_venv`**：因 miniconda 主环境装 `paddleocr` 会触发重包卸载冲突（被沙箱安全删除拦截），改用 venv + `.pth` 复用已装重包，只把 PaddleOCR 相关新包装入 venv。已入 `.gitignore`。
+  3. **`reindex_docs.py` 支持扫描件 OCR 重建**：改用 `MultimodalPipeline().process()`（内部走 PyMuPDF 文字层 + OCR + 分块），`extract_pages` → `extract_chunks`；抽取为空则清理历史垃圾 chunk，非空则先清后写（幂等）。
+  4. **启动脚本 `启动法律文书 RAG 系统.bat`**：`PY` 指向 `.ocr_venv/Scripts/python.exe`（并修正 `set DIR` 必须在 `set PY` 之前的顺序 bug）。
+- **验证**：PaddleOCR 对《劳动合同法》扫描页实测抽出 ~1100 中文字符（置信度 0.97+）；`reindex_docs.py` 用 venv 离线重建《刑法》（545 chunks）+《劳动合同法》（OCR）索引；端到端提问可综合两文档并引用真实法条。
+- **文档同步**：README 补「OCR 引擎」章节、澄清「BGE-M3 纯文本、扫描件靠 OCR」误解、更新 Q5 与一键启动、新增踩坑第 18 条；同步 student.md / docs/static-guide.html。
 
 ### 2026-08-09: Embedding 切回本地 BGE-M3（停用火山云）+ 修复 LLM 流式静默失败
 
@@ -384,7 +453,7 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 - **验证**：本地模型离线加载 12.8 s；稠密 1024 维、稀疏向量正常；重新索引 11 chunks 耗时 14 s，零外部调用；
   提问时前端正确显示「LLM API Key 无效或已过期」而非静默。
 - **已知遗留**：① DeepSeek key 已失效（401），需重新申请后填入 `.env` 的 `LLM_API_KEY`；
-  ② 无 OCR 引擎，扫描件 PDF 抽取为 `[Image]` 占位符，检索内容为空；
+  ② ~~无 OCR 引擎，扫描件 PDF 抽取为 `[Image]` 占位符，检索内容为空~~ → **已解决（2026-08-09）**：接入 PaddleOCR 3.7，`OCREngine.recognize()` 改用 `predict()`+`rec_texts`，扫描件经 OCR 识别文字后走 BGE-M3 向量化，可被正常检索；独立 `.ocr_venv` 离线安装规避装包冲突；`reindex_docs.py` 已支持扫描件 OCR 重建索引。
   ③ Reranker 模型未预下载，离线环境下自动 skip（不影响主链路）。
 
 ### 2026-08-09: 登录界面新增「忘记密码？」入口 + 管理员重置密钥

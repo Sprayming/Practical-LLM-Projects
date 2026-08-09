@@ -14,6 +14,9 @@ __pycache__/
 # Env
 .env
 
+# Isolated OCR venv (PaddleOCR) — 含大量依赖，不入库
+.ocr_venv/
+
 # Temp
 _fix_*.py
 evaluation_report.json

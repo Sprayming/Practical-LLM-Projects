@@ -15,7 +15,15 @@ class OCREngine:
 
     def __init__(self, lang: str = "ch"):
         self.lang = lang
-        self._backend = None
+        # 懒加载：默认不初始化任何后端，首次 recognize() 时才按需加载，
+        # 避免纯文字 PDF（无需 OCR）也白白占用 PaddleOCR 数百 MB 显存/内存。
+        self._backend = None  # None=尚未初始化；"none"=无可用引擎
+        self._ocr = None
+
+    def _ensure_init(self):
+        """首次需要时初始化 OCR 后端（幂等）。"""
+        if self._backend is not None:
+            return
         self._init_backend()
 
     def _init_backend(self):
@@ -57,6 +65,7 @@ class OCREngine:
 
     def recognize(self, image_bytes: bytes) -> str:
         """识别图片中的文字"""
+        self._ensure_init()
         if self._backend == "none":
             return ""
         if self._backend == "paddleocr":

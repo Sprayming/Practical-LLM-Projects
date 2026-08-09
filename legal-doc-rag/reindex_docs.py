@@ -11,6 +11,7 @@
 """
 import os
 import sys
+import traceback
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -74,57 +75,75 @@ def reindex_tenant(tenant_id: str):
     existing_sources = {m.get("source") for m in existing}
 
     for fname in pdfs:
-        path = os.path.join(upload_dir, fname)
-        print(f"  [处理] {fname}: 调用 MultimodalPipeline（含 OCR）...")
-        chunks = extract_chunks(path)
-        total_chars = sum(len(c) for c in chunks)
-
-        if not chunks:
-            # 无文字层且 OCR 也无效：清理历史垃圾 chunk
-            if fname in existing_sources:
-                try:
-                    res = col.get(where={"source": fname})
-                    del_ids = res.get("ids", [])
-                    if del_ids:
-                        col.delete(ids=del_ids)
-                        print(f"  [清理] {fname}: 删除 {len(del_ids)} 个无文字层/无 OCR 垃圾 chunk")
-                except Exception as e:
-                    print(f"  [清理] {fname} 删除失败: {e}")
-            else:
-                print(f"  [跳过] {fname}: 抽取后无有效文本（无文字层且 OCR 未识别）")
-            continue
-
-        # 先清旧的，再写入（幂等）
         try:
-            res = col.get(where={"source": fname})
-            del_ids = res.get("ids", [])
-            if del_ids:
-                col.delete(ids=del_ids)
-                print(f"  [清理] {fname}: 删除旧 chunk {len(del_ids)} 个（准备重建）")
-        except Exception:
-            pass
+            path = os.path.join(upload_dir, fname)
+            print(f"  [处理] {fname}: 调用 MultimodalPipeline（含 OCR）...", flush=True)
+            chunks = extract_chunks(path)
+            total_chars = sum(len(c) for c in chunks)
 
-        print(f"  [索引] {fname}: 抽取 {len(chunks)} chunks（总字符 {total_chars}）")
+            if not chunks:
+                # 无文字层且 OCR 也无效：清理历史垃圾 chunk
+                if fname in existing_sources:
+                    try:
+                        res = col.get(where={"source": fname})
+                        del_ids = res.get("ids", [])
+                        if del_ids:
+                            col.delete(ids=del_ids)
+                            print(f"  [清理] {fname}: 删除 {len(del_ids)} 个无文字层/无 OCR 垃圾 chunk", flush=True)
+                    except Exception as e:
+                        print(f"  [清理] {fname} 删除失败: {e}", flush=True)
+                else:
+                    print(f"  [跳过] {fname}: 抽取后无有效文本（无文字层且 OCR 未识别）", flush=True)
+                continue
 
-        # BGE-M3 稀疏向量（检索时用于稀疏召回，失败不影响稠密）
-        if is_bge:
+            # 先清旧的，再写入（幂等）
             try:
-                sp_items = [
-                    {"key": t[:200], "sp": sp}
-                    for t, sp in zip(chunks, embedder.encode_sparse(chunks))
-                ]
-                save_sparse(tenant_id, fname, sp_items)
-            except Exception as e:
-                print(f"    [warn] 稀疏向量生成失败（忽略）: {e}")
+                res = col.get(where={"source": fname})
+                del_ids = res.get("ids", [])
+                if del_ids:
+                    col.delete(ids=del_ids)
+                    print(f"  [清理] {fname}: 删除旧 chunk {len(del_ids)} 个（准备重建）", flush=True)
+            except Exception:
+                pass
 
-        embs = embedder.embed_documents(chunks)
-        col.add(
-            ids=[f"{fname}-{i}" for i in range(len(chunks))],
-            documents=chunks,
-            embeddings=embs,
-            metadatas=[{"source": fname, "chunk": i} for i in range(len(chunks))],
-        )
-        print(f"    -> 已写入 {len(chunks)} chunks")
+            print(f"  [索引] {fname}: 抽取 {len(chunks)} chunks（总字符 {total_chars}）", flush=True)
+
+            # 分批向量化 + 增量写入：降低峰值内存，单批失败不影响整体可重跑
+            BATCH = 64
+            all_sp_items = []
+            written = 0
+            for s in range(0, len(chunks), BATCH):
+                batch = chunks[s:s + BATCH]
+                if is_bge:
+                    try:
+                        sp = embedder.encode_sparse(batch)
+                        all_sp_items.extend(
+                            {"key": t[:200], "sp": w} for t, w in zip(batch, sp)
+                        )
+                    except Exception as e:
+                        print(f"    [warn] 稀疏向量生成失败（忽略）: {e}", flush=True)
+                embs = embedder.embed_documents(batch)
+                col.add(
+                    ids=[f"{fname}-{s + i}" for i in range(len(batch))],
+                    documents=batch,
+                    embeddings=embs,
+                    metadatas=[{"source": fname, "chunk": s + i} for i in range(len(batch))],
+                )
+                written += len(batch)
+                print(f"    -> 已写入 {written}/{len(chunks)} chunks", flush=True)
+
+            # 稀疏向量落盘（整文件覆盖写，需全部累积后一次保存）
+            if is_bge and all_sp_items:
+                try:
+                    save_sparse(tenant_id, fname, all_sp_items)
+                except Exception as e:
+                    print(f"    [warn] 稀疏向量落盘失败（忽略）: {e}", flush=True)
+
+            print(f"  [完成] {fname}: 共写入 {len(chunks)} chunks", flush=True)
+        except Exception as e:
+            print(f"  [ERROR] {fname} 处理失败: {e}", flush=True)
+            traceback.print_exc()
+            continue
 
     print(f"[tenant {tenant_id}] 集合当前总数: {col.count()}")
 
