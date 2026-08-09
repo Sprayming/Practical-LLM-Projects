@@ -105,6 +105,20 @@ body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif
   </div>
 </div>
 
+<div id="change-password-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; justify-content:center; align-items:center;">
+  <div class="login-card" style="position:relative;">
+    <h2>修改密码</h2>
+    <div id="cp-alert"></div>
+    <form id="cp-form" onsubmit="doChangePassword();return false">
+      <input type="password" id="cp-old" placeholder="原密码" required>
+      <input type="password" id="cp-new" placeholder="新密码（至少 6 位）" required>
+      <input type="password" id="cp-confirm" placeholder="确认新密码" required>
+      <button type="submit">确认修改</button>
+    </form>
+    <p class="switch-form"><a href="#" onclick="hideChangePassword()">取消</a></p>
+  </div>
+</div>
+
 <div id="chat-page">
   <aside id="sidebar">
     <div class="brand">法律文档 RAG</div>
@@ -138,6 +152,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif
     </div>
     <button class="sidebar-btn" onclick="clearHistory()">清除历史</button>
     <button class="sidebar-btn" id="admin-btn" style="display:none" onclick="showAdminPanel()">管理后台</button>
+    <button class="sidebar-btn" onclick="showChangePassword()">修改密码</button>
     <button class="sidebar-btn" onclick="doLogout()">退出登录</button>
   </aside>
   <div id="chat-main">
@@ -329,6 +344,38 @@ function doLogout() {
   document.getElementById("login-page").style.display = "flex";
   document.getElementById("chat-messages").innerHTML = '<div class="empty-state" id="empty-state"><div class="icon">&#x1f4dc;</div><h3>开始问答</h3><p>多租户智能文档问答系统</p></div>';
   messages = [];
+}
+
+function showChangePassword() {
+  document.getElementById("cp-alert").innerHTML = "";
+  document.getElementById("cp-form").reset();
+  document.getElementById("change-password-modal").style.display = "flex";
+}
+function hideChangePassword() {
+  document.getElementById("change-password-modal").style.display = "none";
+}
+async function doChangePassword() {
+  let oldP = document.getElementById("cp-old").value;
+  let newP = document.getElementById("cp-new").value;
+  let confirmP = document.getElementById("cp-confirm").value;
+  if (!oldP || !newP) { showAlert("cp-alert","请填写原密码和新密码","error"); return false; }
+  if (newP.length < 6) { showAlert("cp-alert","新密码至少 6 位","error"); return false; }
+  if (newP !== confirmP) { showAlert("cp-alert","两次输入的新密码不一致","error"); return false; }
+  try {
+    let r = await fetch(API + "/api/auth/change-password", {
+      method:"POST",
+      headers:{"Content-Type":"application/json", "Authorization":"Bearer " + token},
+      body:JSON.stringify({old_password:oldP, new_password:newP})
+    });
+    let d = await r.json();
+    if (r.ok) {
+      showAlert("cp-alert", "密码修改成功，下次登录请用新密码", "success");
+      setTimeout(hideChangePassword, 1500);
+    } else {
+      showAlert("cp-alert", d.detail || d.message || "修改失败", "error");
+    }
+  } catch(e) { showAlert("cp-alert","网络错误： " + e.message,"error"); }
+  return false;
 }
 
 // ============================================================
