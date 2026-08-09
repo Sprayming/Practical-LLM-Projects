@@ -374,6 +374,11 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
   - `curl POST /api/chat` 且 `stream:false` 返回标准 JSON。
   - 登录后连续发送多条消息不再报 JSON 解析错误。
 
+#### 体验改进：提问后即时"正在思考"加载态
+- **问题**：发送问题后，流式气泡立刻以空 `message assistant` 形式插入，界面先出现一个空白方框，直到首个 token 到达才有内容，没有任何"思考中"之类的反馈。
+- **修复**：`app/frontend/index.html` 的 `sendMessage()` 在插入用户消息后**立即**渲染一个"正在思考"气泡（带跳动省略号动画 + 文案轮播："正在思考"→"正在检索相关资料"→"正在组织回答"，每 1.2s 切换）；收到首个 `token` 事件时将该气泡无缝替换为正式回答（清除轮播定时器），流式结束/出错/网络异常时均正确清理。
+- **验证**：服务端 `/api/chat/stream` 实测返回 146 个 `token` 事件，前端"思考中"气泡会在首个 token 到达时被替换，不再出现空白方框。
+
 - **受影响文件**：`task_store.py` / `main.py` / `chat.py` / `frontend/index.html`，以及 `static-guide.html` / `student.md` / `architecture-explainer.html`（调用树与文案同步更新）。
 
 ### 2026-08-05: 测试套件修复 + 代码清理
