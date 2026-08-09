@@ -34,4 +34,11 @@ ReduceMeanCheckIfOneDNNSupport
 Inference Embeddings:   0%|          | 0/4 [00:00<?, ?it/s]Inference Embeddings:  25%|██▌       | 1/4 [03:20<10:00, 200.09s/it]Inference Embeddings:  50%|█████     | 2/4 [12:19<13:19, 399.63s/it]Inference Embeddings:  75%|███████▌  | 3/4 [17:44<06:05, 365.52s/it]Inference Embeddings: 100%|██████████| 4/4 [19:14<00:00, 256.92s/it]Inference Embeddings: 100%|██████████| 4/4 [19:14<00:00, 288.69s/it]
     -> 已写入 128/545 chunks
 pre tokenize:   0%|          | 0/4 [00:00<?, ?it/s]pre tokenize: 100%|██████████| 4/4 [00:00<00:00, 204.76it/s]
-Inference Embeddings:   0%|          | 0/4 [00:00<?, ?it/s]Inference Embeddings:  25%|██▌       | 1/4 [03:15<09:45, 195.05s/it]Inference Embeddings:  50%|█████     | 2/4 [06:11<06:08, 184.36s/it]Inference Embeddings:  75%|███████▌  | 3/4 [08:10<02:34, 154.37s/it]
+Inference Embeddings:   0%|          | 0/4 [00:00<?, ?it/s]Inference Embeddings:  25%|██▌       | 1/4 [03:15<09:45, 195.05s/it]Inference Embeddings:  50%|█████     | 2/4 [06:11<06:08, 184.36s/it]Inference Embeddings:  75%|███████▌  | 3/4 [08:10<02:34, 154.37s/it]Inference Embeddings: 100%|██████████| 4/4 [09:34<00:00, 126.52s/it]Inference Embeddings: 100%|██████████| 4/4 [09:34<00:00, 143.61s/it]
+    -> 已写入 192/545 chunks
+pre tokenize:   0%|          | 0/4 [00:00<?, ?it/s]pre tokenize: 100%|██████████| 4/4 [00:00<00:00, 250.05it/s]
+Inference Embeddings:   0%|          | 0/4 [00:00<?, ?it/s]Inference Embeddings:  25%|██▌       | 1/4 [03:16<09:48, 196.02s/it]Inference Embeddings:  50%|█████     | 2/4 [06:09<06:05, 182.95s/it]Inference Embeddings:  75%|███████▌  | 3/4 [07:57<02:28, 148.43s/it]Inference Embeddings: 100%|██████████| 4/4 [09:08<00:00, 118.03s/it]Inference Embeddings: 100%|██████████| 4/4 [09:08<00:00, 137.15s/it]
+    -> 已写入 256/545 chunks
+pre tokenize:   0%|          | 0/4 [00:00<?, ?it/s]pre tokenize: 100%|██████████| 4/4 [00:00<00:00, 223.40it/s]
+Inference Embeddings:   0%|          | 0/4 [00:00<?, ?it/s]Inference Embeddings:  25%|██▌       | 1/4 [03:09<09:27, 189.16s/it]Inference Embeddings:  50%|█████     | 2/4 [05:55<05:51, 175.65s/it]Inference Embeddings:  75%|███████▌  | 3/4 [07:50<02:27, 147.91s/it]Inference Embeddings: 100%|██████████| 4/4 [09:02<00:00, 118.15s/it]Inference Embeddings: 100%|██████████| 4/4 [09:02<00:00, 135.69s/it]
+    -> 已写入 320/545 chunks
