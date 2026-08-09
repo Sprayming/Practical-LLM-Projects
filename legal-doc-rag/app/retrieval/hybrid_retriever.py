@@ -219,14 +219,14 @@ class HybridRetriever:
         doc_map: dict[str, Document] = {}
 
         for rank, (doc, score) in enumerate(dense_results):
-            key = doc.page_content[:200]
+            key = doc.page_content
             if key not in doc_map:
                 doc_map[key] = doc
                 doc_map[key].metadata["rrf_score"] = 0.0
             doc_map[key].metadata["rrf_score"] += self.dense_weight / (self.rrf_k + rank + 1)
 
         for rank, (text, score) in enumerate(sparse_results):
-            key = text[:200]
+            key = text
             if key not in doc_map:
                 doc_map[key] = Document(page_content=text, metadata={"rrf_score": 0.0})
             doc_map[key].metadata["rrf_score"] += self.sparse_weight / (self.rrf_k + rank + 1)
@@ -235,7 +235,7 @@ class HybridRetriever:
         if elasticsearch_results:
             es_weight = 1.0  # Elasticsearch weight
             for rank, (doc, score) in enumerate(elasticsearch_results):
-                key = doc.page_content[:200]
+                key = doc.page_content
                 if key not in doc_map:
                     doc_map[key] = doc
                     doc_map[key].metadata["rrf_score"] = 0.0
@@ -244,7 +244,7 @@ class HybridRetriever:
         # BGE-M3 稀疏结果 (optional)
         if bge_sparse_results:
             for rank, (text, score) in enumerate(bge_sparse_results):
-                key = text[:200]
+                key = text
                 if key not in doc_map:
                     doc_map[key] = Document(page_content=text, metadata={"rrf_score": 0.0})
                 doc_map[key].metadata["rrf_score"] += self.bge_sparse_weight / (

@@ -31,7 +31,9 @@ class VisionCaptioner:
                 return resp.json()["choices"][0]["message"]["content"] or ""
         except Exception as e:
             logger.warning("Vision caption failed: {}", e)
-        return "[Image]"
+        # 失败时返回空串（而非字面量 "[Image]"），避免无 OCR/无文字层的扫描页
+        # 被写入无意义的占位 chunk 污染向量库。
+        return ""
 
     def batch_caption(self, images: list[tuple[bytes, str]]) -> list[str]:
         return [self.caption(img, ext) for img, ext in images]
