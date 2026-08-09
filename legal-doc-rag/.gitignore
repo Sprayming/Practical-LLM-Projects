@@ -19,6 +19,8 @@ __pycache__/
 
 # Temp
 _fix_*.py
+_make_test_pdf.py
+reindex*.log
 evaluation_report.json
 tenant_data/
 

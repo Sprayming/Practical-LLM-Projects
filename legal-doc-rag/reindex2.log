@@ -1,32 +1,0 @@
-C:\Users\11195\miniconda3\Lib\site-packages\requests\__init__.py:113: RequestsDependencyWarning: urllib3 (2.3.0) or chardet (7.5.1)/charset_normalizer (3.3.2) doesn't match a supported version!
-  warnings.warn(
-��Ϣ: ���ṩ��ģʽ�޷��ҵ��ļ���
-C:\Users\11195\miniconda3\Lib\site-packages\paddle\utils\cpp_extension\extension_utils.py:718: UserWarning: No ccache found. Please be aware that recompiling all source files may be required. You can download and install ccache from: https://github.com/ccache/ccache/blob/master/doc/INSTALL.md
-  warnings.warn(warning_message)
-[32mCreating model: ('PP-LCNet_x1_0_textline_ori', None, None)[0m
-[32mModel files already exist. Using cached files. To redownload, please delete the directory manually: `C:\Users\11195\.paddlex\official_models\PP-LCNet_x1_0_textline_ori`.[0m
-WARNING: Logging before InitGoogleLogging() is written to STDERR
-I0809 19:00:57.132431 25312 onednn_context.cc:81] oneDNN v3.6.2
-[32mCreating model: ('PP-OCRv6_medium_det', None, None)[0m
-[32mModel files already exist. Using cached files. To redownload, please delete the directory manually: `C:\Users\11195\.paddlex\official_models\PP-OCRv6_medium_det`.[0m
-[32mCreating model: ('PP-OCRv6_medium_rec', None, None)[0m
-[32mModel files already exist. Using cached files. To redownload, please delete the directory manually: `C:\Users\11195\.paddlex\official_models\PP-OCRv6_medium_rec`.[0m
-发现租户: ['7e990ab9']
-You're using a XLMRobertaTokenizerFast tokenizer. Please note that with a fast tokenizer, using the `__call__` method is faster than using a method to encode the text followed by a call to the `pad` method to get a padded encoding.
-  [处理] 中华人民共和国刑法_20201226.pdf: 调用 MultimodalPipeline（含 OCR）...
-ReduceMeanCheckIfOneDNNSupport
-ReduceMeanCheckIfOneDNNSupport
-ReduceMeanCheckIfOneDNNSupport
-ReduceMeanCheckIfOneDNNSupport
-ReduceMeanCheckIfOneDNNSupport
-ReduceMeanCheckIfOneDNNSupport
-ReduceMeanCheckIfOneDNNSupport
-ReduceMeanCheckIfOneDNNSupport
-ReduceMeanCheckIfOneDNNSupport
-ReduceMeanCheckIfOneDNNSupport
-ReduceMeanCheckIfOneDNNSupport
-  [索引] 中华人民共和国刑法_20201226.pdf: 抽取 545 chunks（总字符 192680）
-pre tokenize:   0%|          | 0/4 [00:00<?, ?it/s]pre tokenize: 100%|██████████| 4/4 [00:00<00:00, 606.00it/s]
-Inference Embeddings:   0%|          | 0/4 [00:00<?, ?it/s]Inference Embeddings:  25%|██▌       | 1/4 [00:33<01:39, 33.09s/it]Inference Embeddings:  50%|█████     | 2/4 [01:02<01:02, 31.13s/it]Inference Embeddings:  75%|███████▌  | 3/4 [01:22<00:25, 25.88s/it]Inference Embeddings: 100%|██████████| 4/4 [01:33<00:00, 19.96s/it]Inference Embeddings: 100%|██████████| 4/4 [01:33<00:00, 23.34s/it]
-    -> 已写入 64/545 chunks
-pre tokenize:   0%|          | 0/4 [00:00<?, ?it/s]pre tokenize: 100%|██████████| 4/4 [00:00<00:00, 674.60it/s]

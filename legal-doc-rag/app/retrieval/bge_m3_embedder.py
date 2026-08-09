@@ -66,7 +66,9 @@ def get_bge_m3_model():
             from FlagEmbedding import BGEM3FlagModel
 
             model_name = os.getenv("HF_MODEL_NAME", "BAAI/bge-m3")
-            inst = BGEM3FlagModel(model_name, use_fp16=False)
+            # FP16：权重减半（约 2GB），检索质量无损，显著降低内存峰值，
+            # 也让沙箱/低内存机器能跑起重索引与服务。
+            inst = BGEM3FlagModel(model_name, use_fp16=True)
             # warm-up：触发稠密前向（Transformer 编译/首次推理开销），
             # 稀疏路径复用同一 Transformer，无需重复 warm-up。
             try:
