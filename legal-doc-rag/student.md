@@ -41,10 +41,12 @@
 
 ```
 上传 PDF → [安全] JWT + 限流 → 落盘（按租户目录）
+        → 接口**立即返回 task_id（202）**，以下重活在后台线程异步执行：
         → PDF 提取（PyMuPDF 文字 + 图片坐标）
         → OCR（PaddleOCR）/ 视觉描述（可选多模态）
         → 分块（≈500 字符）
-        → Embedding（BGE-M3，1024 维）→ 写入 ChromaDB（每租户独立集合）
+        → Embedding（BGE-M3，1024 维）+ BGE-M3 稀疏(SPLADE) → 写入 ChromaDB（每租户独立集合）
+        → 任务置 done；GET /api/documents/task/{task_id} 查进度
         → Shadow Worker 异步：摘要（中期记忆）+ 实体画像
 ```
 
@@ -148,7 +150,7 @@ POST /api/chat（Bearer）→ [安全] JWT 校验 + 限流
 ![图 2 · 上传/入库数据流](docs/images/ingestion.svg)
 
 - **红色 = security 把关**：`get_safe_upload_path` 把 `tenant_id` 只留 `[a-zA-Z0-9_-]`、清洗文件名，再用 `is_safe_path`（resolve 后判断仍在 base 内）防 `../` 穿越。
-- 关键 API：`app/api/documents.py:39`（落盘路径）、`:56`（建 Chroma 并 persist）。
+- 关键 API：`app/api/documents.py:28 upload_document()`（安全落盘 + **立即返回 task_id**）、`:66 _run_indexing()`（后台抽取+嵌入+建索引）；进度查询 `GET /api/documents/task/{task_id}`。
 
 ### 图 3 · 数据流二：查询 / 问答（读出来）
 
@@ -163,7 +165,7 @@ POST /api/chat（Bearer）→ [安全] JWT 校验 + 限流
    Controller = `app/api/*` 路由（documents/chat/auth/admin/feedback.py），只管收 HTTP、鉴权、调服务；Service = retrieval / processing / memory / security / tenant（业务逻辑）；Model = Chroma 向量库、SQLite、uploads、cache、memory_db（持久化）；View = API 返回的 JSON。
 
 2. **上传一个 PDF 后，数据经过哪些步骤才落盘？**
-   `POST /upload` → `require_user` 解 JWT 得 `tenant_id` → `get_safe_upload_path` 写到 `uploads/<tenant>/<safe>.pdf` → `MultimodalPipeline` 切块 → BGE-M3 embedder 向量化 → `Chroma.from_texts(persist_directory=chroma_db/<tenant>).persist()`。返回 `{success, chunks, tenant_id}`。
+   `POST /upload` → `require_user` 解 JWT 得 `tenant_id` → `get_safe_upload_path` 写到 `uploads/<tenant>/<safe>.pdf` → **立即返回 task_id（202）**；后台线程 `_run_indexing` 继续：`MultimodalPipeline` 切块 → BGE-M3 embedder 向量化（含 SPLADE 稀疏）→ `Chroma.from_texts(persist_directory=chroma_db/<tenant>).persist()`，任务置 `done`；可用 `GET /api/documents/task/{task_id}` 查进度。索引未完成时提问，chat 会返回「文档正在后台索引中（进度 X%）」。
 
 3. **查询时，一条用户问题如何变成带引用的答案？**
    JWT→`tenant_id` → `_build_pipeline` 载入 `chroma_db/<tenant>` → `QueryRewriter`(LLM) 改写 → Chroma 相似检索 top-k → `BGE-Reranker` 精排 → DeepSeek 生成 + `CitationTracker` → 返回带 `source` 引用的 JSON。
@@ -199,7 +201,8 @@ file_path = get_safe_upload_path(cfg.UPLOAD_DIR, tenant_id, file.filename)
 with open(file_path, "wb") as f:
     f.write(content)
 
-# ... 切块 + 向量化 ...
+# 以下在 upload_document() 安全落盘后，交由后台线程 _run_indexing() 执行
+# （upload_document 已先返回 task_id，不再同步等待嵌入）
 texts = [c.text for c in chunks]
 embedder = create_embedder()
 
@@ -212,7 +215,7 @@ vector_store = Chroma.from_texts(
     persist_directory=persist_dir,
 )
 ```
-→ [documents.py#L39](https://github.com/Sprayming/Practical-LLM-Projects/blob/main/legal-doc-rag/app/api/documents.py#L39)
+→ [documents.py#L28](https://github.com/Sprayming/Practical-LLM-Projects/blob/main/legal-doc-rag/app/api/documents.py#L28)（落盘 + 返回 task_id） · [_run_indexing#L66](https://github.com/Sprayming/Practical-LLM-Projects/blob/main/legal-doc-rag/app/api/documents.py#L66)（后台建索引）
 
 ### 8.3 安全护栏：防路径穿越（图 2·红色块的本质）—— `app/security/middleware.py`
 ```python
@@ -291,8 +294,9 @@ class Reranker:
 | 3 | 安全落盘（防穿越） | `get_safe_upload_path()` → `sanitize_filename()` + `is_safe_path()` | `security/middleware.py:114` / `:70` / `:102` |
 | 4 | PDF 切块 | `MultimodalPipeline.process()` | `processing/multimodal_pipeline.py:29` |
 | 5 | 向量化 | `create_embedder()` → `DirectEmbed` | `retrieval/embedder_factory.py:35` / `:9` |
-| 6 | 持久化 | `Chroma.from_texts(...).persist()` | langchain（落盘 `chroma_db/{tenant}`） |
-| 7 | 返回结果 | `upload_document()` return | `documents.py:65` |
+| 6 | 持久化 | `Chroma.from_texts(...).persist()` | langchain（落盘 `chroma_db/{tenant}`，后台线程） |
+| 7 | 立即返回 task_id（202） | `upload_document()` return | `documents.py:57` |
+| 8 | 后台索引（抽取+嵌入+建库） | `_run_indexing()`（线程池） | `documents.py:66` |
 
 ### 9.2 查询 / 问答链路（读）
 
@@ -317,13 +321,14 @@ app/main.py                         FastAPI 装配入口（include_router ×9）
 │   ├─ login()            → tenant/auth.py:137  校验密码
 │   └─ require_user()     → get_user_from_token() 解 JWT 拿 tenant_id
 ├─ documents_router   app/api/documents.py
-│   └─ upload_document()   ← 入库链路入口
-│        ├─ require_user()                  [auth.py:79]
-│        ├─ get_safe_upload_path()          [security/middleware.py:114]  (红)
+│   ├─ upload_document()   ← 接收上传、安全落盘、**立即返回 task_id**
+│   ├─ GET /task/{task_id}  → 查后台索引进度（pending/processing/done/failed）
+│   └─ _run_indexing()（后台线程）
+│        ├─ require_user() / get_safe_upload_path()  [auth.py:79 / middleware.py:114]  (红)
 │        │    ├─ sanitize_filename()        [middleware.py:70]
 │        │    └─ is_safe_path()             [middleware.py:102]  防 ../ 穿越
 │        ├─ MultimodalPipeline.process()    [processing/multimodal_pipeline.py:29]
-│        ├─ create_embedder()              [retrieval/embedder_factory.py:35]
+│        ├─ create_embedder() + BGE-M3 encode_sparse()  [retrieval]  Dense + 稀疏
 │        └─ Chroma.from_texts().persist()  [langchain]  落盘 chroma_db/{tenant}
 ├─ chat_router        app/api/chat.py
 │   └─ chat()   ← 查询链路入口
