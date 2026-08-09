@@ -358,7 +358,8 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 - **根因**：该 .lnk 指向的目标脚本 `D:\git\legal-doc-rag\启动法律文书 RAG 系统.bat` 已丢失（项目内仅剩 `start-rag.bat` / `start-local.bat` / `stop-rag.bat`），快捷方式找不到目标文件而失效。
 - **修复**：重建 `启动法律文书 RAG 系统.bat`，用本机 miniconda Python（`C:\Users\11195\miniconda3\python.exe`）在 `127.0.0.1:8000` 启动 uvicorn，等待 `/health` 就绪后自动打开浏览器 `http://localhost:8000`。
 - **附带修正（文档 bug）**：README API 表原写 `GET /api/health`，但代码实际路由是 `/health`（无 `/api` 前缀，见 `app/observability/monitoring.py:209`），已更正；启动脚本里的就绪探测也同步改为 `/health`。
-- **验证**：uvicorn 成功启动，前端 `/`、`/docs`、`/api/auth/register` 均返回 200；`/health` 返回 200（`overall=unhealthy` 仅因本测试环境未安装 `redis` 模块，不影响前端问答）。
+- **验证**：uvicorn 成功启动，前端 `/`、`/docs`、`/api/auth/register` 均返回 200；`/health` 在缺 `redis` 模块时返回 503（`overall=unhealthy`），但 bat 用 `curl` 连通性判断，503 也是有效 HTTP 响应，能正确识别服务已起并打开浏览器，前端问答不受影响。
+- **补充（本轮健壮性改进）**：bat 增加端口占用预检（`netstat` 检测 8000 是否被旧服务/Docker 占用，占用即提示退出，不再无限等待）、uvicorn 输出重定向到 `start-rag.log`（启动失败可查错）、就绪等待加 60 秒超时（超时明确提示看日志）。旧版用 `start` 后台拉起 uvicorn 后主脚本死等 `curl`，一旦 uvicorn 启动失败（最常见为端口被占）新窗口一闪而过、错误不可见、主脚本卡死，表现为"双击没反应"。
 
 ### 2026-08-08: 修复 chat 接口返回 null/500 的多个 bug（c3ce4f6）
 
