@@ -31,4 +31,7 @@ ReduceMeanCheckIfOneDNNSupport
 Inference Embeddings:   0%|          | 0/4 [00:00<?, ?it/s]Inference Embeddings:  25%|██▌       | 1/4 [03:11<09:35, 191.69s/it]Inference Embeddings:  50%|█████     | 2/4 [06:03<06:00, 180.21s/it]Inference Embeddings:  75%|███████▌  | 3/4 [07:56<02:29, 149.21s/it]Inference Embeddings: 100%|██████████| 4/4 [08:58<00:00, 114.83s/it]Inference Embeddings: 100%|██████████| 4/4 [08:58<00:00, 134.58s/it]
     -> 已写入 64/545 chunks
 pre tokenize:   0%|          | 0/4 [00:00<?, ?it/s]pre tokenize: 100%|██████████| 4/4 [00:00<00:00, 150.81it/s]
-Inference Embeddings:   0%|          | 0/4 [00:00<?, ?it/s]Inference Embeddings:  25%|██▌       | 1/4 [03:20<10:00, 200.09s/it]Inference Embeddings:  50%|█████     | 2/4 [12:19<13:19, 399.63s/it]
+Inference Embeddings:   0%|          | 0/4 [00:00<?, ?it/s]Inference Embeddings:  25%|██▌       | 1/4 [03:20<10:00, 200.09s/it]Inference Embeddings:  50%|█████     | 2/4 [12:19<13:19, 399.63s/it]Inference Embeddings:  75%|███████▌  | 3/4 [17:44<06:05, 365.52s/it]Inference Embeddings: 100%|██████████| 4/4 [19:14<00:00, 256.92s/it]Inference Embeddings: 100%|██████████| 4/4 [19:14<00:00, 288.69s/it]
+    -> 已写入 128/545 chunks
+pre tokenize:   0%|          | 0/4 [00:00<?, ?it/s]pre tokenize: 100%|██████████| 4/4 [00:00<00:00, 204.76it/s]
+Inference Embeddings:   0%|          | 0/4 [00:00<?, ?it/s]Inference Embeddings:  25%|██▌       | 1/4 [03:15<09:45, 195.05s/it]Inference Embeddings:  50%|█████     | 2/4 [06:11<06:08, 184.36s/it]Inference Embeddings:  75%|███████▌  | 3/4 [08:10<02:34, 154.37s/it]
