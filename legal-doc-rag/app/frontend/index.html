@@ -759,7 +759,7 @@ async function doUpload() {
   try {
     let r = await fetch(API + "/api/documents/upload", { method:"POST", headers:{"Authorization":"Bearer " + token}, body:formData });
     let d = await r.json();
-    if (r.ok) { status.textContent = "上传成功：" + d.filename + " (" + d.chunks + " 段已索引)"; loadDocuments(); }
+    if (r.ok) { status.textContent = "上传成功：" + d.filename + "（正在后台索引，任务 ID: " + d.task_id + "）"; loadDocuments(); }
     else { status.textContent = "上传失败"; }
   } catch(e) { status.textContent = "网络错误：" + e.message; }
 }

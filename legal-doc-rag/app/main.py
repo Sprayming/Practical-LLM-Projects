@@ -92,6 +92,66 @@ async def startup_event():
     from app.worker.webhook import get_webhook_manager
     webhook_manager = get_webhook_manager()
     webhook_manager.start()
+    _recover_incomplete_indexing()
+
+
+def _recover_incomplete_indexing():
+    """启动时扫描上传目录，对尚未完成向量化的文档自动重新提交索引任务。"""
+    import os
+    from app.core import config as cfg
+    from app.tasks.task_store import (
+        create_task,
+        submit_indexing_job,
+        list_tasks_for_tenant,
+    )
+    from app.api.documents import _run_indexing
+    from langchain_community.vectorstores import Chroma
+    from app.retrieval.embedder_factory import create_embedder
+
+    if not os.path.exists(cfg.UPLOAD_DIR):
+        return
+
+    embedder = None
+
+    for tenant_id in os.listdir(cfg.UPLOAD_DIR):
+        tenant_upload_dir = os.path.join(cfg.UPLOAD_DIR, tenant_id)
+        if not os.path.isdir(tenant_upload_dir):
+            continue
+
+        pdfs = [f for f in os.listdir(tenant_upload_dir) if f.lower().endswith(".pdf")]
+        if not pdfs:
+            continue
+
+        persist_dir = os.path.join(cfg.CHROMA_PERSIST_DIR, tenant_id)
+        existing_sources = set()
+        if os.path.exists(persist_dir):
+            try:
+                if embedder is None:
+                    embedder = create_embedder()
+                store = Chroma(
+                    embedding_function=embedder,
+                    persist_directory=persist_dir,
+                )
+                metas = store._collection.get(include=["metadatas"]).get("metadatas") or []
+                existing_sources = {m.get("source") for m in metas if m.get("source")}
+            except Exception:
+                existing_sources = set()
+
+        # 避免与已有未完成任务重复
+        active_files = {
+            t["filename"]
+            for t in list_tasks_for_tenant(tenant_id)
+            if t["status"] in ("pending", "processing")
+        }
+
+        for filename in pdfs:
+            if filename in existing_sources:
+                continue
+            if filename in active_files:
+                continue
+            file_path = os.path.join(tenant_upload_dir, filename)
+            task_id = create_task(tenant_id, filename)
+            submit_indexing_job(_run_indexing, task_id, tenant_id, file_path, filename)
 
 @app.on_event("shutdown")
 async def shutdown_event():

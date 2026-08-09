@@ -721,8 +721,10 @@ app/main.py (FastAPI 入口)
    POST /api/documents/upload
    ├── app/api/documents.py: 接收文件 → 保存到 ./uploads/{tenant_id}/ → 立即返回 task_id（**异步，不阻塞**）
    ├── 后台线程池执行：app/processing/multimodal_pipeline.py 解析 PDF (PyMuPDF + OCR) → embedder_factory 生成向量 → ChromaDB 持久化到 ./chroma_db/{tenant_id}/
+   ├── 任务状态持久化到 `data/tasks.json`，服务重启后从磁盘恢复，避免"已上传却提示请先上传文档"
+   ├── 服务启动时自动扫描 `uploads/{tenant_id}/`，对未向量化的 PDF 重新提交后台索引任务
    ├── 进度查询：GET /api/documents/task/{task_id} 返回 pending/processing(extracting→embedding→building_index)/done/failed 及百分比
-   └── 索引完成后即可提问；索引中提问会返回"文档正在后台索引中"提示而非报错
+   └── 索引完成后即可提问；索引中提问会返回"文档正在后台索引中"提示而非报错；已上传但索引失败会提示重新上传
 
 2. 用户提问
    POST /api/chat (SSE 流式)

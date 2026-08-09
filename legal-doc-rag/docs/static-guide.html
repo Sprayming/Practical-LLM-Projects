@@ -67,9 +67,11 @@
   <div class="step"><span class="n">2</span><b>鉴权</b> <code>auth.py:79 require_user()</code> 解 JWT 取出 <code>tenant_id</code>（写入侧与读取侧共用）。</div>
   <div class="step red"><span class="n">3</span><b>安全落盘</b> <code>middleware.py:114 get_safe_upload_path()</code> → <code>sanitize_filename()</code> + <code>is_safe_path()</code>，写到 <code>uploads/{tenant}/</code>，防 <code>../</code> 穿越。</div>
   <div class="step"><span class="n">4</span><b>立即返回 task_id</b> 创建后台索引任务并<b>马上返回 202 + task_id</b>，不等待嵌入完成；大文档也不再阻塞主服务（核心改动）。</div>
-  <div class="step"><span class="n">5</span><b>后台抽取+切块</b> 线程池里的 <code>_run_indexing()</code> 调 <code>multimodal_pipeline.py:29 MultimodalPipeline.process()</code> 切 500 字块，进度 10→40%。</div>
-  <div class="step"><span class="n">6</span><b>后台向量化</b> <code>embedder_factory.py create_embedder()</code> 生成 Dense + BGE-M3 稀疏(SPLADE，按 <code>input_ids</code> 取 amax 聚合)，进度 40%。</div>
-  <div class="step green"><span class="n">7</span><b>后台落盘 + 轮询</b> <code>Chroma.from_texts(...).persist()</code> 写 <code>chroma_db/{tenant}</code>，任务置 <code>done</code>；前端用 <code>GET /api/documents/task/{task_id}</code> 查进度。</div>
+  <div class="step"><span class="n">5</span><b>任务状态持久化</b> <code>app/tasks/task_store.py</code> 把任务写入 <code>data/tasks.json</code>，服务重启后自动恢复，避免"已上传却提示请先上传文档"。</div>
+  <div class="step"><span class="n">6</span><b>后台抽取+切块</b> 线程池里的 <code>_run_indexing()</code> 调 <code>multimodal_pipeline.py:29 MultimodalPipeline.process()</code> 切 500 字块，进度 10→40%。</div>
+  <div class="step"><span class="n">7</span><b>后台向量化</b> <code>embedder_factory.py create_embedder()</code> 生成 Dense + BGE-M3 稀疏(SPLADE，按 <code>input_ids</code> 取 amax 聚合)，进度 40%。</div>
+  <div class="step green"><span class="n">8</span><b>后台落盘 + 轮询</b> <code>Chroma.from_texts(...).persist()</code> 写 <code>chroma_db/{tenant}</code>，任务置 <code>done</code>；前端用 <code>GET /api/documents/task/{task_id}</code> 查进度。</div>
+  <div class="step orange"><span class="n">9</span><b>启动自愈</b> <code>app/main.py startup_event()</code> 扫描 <code>uploads/{tenant}/</code>，对未向量化的 PDF 自动重新提交索引任务。</div>
 </div>
 
 <h3>关键代码 · 安全落盘三件套（步骤 3）</h3>
@@ -117,7 +119,7 @@ def is_safe_path(base_dir, target_path) -&gt; bool:
 <h2>2 · 读取链路：查询问答（7 步）</h2>
 <div class="scene">
   <span class="tag">POST /api/chat</span>
-  <div class="step"><span class="n">1</span><b>入口</b> <code>chat.py:179 chat()</code> 由 <code>require_user</code> 拿 <code>tenant_id</code>，判空库后改写查询。</div>
+  <div class="step"><span class="n">1</span><b>入口</b> <code>chat.py:179 chat()</code> 由 <code>require_user</code> 拿 <code>tenant_id</code>；按向量库状态返回不同提示：未上传→"请先上传文档"、索引中→"正在后台索引中"、失败→"请重新上传"、正常→进入改写查询。</div>
   <div class="step"><span class="n">2</span><b>建管道</b> <code>chat.py:162 _build_pipeline()</code> 按 tenant 载入 Chroma，实例化 <code>QueryRewriter / QueryCache / CitationTracker</code>。</div>
   <div class="step"><span class="n">3</span><b>查询改写</b> <code>query_rewriter.py:29 QueryRewriter.rewrite()</code> 调 LLM 改写，失败回退原查询。</div>
   <div class="step"><span class="n">4</span><b>混合检索</b> <code>hybrid_retriever.py:290 HybridRetriever.retrieve()</code> 跑 稠密(Chroma)+BM25 稀疏+BGE-M3 稀疏(SPLADE)+RRF 融合。</div>
@@ -189,6 +191,12 @@ def _rrf_fuse(self, dense_results, sparse_results, es_results=None, bge_sparse_r
 │        ├─ MultimodalPipeline.process()  [processing]         切块(OCR+描述)
 │        ├─ create_embedder() + encode_sparse()  [retrieval]    Dense + BGE-M3 稀疏
 │        └─ Chroma.from_texts().persist()   → 写 chroma_db/{tenant}/
+├─ task_store         app/tasks/task_store.py
+│   ├─ create_task() / update_task() → 写内存 + 持久化到 data/tasks.json
+│   ├─ get_active_task_for_tenant()  → chat 返回"正在索引中"提示
+│   └─ _load_tasks() / _save_tasks() → 服务重启自动恢复任务状态
+├─ startup_recovery   app/main.py startup_event()
+│   └─ _recover_incomplete_indexing() → 扫描 uploads/{tenant}/，缺失向量库自动重索引
 ├─ chat_router        app/api/chat.py
 │   └─ chat()                    → 问答总入口
 │       ├─ _build_pipeline()         → 按 tenant 重建 Chroma

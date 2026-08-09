@@ -41,13 +41,15 @@
 
 ```
 上传 PDF → [安全] JWT + 限流 → 落盘（按租户目录）
-        → 接口**立即返回 task_id（202）**，以下重活在后台线程异步执行：
+        → 接口**立即返回 task_id（202）**，任务状态持久化到 data/tasks.json
+        → 以下重活在后台线程异步执行：
         → PDF 提取（PyMuPDF 文字 + 图片坐标）
         → OCR（PaddleOCR）/ 视觉描述（可选多模态）
         → 分块（≈500 字符）
         → Embedding（BGE-M3，1024 维）+ BGE-M3 稀疏(SPLADE) → 写入 ChromaDB（每租户独立集合）
         → 任务置 done；GET /api/documents/task/{task_id} 查进度
         → Shadow Worker 异步：摘要（中期记忆）+ 实体画像
+        → 服务重启时自动扫描 uploads/{tenant}/，未向量化的 PDF 自动重新提交索引
 ```
 
 **问答 query（一次 RAG 链路）：**
@@ -292,11 +294,13 @@ class Reranker:
 | 1 | 接收上传请求 | `upload_document()` | `app/api/documents.py:20` |
 | 2 | 鉴权、取 tenant_id | `require_user()` → `get_user_from_token()` | `app/api/auth.py:79` / `:66` |
 | 3 | 安全落盘（防穿越） | `get_safe_upload_path()` → `sanitize_filename()` + `is_safe_path()` | `security/middleware.py:114` / `:70` / `:102` |
-| 4 | PDF 切块 | `MultimodalPipeline.process()` | `processing/multimodal_pipeline.py:29` |
-| 5 | 向量化 | `create_embedder()` → `DirectEmbed` | `retrieval/embedder_factory.py:35` / `:9` |
-| 6 | 持久化 | `Chroma.from_texts(...).persist()` | langchain（落盘 `chroma_db/{tenant}`，后台线程） |
-| 7 | 立即返回 task_id（202） | `upload_document()` return | `documents.py:57` |
-| 8 | 后台索引（抽取+嵌入+建库） | `_run_indexing()`（线程池） | `documents.py:66` |
+| 4 | 创建任务并持久化 | `create_task()` / `_save_tasks()` | `app/tasks/task_store.py:21` / `:55` |
+| 5 | 立即返回 task_id（202） | `upload_document()` return | `documents.py:57` |
+| 6 | PDF 切块 | `MultimodalPipeline.process()` | `processing/multimodal_pipeline.py:29` |
+| 7 | 向量化 | `create_embedder()` → `DirectEmbed` | `retrieval/embedder_factory.py:35` / `:9` |
+| 8 | 持久化 | `Chroma.from_texts(...).persist()` | langchain（落盘 `chroma_db/{tenant}`，后台线程） |
+| 9 | 后台索引（抽取+嵌入+建库） | `_run_indexing()`（线程池） | `documents.py:66` |
+| 10 | 启动恢复 | `_recover_incomplete_indexing()` | `app/main.py:91` |
 
 ### 9.2 查询 / 问答链路（读）
 
@@ -330,6 +334,12 @@ app/main.py                         FastAPI 装配入口（include_router ×9）
 │        ├─ MultimodalPipeline.process()    [processing/multimodal_pipeline.py:29]
 │        ├─ create_embedder() + BGE-M3 encode_sparse()  [retrieval]  Dense + 稀疏
 │        └─ Chroma.from_texts().persist()  [langchain]  落盘 chroma_db/{tenant}
+├─ task_store         app/tasks/task_store.py
+│   ├─ create_task() / update_task() → 写内存 + 持久化到 data/tasks.json
+│   ├─ get_active_task_for_tenant()  → chat 返回"正在索引中"提示
+│   └─ _load_tasks() / _save_tasks() → 服务重启自动恢复任务状态
+├─ startup_recovery   app/main.py startup_event()
+│   └─ _recover_incomplete_indexing() → 扫描 uploads/{tenant}/，缺失向量库自动重索引
 ├─ chat_router        app/api/chat.py
 │   └─ chat()   ← 查询链路入口
 │        ├─ _build_pipeline()               [chat.py:162]

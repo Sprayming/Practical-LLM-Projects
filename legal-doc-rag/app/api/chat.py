@@ -24,7 +24,7 @@ from typing import Dict, Any, AsyncGenerator
 from types import SimpleNamespace
 from fastapi import Request
 from app.core.limiter import limiter
-from app.tasks.task_store import get_active_task_for_tenant
+from app.tasks.task_store import get_active_task_for_tenant, has_failed_task_for_tenant
 
 _log = StructuredLogger("chat")
 
@@ -197,19 +197,15 @@ async def chat(request: Request, req: ChatRequest, user: dict = Depends(require_
 
     # 检查向量库
     if not pipeline or not pipeline.vector_store:
-        # 若该租户有文档正在后台索引，给出更友好的"进行中"提示
-        active = get_active_task_for_tenant(user["tenant_id"])
-        if active:
-            return JSONResponse(content={
-                "answer": (
-                    f"文档「{active['filename']}」正在后台索引中"
-                    f"（{active['stage']}，进度 {active['progress']}%），请稍候再问。"
-                ),
-                "citations": [],
-                "token_usage": 0,
-                "task_id": active["task_id"],
-            })
-        return _handle_vector_store_error()
+        return _handle_vector_store_error(user["tenant_id"])
+
+    # 向量库存在但为空（已上传但未完成索引或数据损坏）
+    try:
+        docs_count = len(_get_all_texts(pipeline.vector_store))
+    except Exception:
+        docs_count = 0
+    if docs_count == 0:
+        return _handle_vector_store_error(user["tenant_id"])
 
     # 处理查询
     query = _process_query(req.message, pipeline.qr)
@@ -228,8 +224,49 @@ async def chat(request: Request, req: ChatRequest, user: dict = Depends(require_
     else:
         return await _handle_non_streaming_response(context, req, pipeline, trace)
 
-def _handle_vector_store_error():
-    """处理向量库不存在的情况"""
+def _handle_vector_store_error(tenant_id: str):
+    """处理向量库不可用的情况，按状态给出不同提示。"""
+    # 1. 有正在后台索引的任务
+    active = get_active_task_for_tenant(tenant_id)
+    if active:
+        return JSONResponse(content={
+            "answer": (
+                f"文档「{active['filename']}」正在后台索引中"
+                f"（{active['stage']}，进度 {active['progress']}%），请稍候再问。"
+            ),
+            "citations": [],
+            "token_usage": 0,
+            "task_id": active["task_id"],
+        })
+
+    # 2. 最近有索引失败的任务
+    failed = has_failed_task_for_tenant(tenant_id)
+    if failed:
+        return JSONResponse(content={
+            "answer": (
+                f"文档「{failed['filename']}」索引失败（{failed.get('error', '未知错误')}），"
+                "请删除后重新上传。"
+            ),
+            "citations": [],
+            "token_usage": 0,
+        })
+
+    # 3. 已上传文件但向量库尚未建立（服务重启/索引中断）
+    upload_dir = os.path.join(cfg.UPLOAD_DIR, tenant_id)
+    has_uploads = os.path.exists(upload_dir) and any(
+        f.lower().endswith(".pdf") for f in os.listdir(upload_dir)
+    )
+    if has_uploads:
+        return JSONResponse(content={
+            "answer": (
+                "检测到您已上传文档，但向量索引尚未完成或已被中断，"
+                "系统正在后台恢复索引，请稍候再试。"
+            ),
+            "citations": [],
+            "token_usage": 0,
+        })
+
+    # 4. 确实没有上传过文档
     return JSONResponse(content={"answer": "请先上传文档", "citations": [], "token_usage": 0})
 
 def _process_query(message, qr):
