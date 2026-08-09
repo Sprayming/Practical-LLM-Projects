@@ -3,9 +3,9 @@ sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent.par
 from datetime import datetime, timedelta, timezone
 
 import jwt
-from fastapi import APIRouter, HTTPException, Header, Request
+from fastapi import APIRouter, HTTPException, Header, Request, Depends
 from pydantic import BaseModel
-from app.tenant.auth import login as _login, register as _register, has_users as _has_users
+from app.tenant.auth import login as _login, register as _register, has_users as _has_users, change_password as _change_password
 import app.core.config as cfg
 from app.core.limiter import limiter
 
@@ -23,6 +23,11 @@ class LoginRequest(BaseModel):
 class RegisterRequest(BaseModel):
     username: str
     password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
 
 
 @router.post("/register")
@@ -96,3 +101,17 @@ def get_current_user(authorization: str = Header(...)):
         "tenant_id": user.get("tenant_id", ""),
         "role": user.get("role", "user"),
     }
+
+
+@router.post("/change-password")
+@limiter.limit("10/minute")
+def change_password(
+    request: Request,
+    req: ChangePasswordRequest,
+    user: dict = Depends(require_user),
+):
+    """修改当前登录用户的密码（需校验原密码）。"""
+    ok, msg = _change_password(user["username"], req.old_password, req.new_password)
+    if not ok:
+        raise HTTPException(400, msg)
+    return {"success": True, "message": msg}

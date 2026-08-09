@@ -202,3 +202,31 @@ def delete_user(username: str) -> bool:
         return cur.rowcount > 0
     finally:
         conn.close()
+
+
+def change_password(username: str, old_password: str, new_password: str) -> Tuple[bool, str]:
+    """修改密码。需先校验原密码，返回 (成功, 消息)。"""
+    _init_db()
+    conn = sqlite3.connect(_db_path())
+    try:
+        cur = conn.execute(
+            "SELECT id, password_hash FROM users WHERE username=?", (username,)
+        )
+        row = cur.fetchone()
+        if not row:
+            return False, "用户不存在"
+        if not _verify_password(old_password, row[1]):
+            return False, "原密码错误"
+        if not new_password or len(new_password) < 6:
+            return False, "新密码长度至少 6 位"
+        conn.execute(
+            "UPDATE users SET password_hash=? WHERE username=?",
+            (_hash_password(new_password), username),
+        )
+        conn.commit()
+        return True, "密码修改成功"
+    except Exception as e:
+        conn.rollback()
+        return False, str(e)
+    finally:
+        conn.close()

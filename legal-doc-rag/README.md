@@ -55,6 +55,7 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 |------|------|------|------|
 | POST | /api/auth/register | 注册（首个为超管） | 无 |
 | POST | /api/auth/login | 登录返回 Token | 无 |
+| POST | /api/auth/change-password | 修改密码（校验原密码，新密码≥6 位） | Bearer |
 | POST | /api/documents/upload | 上传 PDF（**异步**：立即返回 task_id，后台索引） | Bearer |
 | GET | /api/documents/task/{task_id} | 查询上传索引任务的进度与状态 | Bearer |
 | GET | /api/documents | 文档列表 | Bearer |
@@ -351,6 +352,16 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 .env 文件不要放 .gitignore（或放 docker-compose 的 environment 里兜底）。
 
 ## 更新日志
+
+### 2026-08-09: 新增修改密码接口 POST /api/auth/change-password
+
+- **需求**：用户把 Sprayming 密码改成 123456 测试后需要改回，但系统无修改密码入口。
+- **改动**：
+  1. `app/tenant/auth.py` 新增 `change_password(username, old_password, new_password)`：校验用户存在 → 校验原密码（`_verify_password`）→ 新密码≥6 位 → 更新 `password_hash`。
+  2. `app/api/auth.py` 新增 `POST /api/auth/change-password`，请求体 `{old_password, new_password}`，经 `Depends(require_user)` 鉴权（取当前登录用户），路由放在 `require_user` 定义之后以免 `NameError`；限流 10/minute。
+- **行为**：成功返回 `{success:true}`；原密码错误/新密码过短(≥6)/用户不存在 → 400；未带 Token → 被拒（与 `/me` 等受保护路由一致，缺 `Authorization` 头时 FastAPI 返回 422）。
+- **验证**：端到端测试通过——注册临时账号→登录→改密→新密码可登/旧密码 401→错误原密码 400→过短新密码 400；临时账号已清理，未改动 Sprayming 账户。
+- **文档同步**：README API 表新增 `POST /api/auth/change-password`（Bearer 认证）。
 
 ### 2026-08-09: 恢复桌面快捷方式启动脚本 + 修正健康检查端点文档
 
