@@ -1,34 +1,32 @@
 @echo off
-title ·¨ÂÉÎÄÊé RAG ÏµÍ³
+title æ³•å¾‹æ–‡ä¹¦ RAG ç³»ç»Ÿ
 cd /d "D:\git\legal-doc-rag"
-
 set "LOG=%~dp0start-rag.log"
 set "PORT=8000"
-echo [%date% %time%] === Æô¶¯½Å±¾¿ªÊ¼ === > "%LOG%"
+echo [%date% %time%] === å¯åŠ¨è„šæœ¬å¼€å§‹ === > "%LOG%"
 
-REM ¶Ë¿ÚÔ¤¼ì: ¼ì²â 8000 ÊÇ·ñ±»Õ¼ÓÃ
-netstat -ano 2>nul | findstr ":8000" >nul
+netstat -ano 2>nul | findstr /r ":%PORT% " >nul
 if %errorlevel% == 0 (
-    echo [´íÎó] ¶Ë¿Ú 8000 ÒÑ±»Õ¼ÓÃ,ÇëÏÈ¹Ø±ÕÕ¼ÓÃËüµÄ³ÌĞò,ÀıÈç¾É·şÎñ¡¢Docker »òÆäËû,È»ºóÖØÊÔ¡£ >> "%LOG%"
-    echo [´íÎó] ¶Ë¿Ú 8000 ÒÑ±»Õ¼ÓÃ!ÇëÏÈ¹Ø±ÕÕ¼ÓÃ³ÌĞòºóÖØÊÔ¡£
+    echo [é”™è¯¯] ç«¯å£ %PORT% å·²è¢«å ç”¨ï¼Œè¯·å…ˆå…³é—­å ç”¨ç¨‹åºåé‡è¯•ã€‚ >> "%LOG%"
+    echo [é”™è¯¯] ç«¯å£ %PORT% å·²è¢«å ç”¨!è¯·å…ˆå…³é—­å ç”¨ç¨‹åºåé‡è¯•ã€‚
     pause
     exit /b 1
 )
 
-echo [1/2] ÕıÔÚÆô¶¯ºó¶Ë (http://localhost:8000) ...
-echo [%date% %time%] Æô¶¯ÃüÁî: C:\Users\11195\miniconda3\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 >> "%LOG%"
-start "" "C:\Users\11195\miniconda3\python.exe" -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+echo [1/2] æ­£åœ¨å¯åŠ¨åç«¯ (http://localhost:%PORT%) ...
+echo å¯åŠ¨å‘½ä»¤: C:\Users\11195\miniconda3\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port %PORT% >> "%LOG%"
+start "uvicorn" cmd /c "C:\Users\11195\miniconda3\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 & echo uvicorn å·²é€€å‡ºï¼ŒæŒ‰ä»»æ„é”®å…³é—­ & pause"
 
-echo [2/2] µÈ´ı·şÎñ¾ÍĞ÷,×î¶à 60 Ãë...
+echo [2/2] ç­‰å¾…æœåŠ¡å°±ç»ªï¼Œæœ€å¤š 60 ç§’...
 set tries=0
 :wait
 timeout /t 2 /nobreak >nul
-curl.exe -s http://localhost:8000/health >nul 2>&1
+curl.exe -s -o nul http://localhost:%PORT%/ >nul 2>&1
 if %errorlevel% == 0 goto ok
 set /a tries+=1
 if %tries% geq 30 (
-    echo [´íÎó] Æô¶¯³¬Ê±,·şÎñÎ´ÔÚ 60 ÃëÄÚ¾ÍĞ÷¡£Çë²é¿´ start-rag.log »òµ¯³öµÄ uvicorn ´°¿Ú±¨´í¡£ >> "%LOG%"
-    echo [´íÎó] Æô¶¯³¬Ê±!Çë²é¿´ÈÕÖ¾»ò uvicorn ´°¿Ú±¨´í¡£
+    echo [é”™è¯¯] å¯åŠ¨è¶…æ—¶ï¼Œè¯·æŸ¥çœ‹å¼¹å‡ºçš„ uvicorn çª—å£æˆ– start-rag.logã€‚ >> "%LOG%"
+    echo [é”™è¯¯] å¯åŠ¨è¶…æ—¶!è¯·æŸ¥çœ‹ uvicorn çª—å£æŠ¥é”™æˆ– start-rag.logã€‚
     pause
     exit /b 1
 )
@@ -37,7 +35,7 @@ goto wait
 :ok
 echo.
 echo ========================================
-echo   Æô¶¯Íê³É!ÕıÔÚ´ò¿ª http://localhost:8000
+echo   å¯åŠ¨å®Œæˆ!æ­£åœ¨æ‰“å¼€ http://localhost:%PORT%
 echo ========================================
-start "" "http://localhost:8000"
+start "" "http://localhost:%PORT%"
 exit /b 0
