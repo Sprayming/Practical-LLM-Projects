@@ -700,22 +700,31 @@ async function loadConversations() {
   }
 }
 
-async function startNewConversation() {
-  try {
-    const r = await fetch(API + "/api/conversations", {
-      method: "POST",
-      headers: {"Content-Type": "application/json", "Authorization": "Bearer " + token},
-      body: JSON.stringify({})
-    });
-    if (r.ok) {
-      const data = await r.json();
-      currentConversationId = data.conversation_id;
-      clearHistory();
-      loadConversations();
+// 仅创建会话（不碰聊天显示），供首条消息自动建会话 / 新建对话复用
+async function ensureConversation() {
+  if (!currentConversationId) {
+    try {
+      const r = await fetch(API + "/api/conversations", {
+        method: "POST",
+        headers: {"Content-Type": "application/json", "Authorization": "Bearer " + token},
+        body: JSON.stringify({})
+      });
+      if (r.ok) {
+        const data = await r.json();
+        currentConversationId = data.conversation_id;
+        loadConversations();
+      }
+    } catch (e) {
+      console.error("Failed to create conversation:", e);
     }
-  } catch (e) {
-    console.error("Failed to create conversation:", e);
   }
+}
+
+// “新建对话”按钮：清空当前显示 + 新建会话（注意与自动建会话区分，后者不能清屏）
+async function startNewConversation() {
+  currentConversationId = null;
+  clearHistory();
+  await ensureConversation();
 }
 
 async function loadConversation(conversationId) {
@@ -741,10 +750,8 @@ async function loadConversation(conversationId) {
 }
 
 async function saveMessageToConversation(role, content) {
-  if (!currentConversationId) {
-    // Create new conversation if none exists
-    await startNewConversation();
-  }
+  // 自动建会话时【不能】清空聊天显示，否则首条消息会被抹掉、用户以为没反应
+  await ensureConversation();
 
   try {
     await fetch(API + "/api/conversations/" + currentConversationId + "/messages", {
@@ -912,8 +919,8 @@ async function sendMessage() {
   addMessage("user", msg, null, null);
   document.getElementById("send-btn").disabled = true;
 
-  // Save user message to conversation history
-  saveMessageToConversation("user", msg);
+  // Save user message to conversation history（await 保证建会话顺序确定，不再异步清空显示）
+  await saveMessageToConversation("user", msg);
 
   // 立即显示"正在思考"气泡，避免先出现空白框
   var cont = document.getElementById("chat-messages");

@@ -401,7 +401,17 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 - **修复**：`app/frontend/index.html` 的 `sendMessage()` 在插入用户消息后**立即**渲染一个"正在思考"气泡（带跳动省略号动画 + 文案轮播："正在思考"→"正在检索相关资料"→"正在组织回答"，每 1.2s 切换）；收到首个 `token` 事件时将该气泡无缝替换为正式回答（清除轮播定时器），流式结束/出错/网络异常时均正确清理。
 - **验证**：服务端 `/api/chat/stream` 实测返回 146 个 `token` 事件，前端"思考中"气泡会在首个 token 到达时被替换，不再出现空白方框。
 
-- **受影响文件**：`task_store.py` / `main.py` / `chat.py` / `frontend/index.html`，以及 `static-guide.html` / `student.md` / `architecture-explainer.html`（调用树与文案同步更新）。
+#### Bug 3：问完第一个问题就"跳到新界面"，用户以为没反应又问一遍
+- **现象**：用户问出第一条消息后，界面立刻回到"开始问答"空状态（像跳去了一个新问题界面），左侧"对话历史"也多了一条；而回答要等 RAG 检索 + LLM 生成（数秒）才回来，期间看起来"没反应"，于是用户重复提问。
+- **根因**：前端 `sendMessage()` 在插入用户消息后调用 `saveMessageToConversation("user", msg)`，因为是首条消息 `currentConversationId` 为空，该函数会调用 `startNewConversation()`；而 `startNewConversation()` 内部有一句 **`clearHistory()`**，把整个聊天区清空并恢复"开始问答"空状态。由于 `saveMessageToConversation` 是未 await 的异步调用，这个清空动作会在"正在思考"气泡显示之后异步发生，**把用户问题和思考气泡一起抹掉**，界面退回空状态，造成"跳到新界面 + 没反应"的错觉。
+- **修复**：把"创建会话"与"清空聊天显示"拆开——
+  1. 新增 `ensureConversation()`：仅当 `currentConversationId` 为空时创建会话（服务端）+ 刷新侧栏，**不清空聊天显示**。`saveMessageToConversation()` 改为调用它。
+  2. `startNewConversation()`（"新建对话"按钮）保留旧语义：先 `clearHistory()` 再 `ensureConversation()`，保证用户主动开新会话时显示是干净的。
+  3. `sendMessage()` 中对用户消息的保存改为 `await`，使建会话顺序确定，不再异步清空显示。
+- **效果**：首条消息发送后，用户问题气泡 + "正在思考"气泡都稳定保留，回答串行流式回来；侧栏新增一条对话历史属正常行为，不再有"跳新界面"的闪动，用户不会误以为没反应。
+- **验证**：`node --check` 校验前端脚本语法通过；服务端（StaticFiles 每次从磁盘读取）已提供含 `ensureConversation` 的新版页面。
+
+- **受影响文件**：`frontend/index.html`（`ensureConversation` / `startNewConversation` / `saveMessageToConversation` / `sendMessage`）。
 
 ### 2026-08-05: 测试套件修复 + 代码清理
 
