@@ -91,7 +91,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif
       <input type="password" id="login-pass" placeholder="密码" required>
       <button type="submit">登录</button>
     </form>
-    <p class="switch-form"><a href="#" onclick="showRegister()">创建账户</a></p>
+    <p class="switch-form"><a href="#" onclick="showRegister()">创建账户</a> · <a href="#" onclick="showForgotPassword()">忘记密码？</a></p>
   </div>
   <div class="login-card" id="register-card" style="display:none">
     <h2>创建管理员账户</h2>
@@ -102,6 +102,20 @@ body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif
       <button type="submit">注册</button>
     </form>
     <p class="switch-form"><a href="#" onclick="showLogin()">已有账户？登录</a></p>
+  </div>
+</div>
+
+<div id="forgot-password-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:1000; justify-content:center; align-items:center;">
+  <div class="login-card" style="position:relative;">
+    <h2>忘记密码</h2>
+    <p style="font-size:0.8rem;color:#666;margin-bottom:1rem;">输入用户名和管理员重置密钥，将该账号密码重置为 123456</p>
+    <div id="fp-alert"></div>
+    <form id="fp-form" onsubmit="doResetPassword();return false">
+      <input type="text" id="fp-user" placeholder="用户名" required>
+      <input type="password" id="fp-key" placeholder="管理员重置密钥" required>
+      <button type="submit">重置密码</button>
+    </form>
+    <p class="switch-form"><a href="#" onclick="hideForgotPassword()">取消</a></p>
   </div>
 </div>
 
@@ -375,6 +389,35 @@ async function doChangePassword() {
       showAlert("cp-alert", d.detail || d.message || "修改失败", "error");
     }
   } catch(e) { showAlert("cp-alert","网络错误： " + e.message,"error"); }
+  return false;
+}
+
+function showForgotPassword() {
+  document.getElementById("fp-alert").innerHTML = "";
+  document.getElementById("fp-form").reset();
+  document.getElementById("forgot-password-modal").style.display = "flex";
+}
+function hideForgotPassword() {
+  document.getElementById("forgot-password-modal").style.display = "none";
+}
+async function doResetPassword() {
+  let u = document.getElementById("fp-user").value;
+  let k = document.getElementById("fp-key").value;
+  if (!u || !k) { showAlert("fp-alert","请填写用户名和重置密钥","error"); return false; }
+  try {
+    let r = await fetch(API + "/api/auth/reset-password", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({username:u, reset_key:k})
+    });
+    let d = await r.json();
+    if (r.ok) {
+      showAlert("fp-alert", d.message || "密码已重置为 123456", "success");
+      setTimeout(hideForgotPassword, 2500);
+    } else {
+      showAlert("fp-alert", d.detail || d.message || "重置失败", "error");
+    }
+  } catch(e) { showAlert("fp-alert","网络错误： " + e.message,"error"); }
   return false;
 }
 

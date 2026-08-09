@@ -56,6 +56,7 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 | POST | /api/auth/register | 注册（首个为超管） | 无 |
 | POST | /api/auth/login | 登录返回 Token | 无 |
 | POST | /api/auth/change-password | 修改密码（校验原密码，新密码≥6 位） | Bearer |
+| POST | /api/auth/reset-password | 忘记密码自救：凭管理员重置密钥将账号重置为 123456 | 无（需 reset_key） |
 | POST | /api/documents/upload | 上传 PDF（**异步**：立即返回 task_id，后台索引） | Bearer |
 | GET | /api/documents/task/{task_id} | 查询上传索引任务的进度与状态 | Bearer |
 | GET | /api/documents | 文档列表 | Bearer |
@@ -213,6 +214,7 @@ python -m pytest --cov=app --cov-report=term-missing
 | EMBEDDING_API_KEY | - | 豆包 Embedding Key |
 | EMBEDDING_BASE_URL | https://ark.cn-beijing.volces.com/api/v3 | Embedding 地址 |
 | EMBEDDER_TYPE | openai | 嵌入类型（openai/huggingface） |
+| ADMIN_RESET_KEY | - | 管理员重置密钥（登录界面「忘记密码？」使用，必须配置且保密） |
 
 ## Docker
 
@@ -352,6 +354,18 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 .env 文件不要放 .gitignore（或放 docker-compose 的 environment 里兜底）。
 
 ## 更新日志
+
+### 2026-08-09: 登录界面新增「忘记密码？」入口 + 管理员重置密钥
+
+- **需求**：用户担心登录界面忘记密码后无处可改（已登录才有侧边栏「修改密码」）。
+- **改动**：
+  1. `app/core/config.py` 新增 `ADMIN_RESET_KEY = os.getenv("ADMIN_RESET_KEY", "")`；本地 `.env`（已 gitignore）写入随机密钥。
+  2. `app/tenant/auth.py` 新增 `reset_password_with_key(username, reset_key)`：校验服务端密钥已配置且传参一致 → 用户存在 → 将密码重置为 `123456`。
+  3. `app/api/auth.py` 新增 `POST /api/auth/reset-password`（请求体 `{username, reset_key}`，**无需登录**，限流 5/minute）。
+  4. `app/frontend/index.html` 登录卡片新增「忘记密码？」链接 → 弹窗输入用户名 + 重置密钥 → 调 `/api/auth/reset-password`；成功后提示密码已重置为 123456。
+- **行为**：密钥正确且用户存在 → 200 + 密码置为 123456；密钥错误 / 用户不存在 / 服务端未配置密钥 → 400；未带登录态也可调用（符合"忘记密码"场景）。
+- **安全**：区别于普通「修改密码」，此接口需管理员重置密钥，避免任意访客重置 Sprayming。密钥存于本地 `.env`，不入库。
+- **文档同步**：README API 表新增 `POST /api/auth/reset-password`（无认证，需 reset_key）；环境变量表新增 `ADMIN_RESET_KEY`；`.env.example` 补充示例。
 
 ### 2026-08-09: 新增修改密码接口 POST /api/auth/change-password
 

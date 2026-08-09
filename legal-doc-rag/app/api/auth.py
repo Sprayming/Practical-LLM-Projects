@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import jwt
 from fastapi import APIRouter, HTTPException, Header, Request, Depends
 from pydantic import BaseModel
-from app.tenant.auth import login as _login, register as _register, has_users as _has_users, change_password as _change_password
+from app.tenant.auth import login as _login, register as _register, has_users as _has_users, change_password as _change_password, reset_password_with_key as _reset_password_with_key
 import app.core.config as cfg
 from app.core.limiter import limiter
 
@@ -28,6 +28,11 @@ class RegisterRequest(BaseModel):
 class ChangePasswordRequest(BaseModel):
     old_password: str
     new_password: str
+
+
+class ResetPasswordRequest(BaseModel):
+    username: str
+    reset_key: str
 
 
 @router.post("/register")
@@ -112,6 +117,16 @@ def change_password(
 ):
     """修改当前登录用户的密码（需校验原密码）。"""
     ok, msg = _change_password(user["username"], req.old_password, req.new_password)
+    if not ok:
+        raise HTTPException(400, msg)
+    return {"success": True, "message": msg}
+
+
+@router.post("/reset-password")
+@limiter.limit("5/minute")
+def reset_password(request: Request, req: ResetPasswordRequest):
+    """忘记密码自救：凭管理员重置密钥重置指定账号密码（无需登录）。"""
+    ok, msg = _reset_password_with_key(req.username, req.reset_key)
     if not ok:
         raise HTTPException(400, msg)
     return {"success": True, "message": msg}

@@ -5,6 +5,8 @@ import sqlite3
 from pathlib import Path
 from typing import Optional, Tuple, Dict, List
 
+import app.core.config as cfg
+
 
 def _db_path() -> str:
     """返回 users.db 的路径（相对于项目根目录）"""
@@ -225,6 +227,36 @@ def change_password(username: str, old_password: str, new_password: str) -> Tupl
         )
         conn.commit()
         return True, "密码修改成功"
+    except Exception as e:
+        conn.rollback()
+        return False, str(e)
+    finally:
+        conn.close()
+
+
+def reset_password_with_key(username: str, reset_key: str) -> Tuple[bool, str]:
+    """管理员重置密钥重置任意用户密码（忘记密码自救）。
+
+    不依赖原密码，但需要正确的 ADMIN_RESET_KEY。
+    重置后密码统一为 123456，提示用户登录后立即修改。
+    """
+    expected = cfg.ADMIN_RESET_KEY
+    if not expected:
+        return False, "服务端未配置 ADMIN_RESET_KEY，无法使用此功能"
+    if not reset_key or reset_key != expected:
+        return False, "重置密钥错误"
+    _init_db()
+    conn = sqlite3.connect(_db_path())
+    try:
+        cur = conn.execute("SELECT id FROM users WHERE username=?", (username,))
+        if not cur.fetchone():
+            return False, "用户不存在"
+        conn.execute(
+            "UPDATE users SET password_hash=? WHERE username=?",
+            (_hash_password("123456"), username),
+        )
+        conn.commit()
+        return True, "已将密码重置为 123456，请登录后立即修改"
     except Exception as e:
         conn.rollback()
         return False, str(e)

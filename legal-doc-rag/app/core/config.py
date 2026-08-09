@@ -28,5 +28,8 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 # JWT
 JWT_SECRET = os.getenv("JWT_SECRET", "legal-rag-secret-key-change-in-production")
 
+# 管理员重置密钥（忘记密码自救用，必须配置且保密，切勿提交到仓库）
+ADMIN_RESET_KEY = os.getenv("ADMIN_RESET_KEY", "")
+
 # Paths
 TENANT_DB = str(BASE_DIR / "tenant_data" / "users.db")
