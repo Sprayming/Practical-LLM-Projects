@@ -1,0 +1,4 @@
+# Windows 批处理文件必须用 CRLF 行尾，否则 cmd.exe 解析 goto/标签/代码块会失败、双击无反应
+*.bat text eol=crlf
+# Shell 脚本用 LF
+*.sh text eol=lf
