@@ -61,7 +61,7 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 | DELETE | /api/documents/{filename} | 删除文档（超管） | Bearer |
 | POST | /api/chat | RAG 问答（stream 字段控制是否 SSE） | Bearer |
 | POST | /api/chat/stream | RAG 流式问答（SSE） | Bearer |
-| GET | /api/health | 健康检查 | 无 |
+| GET | /health | 健康检查（注意：无 `/api` 前缀） | 无 |
 
 ## 测试
 
@@ -351,6 +351,14 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 .env 文件不要放 .gitignore（或放 docker-compose 的 environment 里兜底）。
 
 ## 更新日志
+
+### 2026-08-09: 恢复桌面快捷方式启动脚本 + 修正健康检查端点文档
+
+- **问题**：双击桌面"法律文书 RAG 系统"快捷方式（.lnk）无反应 / 打不开。
+- **根因**：该 .lnk 指向的目标脚本 `D:\git\legal-doc-rag\启动法律文书 RAG 系统.bat` 已丢失（项目内仅剩 `start-rag.bat` / `start-local.bat` / `stop-rag.bat`），快捷方式找不到目标文件而失效。
+- **修复**：重建 `启动法律文书 RAG 系统.bat`，用本机 miniconda Python（`C:\Users\11195\miniconda3\python.exe`）在 `127.0.0.1:8000` 启动 uvicorn，等待 `/health` 就绪后自动打开浏览器 `http://localhost:8000`。
+- **附带修正（文档 bug）**：README API 表原写 `GET /api/health`，但代码实际路由是 `/health`（无 `/api` 前缀，见 `app/observability/monitoring.py:209`），已更正；启动脚本里的就绪探测也同步改为 `/health`。
+- **验证**：uvicorn 成功启动，前端 `/`、`/docs`、`/api/auth/register` 均返回 200；`/health` 返回 200（`overall=unhealthy` 仅因本测试环境未安装 `redis` 模块，不影响前端问答）。
 
 ### 2026-08-08: 修复 chat 接口返回 null/500 的多个 bug（c3ce4f6）
 
