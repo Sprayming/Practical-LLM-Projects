@@ -65,12 +65,24 @@ class OCREngine:
                 tmp.write(image_bytes)
                 tmp_path = tmp.name
             try:
-                result = self._ocr.ocr(tmp_path)
+                # 兼容 PaddleOCR 3.x（推荐 predict()）与 2.x（ocr()）
+                if hasattr(self._ocr, "predict"):
+                    result = self._ocr.predict(tmp_path)
+                else:
+                    result = self._ocr.ocr(tmp_path)
+                if not result:
+                    return ""
+                ocr_result = result[0]
+                # PaddleOCR 3.x: OCRResult 是类字典对象，识别文本在 'rec_texts' 中
+                if hasattr(ocr_result, "keys") and "rec_texts" in ocr_result:
+                    texts = ocr_result.get("rec_texts") or []
+                    return "\n".join(str(t) for t in texts)
+                # PaddleOCR 2.x: 列表格式 [ [bbox, (text, score)], ... ]
                 texts = []
-                if result and result[0]:
-                    for line in result[0]:
+                for line in ocr_result:
+                    if isinstance(line, (list, tuple)) and len(line) >= 2:
                         texts.append(line[1][0])
-                return " ".join(texts)
+                return "\n".join(str(t) for t in texts)
             finally:
                 os.unlink(tmp_path)
         elif self._backend == "pytesseract":

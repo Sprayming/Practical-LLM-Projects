@@ -1,7 +1,7 @@
 @echo off
 setlocal
 set PORT=8000
-set PY=C:\Users\11195\miniconda3\python.exe
+set PY=%DIR%\.ocr_venv\Scripts\python.exe
 set DIR=D:\git\legal-doc-rag
 title Legal-DOC-RAG Server (port 8000)
 

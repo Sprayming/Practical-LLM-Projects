@@ -1,11 +1,13 @@
 """
 独立重索引脚本（脱离 web 服务进程，避免后台线程被回收导致索引中断）。
 用途：
-  1. 遍历 chroma_db 下每个租户的 uploads，用 PyMuPDF 抽取真实文字层；
-  2. 有文字层的 PDF → 分块 → 本地 BGE-M3 向量化 → 写入 Chroma（含 BGE-M3 稀疏向量）；
-  3. 无文字层（扫描件）且未装 OCR → 删除其历史垃圾 chunk（如 [Image] 占位符），避免污染检索；
-  4. 幂等：已索引的源会先清后写，可重复运行。
+  1. 遍历 chroma_db 下每个租户的 uploads，调用 MultimodalPipeline 处理；
+  2. 有文字层 PDF 直接抽文字 → 分块 → 本地 BGE-M3 向量化；
+  3. 无文字层扫描件通过 OCR（PaddleOCR）识别图片文字 → 分块 → 向量化；
+  4. 识别结果为空 → 删除其历史垃圾 chunk（如旧版 [Image] 占位符），避免污染检索；
+  5. 幂等：已索引的源会先清后写，可重复运行。
 运行：python reindex_docs.py
+注意：要在能 import paddleocr 的 Python 环境执行（如 .ocr_venv/Scripts/python）。
 """
 import os
 import sys
@@ -27,29 +29,22 @@ try:
 except Exception:
     pass
 
-import fitz  # PyMuPDF
 import chromadb
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from app.core import config as cfg
+from app.processing.multimodal_pipeline import MultimodalPipeline
 from app.retrieval.embedder_factory import create_embedder
 from app.retrieval.sparse_store import save_sparse
 
 CHROMA_ROOT = cfg.CHROMA_PERSIST_DIR
 UPLOAD_ROOT = cfg.UPLOAD_DIR
 
-splitter = RecursiveCharacterTextSplitter(
-    chunk_size=500,
-    chunk_overlap=50,
-    separators=["\n\n", "\n", "。", "；", "，", " "],
-)
+pipeline = MultimodalPipeline()
 
 
-def extract_pages(pdf_path: str):
-    """返回每页文字；无文字层则为空串。"""
-    doc = fitz.open(pdf_path)
-    pages = [doc[i].get_text("text").strip() for i in range(doc.page_count)]
-    doc.close()
-    return pages
+def extract_chunks(pdf_path: str):
+    """调用多模态管线：文字层 + OCR + 图片 caption → 文本块列表。"""
+    chunks = pipeline.process(pdf_path)
+    return [c.text for c in chunks if c.text.strip()]
 
 
 def reindex_tenant(tenant_id: str):
@@ -80,26 +75,26 @@ def reindex_tenant(tenant_id: str):
 
     for fname in pdfs:
         path = os.path.join(upload_dir, fname)
-        pages = extract_pages(path)
-        total_chars = sum(len(p) for p in pages)
-        if total_chars == 0:
-            # 扫描件/无文字层：清理历史垃圾 chunk
+        print(f"  [处理] {fname}: 调用 MultimodalPipeline（含 OCR）...")
+        chunks = extract_chunks(path)
+        total_chars = sum(len(c) for c in chunks)
+
+        if not chunks:
+            # 无文字层且 OCR 也无效：清理历史垃圾 chunk
             if fname in existing_sources:
-                ids = [m.get("id") for m in existing if m.get("source") == fname]
-                # col.get 不返回 id？直接按 where 删除
                 try:
                     res = col.get(where={"source": fname})
                     del_ids = res.get("ids", [])
                     if del_ids:
                         col.delete(ids=del_ids)
-                        print(f"  [清理] {fname}: 删除 {len(del_ids)} 个无文字层垃圾 chunk（需 OCR 才能真正索引）")
+                        print(f"  [清理] {fname}: 删除 {len(del_ids)} 个无文字层/无 OCR 垃圾 chunk")
                 except Exception as e:
                     print(f"  [清理] {fname} 删除失败: {e}")
             else:
-                print(f"  [跳过] {fname}: 无文字层且未索引（需 OCR 才能检索）")
+                print(f"  [跳过] {fname}: 抽取后无有效文本（无文字层且 OCR 未识别）")
             continue
 
-        # 有文字层：先清旧的，再写入
+        # 先清旧的，再写入（幂等）
         try:
             res = col.get(where={"source": fname})
             del_ids = res.get("ids", [])
@@ -108,18 +103,6 @@ def reindex_tenant(tenant_id: str):
                 print(f"  [清理] {fname}: 删除旧 chunk {len(del_ids)} 个（准备重建）")
         except Exception:
             pass
-
-        chunks = []
-        for i, pt in enumerate(pages):
-            if not pt:
-                continue
-            for st in splitter.split_text(pt):
-                if st.strip():
-                    chunks.append(st)
-
-        if not chunks:
-            print(f"  [跳过] {fname}: 抽取后无有效文本")
-            continue
 
         print(f"  [索引] {fname}: 抽取 {len(chunks)} chunks（总字符 {total_chars}）")
 
