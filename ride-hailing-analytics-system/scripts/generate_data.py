@@ -45,13 +45,13 @@ DRIVER_LEVELS = [
 
 # 卡券类型
 COUPON_TYPES = [
-    {"name": "新人券", "value": 5, "min_order": 10, "validity_days": 7, "weight": 15},
-    {"name": "满减券", "value": 10, "min_order": 30, "validity_days": 14, "weight": 25},
-    {"name": "折扣券", "value": 15, "min_order": 50, "validity_days": 7, "weight": 20},
-    {"name": "大额券", "value": 20, "min_order": 80, "validity_days": 3, "weight": 15},
-    {"name": "节日券", "value": 30, "min_order": 100, "validity_days": 1, "weight": 10},
-    {"name": "会员券", "value": 50, "min_order": 150, "validity_days": 30, "weight": 10},
-    {"name": "专属券", "value": 100, "min_order": 200, "validity_days": 7, "weight": 5},
+    {"name": "新人券", "face_value": 5, "min_order": 10, "valid_days": 7, "weight": 15},
+    {"name": "满减券", "face_value": 10, "min_order": 30, "valid_days": 14, "weight": 25},
+    {"name": "折扣券", "face_value": 15, "min_order": 50, "valid_days": 7, "weight": 20},
+    {"name": "大额券", "face_value": 20, "min_order": 80, "valid_days": 3, "weight": 15},
+    {"name": "节日券", "face_value": 30, "min_order": 100, "valid_days": 1, "weight": 10},
+    {"name": "会员券", "face_value": 50, "min_order": 150, "valid_days": 30, "weight": 10},
+    {"name": "专属券", "face_value": 100, "min_order": 200, "valid_days": 7, "weight": 5},
 ]
 
 # 时段分布（高峰时段权重更高）
@@ -156,15 +156,15 @@ def generate_coupon_types(conn):
     
     for i, ct in enumerate(COUPON_TYPES, 1):
         cursor.execute("""
-            INSERT OR REPLACE INTO coupon_types (id, name, value, min_order_amount, validity_days)
+            INSERT OR REPLACE INTO coupon_types (id, name, face_value, min_order_amount, valid_days)
             VALUES (?, ?, ?, ?, ?)
-        """, (i, ct["name"], ct["value"], ct["min_order"], ct["validity_days"]))
+        """, (i, ct["name"], ct["face_value"], ct["min_order"], ct["valid_days"]))
     
     conn.commit()
     logger.info("卡券类型数据生成完成")
 
 
-def generate_coupons(conn, count: int):
+def generate_coupons(conn, count: int, drivers_count: int = 100):
     """生成卡券发放记录"""
     logger.info("生成 {} 条卡券发放记录...", count)
     cursor = conn.cursor()
@@ -180,7 +180,7 @@ def generate_coupons(conn, count: int):
         issue_date = datetime.now() - timedelta(days=days_ago)
         
         # 有效期
-        valid_until = issue_date + timedelta(days=ct["validity_days"])
+        valid_until = issue_date + timedelta(days=ct["valid_days"])
         
         # 状态：已使用/已过期/未使用
         if valid_until < datetime.now():
@@ -193,18 +193,18 @@ def generate_coupons(conn, count: int):
         coupon = {
             "id": i,
             "coupon_type_id": ct_id,
-            "user_id": random.randint(1, 1000),  # 模拟用户ID
-            "issue_date": issue_date.strftime("%Y-%m-%d %H:%M:%S"),
-            "valid_until": valid_until.strftime("%Y-%m-%d"),
+            "driver_id": random.randint(1, drivers_count),
+            "issued_at": issue_date.strftime("%Y-%m-%d %H:%M:%S"),
+            "expired_at": valid_until.strftime("%Y-%m-%d %H:%M:%S"),
             "status": status,
         }
         coupons.append(coupon)
         
         cursor.execute("""
-            INSERT OR REPLACE INTO coupons (id, coupon_type_id, issue_date, valid_until, status)
-            VALUES (?, ?, ?, ?, ?)
-        """, (coupon["id"], coupon["coupon_type_id"], coupon["issue_date"], 
-              coupon["valid_until"], coupon["status"]))
+            INSERT OR REPLACE INTO coupons (id, coupon_type_id, driver_id, issued_at, expired_at, status)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (coupon["id"], coupon["coupon_type_id"], coupon["driver_id"],
+              coupon["issued_at"], coupon["expired_at"], coupon["status"]))
     
     conn.commit()
     logger.info("卡券发放记录生成完成")
@@ -242,18 +242,18 @@ def generate_orders(conn, count: int, drivers: list):
         order = {
             "id": i,
             "driver_id": driver["id"],
-            "order_date": order_date.strftime("%Y-%m-%d %H:%M:%S"),
-            "amount": amount,
+            "order_time": order_date.strftime("%Y-%m-%d %H:%M:%S"),
+            "order_amount": amount,
             "status": status,
             "city": driver["city"],
         }
         orders.append(order)
         
         cursor.execute("""
-            INSERT OR REPLACE INTO orders (id, driver_id, order_date, amount, status)
+            INSERT OR REPLACE INTO orders (id, driver_id, order_time, order_amount, status)
             VALUES (?, ?, ?, ?, ?)
-        """, (order["id"], order["driver_id"], order["order_date"], 
-              order["amount"], order["status"]))
+        """, (order["id"], order["driver_id"], order["order_time"], 
+              order["order_amount"], order["status"]))
     
     conn.commit()
     logger.info("订单记录生成完成")
@@ -275,7 +275,7 @@ def generate_redemptions(conn, coupons: list, orders: list):
         
         # 核销时间（在订单时间之后）
         if order:
-            order_time = datetime.strptime(order["order_date"], "%Y-%m-%d %H:%M:%S")
+            order_time = datetime.strptime(order["order_time"], "%Y-%m-%d %H:%M:%S")
             redemption_time = order_time + timedelta(minutes=random.randint(1, 30))
         else:
             redemption_time = datetime.now() - timedelta(days=random.randint(0, 30))
@@ -284,15 +284,15 @@ def generate_redemptions(conn, coupons: list, orders: list):
             "id": i,
             "coupon_id": coupon["id"],
             "order_id": order["id"] if order else None,
-            "redemption_date": redemption_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "redeemed_at": redemption_time.strftime("%Y-%m-%d %H:%M:%S"),
         }
         redemptions.append(redemption)
         
         cursor.execute("""
-            INSERT OR REPLACE INTO redemptions (id, coupon_id, order_id, redemption_date)
+            INSERT OR REPLACE INTO redemptions (id, coupon_id, order_id, redeemed_at)
             VALUES (?, ?, ?, ?)
         """, (redemption["id"], redemption["coupon_id"], redemption["order_id"],
-              redemption["redemption_date"]))
+              redemption["redeemed_at"]))
     
     conn.commit()
     logger.info("核销记录生成完成，共 {} 条", len(redemptions))
@@ -306,15 +306,15 @@ def generate_business_data(conn, days: int):
     
     # 统计各卡券类型的核销率
     cursor.execute("""
-        SELECT ct.id, ct.value,
+        SELECT ct.id, ct.face_value,
                COUNT(DISTINCT c.id) as total_coupons,
                COUNT(DISTINCT r.id) as total_redemptions
         FROM coupon_types ct
         LEFT JOIN coupons c ON c.coupon_type_id = ct.id
         LEFT JOIN redemptions r ON r.coupon_id = c.id
-        GROUP BY ct.id, ct.value
+        GROUP BY ct.id, ct.face_value
     """)
-    
+
     stats = cursor.fetchall()
     logger.info("业务统计完成")
     return stats
@@ -355,7 +355,7 @@ def main():
         # 生成数据
         drivers = generate_drivers(conn, args.drivers)
         generate_coupon_types(conn)
-        coupons = generate_coupons(conn, args.coupons)
+        coupons = generate_coupons(conn, args.coupons, args.drivers)
         orders = generate_orders(conn, args.orders, drivers)
         redemptions = generate_redemptions(conn, coupons, orders)
         
@@ -376,9 +376,9 @@ def main():
         # 打印卡券核销率
         logger.info("卡券核销率统计:")
         for row in stats:
-            ct_id, value, total, redeemed = row
+            ct_id, face_value, total, redeemed = row
             rate = (redeemed / total * 100) if total > 0 else 0
-            logger.info("  {}元券: {} / {} ({:.1f}%)", value, redeemed, total, rate)
+            logger.info("  {}元券: {} / {} ({:.1f}%)", face_value, redeemed, total, rate)
         
     except Exception as e:
         logger.error("数据生成失败: {}", e)

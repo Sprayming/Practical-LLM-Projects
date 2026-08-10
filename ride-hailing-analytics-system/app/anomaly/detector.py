@@ -75,10 +75,10 @@ class AnomalyDetector:
             today = datetime.now().strftime("%Y-%m-%d")
             yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
             
-            cursor.execute("SELECT COUNT(*) FROM orders WHERE DATE(order_date) = ? AND status = 'completed'", (today,))
+            cursor.execute("SELECT COUNT(*) FROM orders WHERE DATE(order_time) = ? AND status = 'completed'", (today,))
             today_orders = cursor.fetchone()[0]
             
-            cursor.execute("SELECT COUNT(*) FROM orders WHERE DATE(order_date) = ? AND status = 'completed'", (yesterday,))
+            cursor.execute("SELECT COUNT(*) FROM orders WHERE DATE(order_time) = ? AND status = 'completed'", (yesterday,))
             yesterday_orders = cursor.fetchone()[0]
             
             if yesterday_orders > 0:
@@ -126,10 +126,10 @@ class AnomalyDetector:
             today = datetime.now().strftime("%Y-%m-%d")
             yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
             
-            cursor.execute("SELECT SUM(amount) FROM orders WHERE DATE(order_date) = ? AND status = 'completed'", (today,))
+            cursor.execute("SELECT SUM(order_amount) FROM orders WHERE DATE(order_time) = ? AND status = 'completed'", (today,))
             today_amount = cursor.fetchone()[0] or 0
             
-            cursor.execute("SELECT SUM(amount) FROM orders WHERE DATE(order_date) = ? AND status = 'completed'", (yesterday,))
+            cursor.execute("SELECT SUM(order_amount) FROM orders WHERE DATE(order_time) = ? AND status = 'completed'", (yesterday,))
             yesterday_amount = cursor.fetchone()[0] or 0
             
             if yesterday_amount > 0:
@@ -162,14 +162,14 @@ class AnomalyDetector:
             
             # 检测各类卡券的核销率
             cursor.execute("""
-                SELECT ct.name, ct.value,
+                SELECT ct.name, ct.face_value,
                        COUNT(DISTINCT c.id) as total,
                        COUNT(DISTINCT r.id) as redeemed
                 FROM coupon_types ct
                 LEFT JOIN coupons c ON c.coupon_type_id = ct.id
                 LEFT JOIN redemptions r ON r.coupon_id = c.id
                 WHERE c.id IS NOT NULL
-                GROUP BY ct.id, ct.name, ct.value
+                GROUP BY ct.id, ct.name, ct.face_value
             """)
             
             for row in cursor.fetchall():
@@ -204,10 +204,10 @@ class AnomalyDetector:
             today = datetime.now().strftime("%Y-%m-%d")
             yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
             
-            cursor.execute("SELECT COUNT(DISTINCT driver_id) FROM orders WHERE DATE(order_date) = ?", (today,))
+            cursor.execute("SELECT COUNT(DISTINCT driver_id) FROM orders WHERE DATE(order_time) = ?", (today,))
             today_drivers = cursor.fetchone()[0]
             
-            cursor.execute("SELECT COUNT(DISTINCT driver_id) FROM orders WHERE DATE(order_date) = ?", (yesterday,))
+            cursor.execute("SELECT COUNT(DISTINCT driver_id) FROM orders WHERE DATE(order_time) = ?", (yesterday,))
             yesterday_drivers = cursor.fetchone()[0]
             
             if yesterday_drivers > 0:
@@ -244,7 +244,7 @@ class AnomalyDetector:
                 SELECT COUNT(*) as total, 
                        SUM(CASE WHEN status = 'used' THEN 1 ELSE 0 END) as used
                 FROM coupons
-                WHERE DATE(issue_date) >= ?
+                WHERE DATE(issued_at) >= ?
             """, (week_ago,))
             
             row = cursor.fetchone()
