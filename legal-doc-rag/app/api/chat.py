@@ -61,6 +61,7 @@ router = APIRouter(prefix="/api/chat", tags=["chat"]) # 创建一个API路由器
 
 
 class ChatRequest(BaseModel):
+    """定义聊天请求的模型"""
     message: str
     history: Optional[List[dict]] = []
     stream: Optional[bool] = True  # SSE 流式输出（默认开启，见 chat 端点的流式分支）
@@ -156,6 +157,7 @@ async def cleanup_cache():
 _reranker = None
 _reranker_lock = threading.Lock() # 创建一个锁对象，用于保护 _reranker
 def _get_reranker():
+    """获取重排序器"""
     global _reranker
     with _reranker_lock:
         if _reranker is None:
@@ -163,6 +165,7 @@ def _get_reranker():
         return _reranker
 
 def _build_pipeline(tenant_id: str):
+    """构建管道"""
     try:
         embedder = create_embedder()
         mem = _get_memory(tenant_id, embedder) if embedder else None
