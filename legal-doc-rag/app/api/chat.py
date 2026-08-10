@@ -501,8 +501,8 @@ async def _handle_post_processing(message, answer, pipeline):
 def _get_citations(context_tracker):
     """获取引用列表"""
     sources = context_tracker.get_sources()
-    return [{"source": s.source if hasattr(s, 'source') else "", 
-             "content": s.page_content[:200] if hasattr(s, 'page_content') else str(s)[:200]} 
+    return [{"source": s.filename or "未知来源",
+             "content": (s.content[:200] if s.content else "")}
             for s in sources]
 
 
