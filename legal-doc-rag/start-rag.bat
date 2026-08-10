@@ -29,7 +29,7 @@ REM 3. Wait for FastAPI to be ready
 echo [3/3] Waiting for app to be ready...
 :wait_ready
 timeout /t 2 /nobreak >nul
-curl.exe -s http://localhost:8000/api/health >nul 2>&1
+curl.exe -s http://localhost:8000/health >nul 2>&1
 if %errorlevel% neq 0 goto wait_ready
 
 echo.
