@@ -146,7 +146,12 @@ def record_upload(filename: str, chunks: int, duration_ms: float):
 # ============================================================
 
 def _check_redis() -> dict:
-    """Check Redis connectivity."""
+    """Check Redis connectivity.
+
+    Redis is an *optional* dependency: when unavailable the app falls back to
+    an in-memory store (see app.memory.memory_manager). Its absence therefore
+    means "degraded" operation, not a hard failure.
+    """
     try:
         import redis as redis_lib
         import app.core.config as cfg
@@ -154,7 +159,10 @@ def _check_redis() -> dict:
         r.ping()
         return {"status": "healthy", "message": "Connected"}
     except Exception as e:
-        return {"status": "unhealthy", "message": str(e)}
+        return {
+            "status": "degraded",
+            "message": f"not available ({e}); using in-memory fallback",
+        }
 
 
 def _check_disk() -> dict:
@@ -215,16 +223,20 @@ def health():
         "memory": _check_memory(),
     }
 
-    # Overall status: unhealthy if any critical check fails
+    # Overall status:
+    #   - "unhealthy" only when a critical check hard-fails (e.g. disk full)
+    #   - "degraded" when an optional dependency is missing or a soft threshold
+    #     is exceeded (redis down, high disk/mem usage). The service is still
+    #     serving traffic, so it returns HTTP 200 in degraded mode.
     overall = "healthy"
     for name, check in checks.items():
         if check.get("status") == "unhealthy":
             overall = "unhealthy"
             break
-        elif check.get("status") == "warning":
+        elif check.get("status") in ("degraded", "warning"):
             overall = "degraded"
 
-    status_code = 200 if overall == "healthy" else 503
+    status_code = 200 if overall in ("healthy", "degraded") else 503
 
     return JSONResponse(
         status_code=status_code,
