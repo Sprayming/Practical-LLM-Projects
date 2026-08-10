@@ -1,0 +1,12 @@
+C:\Users\11195\miniconda3\Lib\site-packages\requests\__init__.py:113: RequestsDependencyWarning: urllib3 (2.3.0) or chardet (7.5.1)/charset_normalizer (3.3.2) doesn't match a supported version!
+  warnings.warn(
+[32m2026-08-10 23:47:27.059[0m | [1mINFO    [0m | [36mapp.security.error_handlers[0m:[36msetup_error_handlers[0m:[36m196[0m - [1mGlobal error handlers registered[0m
+INFO:     Started server process [11804]
+INFO:     Waiting for application startup.
+[32m2026-08-10 23:47:27.127[0m | [1mINFO    [0m | [36mapp.worker.webhook[0m:[36mstart[0m:[36m87[0m - [1mWebhook manager started[0m
+You're using a XLMRobertaTokenizerFast tokenizer. Please note that with a fast tokenizer, using the `__call__` method is faster than using a method to encode the text followed by a call to the `pad` method to get a padded encoding.
+D:\git\legal-doc-rag\app\main.py:131: LangChainDeprecationWarning: The class `Chroma` was deprecated in LangChain 0.2.9 and will be removed in 1.0. An updated version of the class exists in the :class:`~langchain-chroma package and should be used instead. To use it run `pip install -U :class:`~langchain-chroma` and import as `from :class:`~langchain_chroma import Chroma``.
+  store = Chroma(
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:58139 - "GET /api/health HTTP/1.1" 404 Not Found
