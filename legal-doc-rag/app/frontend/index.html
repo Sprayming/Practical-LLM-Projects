@@ -1189,8 +1189,17 @@ if (token) {
         fetch(API + "/api/documents", {headers:{"Authorization":"Bearer "+token}})
           .then(function(r) {
             if (r.ok) {
-              // Token is valid but we don't have user info - assume admin for now
-              user = { role: "super_admin" };
+              // Token 有效但 /api/auth/me 失败：从 JWT payload 恢复 tenant/role，避免丢失 tenant_id
+              try {
+                const payload = JSON.parse(atob(token.split(".")[1]));
+                user = {
+                  username: payload.sub || "user",
+                  tenant_id: payload.tenant_id,
+                  role: payload.role || "user",
+                };
+              } catch (e) {
+                user = { role: "super_admin" };
+              }
               updateAdminButton();
               document.getElementById("login-page").style.display = "none";
               document.getElementById("chat-page").style.display = "block";
@@ -1203,7 +1212,7 @@ if (token) {
   
   async function doDeleteDocument(filename) {  
     if (!confirm("确定删除 " + filename + " 吗？")) return;  
-    let r = await fetch(API + "/api/documents/" + filename, {  
+    let r = await fetch(API + "/api/documents/" + encodeURIComponent(filename), {  
       method: "DELETE",  
       headers: {"Authorization":"Bearer " + token},  
     });  

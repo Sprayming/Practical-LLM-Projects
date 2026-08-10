@@ -191,19 +191,23 @@ def delete_document(filename: str, user: dict = Depends(require_user)):
         os.remove(file_path)
         deleted = True
 
-    # 从 ChromaDB 删除对应的向量数据
+    # 从 ChromaDB 删除对应的向量数据。
+    # 注意：删除只需按 source 元数据过滤，无需加载 embedding 模型
+    # （原先 create_embedder() 会触发 BGE-M3 加载，慢且易在内存压力下失败，
+    # 失败被静默吞掉会导致向量残留、文档"删不干净"）。
     persist_dir = os.path.join(cfg.CHROMA_PERSIST_DIR, tenant_id)
     if os.path.exists(persist_dir):
         try:
-            vector_store = Chroma(
-                embedding_function=create_embedder(),
-                persist_directory=persist_dir,
-            )
-            results = vector_store.get(where={"source": filename})
-            ids = results.get("ids", [])
-            if ids:
-                vector_store.delete(ids=ids)
-                vector_store.persist()
+            import chromadb
+
+            client = chromadb.PersistentClient(path=persist_dir)
+            col = client.get_or_create_collection("langchain")
+            # source 在历史上可能以原始名或 sanitize 名存储，两者都尝试删除
+            for src in (filename, safe_filename):
+                try:
+                    col.delete(where={"source": src})
+                except Exception:
+                    pass
         except Exception:
             pass
 
