@@ -7,6 +7,7 @@
 避免测试需要 GPU/网络，同时验证「上传后文件确实落盘、并被列表接口可见」。
 """
 import os
+import time
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -25,6 +26,9 @@ def test_upload_document_success_and_listed(client, auth_headers, test_env):
 
     pdf_bytes = b"%PDF-1.4 fake pdf content for testing"
 
+    # 上传接口已改为异步（立即返回 task_id，索引在后台线程完成）。
+    # patch 作用域必须覆盖后台线程执行期，否则 mock 撤掉后真实
+    # MultimodalPipeline 会去解析这份假 PDF 而失败。
     with patch(
         "app.api.documents.MultimodalPipeline", return_value=fake_pipeline
     ), patch("app.api.documents.create_embedder", return_value=MagicMock()), patch(
@@ -36,12 +40,30 @@ def test_upload_document_success_and_listed(client, auth_headers, test_env):
             headers=auth_headers,
         )
 
-    assert r.status_code == 200, r.text
-    data = r.json()
-    assert data["success"] is True
-    assert data["chunks"] == 2
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert data["success"] is True
+        task_id = data["task_id"]
 
-    tenant_id = data["tenant_id"]
+        # 轮询后台索引任务，确认 chunks 真实产出。
+        # 上传响应不携带 tenant_id，从 task 本身取（task 记录里含 tenant_id）。
+        result = None
+        tenant_id = None
+        for _ in range(50):
+            rt = client.get(f"/api/documents/task/{task_id}", headers=auth_headers)
+            assert rt.status_code == 200, rt.text
+            td = rt.json()
+            if td.get("status") == "done":
+                result = td.get("result") or {}
+                tenant_id = td.get("tenant_id")
+                break
+            if td.get("status") == "failed":
+                pytest.fail(f"索引失败: {td.get('error')}")
+            time.sleep(0.1)
+        assert result is not None, "索引任务未在限定时间内完成"
+        assert tenant_id is not None, "task 未返回 tenant_id"
+        assert result.get("chunks") == 2
+
     # 文件确实落盘到临时上传目录
     saved = os.path.join(test_env["upload_dir"], tenant_id, "contract.pdf")
     assert os.path.exists(saved), f"上传文件未落盘: {saved}"

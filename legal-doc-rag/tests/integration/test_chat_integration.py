@@ -6,6 +6,7 @@
 外部依赖（LLM、embedding、向量库、reranker）用 mock 替代，
 保证测试离线可跑、可重复，同时验证「内部接线」正确。
 """
+from types import SimpleNamespace
 from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
@@ -15,6 +16,8 @@ def _make_fake_doc():
     doc = MagicMock(name="retrieved_doc")
     doc.page_content = "《劳动合同法》第十条规定：建立劳动关系，应当订立书面劳动合同。"
     doc.source = "test.pdf"
+    doc.filename = "test.pdf"
+    doc.content = "《劳动合同法》第十条规定：建立劳动关系，应当订立书面劳动合同。"
     doc.metadata = {"source": "test.pdf"}
     return doc
 
@@ -54,9 +57,18 @@ def test_chat_full_pipeline_with_mocked_llm(client, auth_headers):
     mock_ac.__aenter__.return_value = mock_client
     mock_ac.__aexit__.return_value = False
 
+    # 当前 _build_pipeline 返回 SimpleNamespace，测试需对齐该契约
+    fake_pipeline = SimpleNamespace(
+        embedder=fake_embedder,
+        vector_store=fake_vs,
+        qr=fake_qr,
+        cache=fake_cache,
+        ct=fake_ct,
+        mem=fake_mem,
+    )
     with patch(
         "app.api.chat._build_pipeline",
-        return_value=(fake_embedder, fake_vs, fake_qr, fake_cache, fake_ct),
+        return_value=fake_pipeline,
     ), patch("app.api.chat._get_memory", return_value=fake_mem), patch(
         "app.api.chat.HybridRetriever"
     ) as MockHR, patch("app.api.chat._get_reranker") as MockRR, patch(
