@@ -741,6 +741,80 @@ v0.1.0 ──────▶ v0.2.0 ──────▶ v0.3.0 ─────
 - ✅ Agent 编排（Planner → SQLTool → AnalysisTool → ReportTool）
 - ✅ 仪表盘 API
 
+## 踩坑记录与复盘（真实记录）
+
+> 本节如实记录项目从原型到生产级演进过程中真实踩过的坑、修复过程与教训。这些坑大多在"单测全绿"的情况下仍未被发现，直到端到端实测才暴露——对面试复盘和后续维护都有价值。
+
+### 坑 1：Schema 列名漂移（最严重，导致核心功能全失效）
+
+**现象**：服务能启动、44 个单元测试全过，但真实数据模拟、异常检测、报告生成、仪表盘 4 个功能模块全部跑不起来。
+
+**根因**：`data/schema_sqlite.sql` 在建库时把关键列名做了规范化（如 `orders.order_date` → `order_time`、`amount` → `order_amount`），但 4 处业务代码仍引用旧的列名，且彼此互不同步，形成"schema 已改、代码没跟"的漂移。
+
+**具体故障点**（均指向 SQLite `no such column` 报错）：
+
+| 文件 | 旧列名（错误） | schema 真实列名 | 后果 |
+|------|---------------|----------------|------|
+| `scripts/generate_data.py` | `order_date`/`amount`/`issue_date`/`valid_until`/`value`/`validity_days` | `order_time`/`order_amount`/`issued_at`/`expired_at`/`face_value`/`valid_days` | 数据生成直接失败，无任何演示数据 |
+| `app/anomaly/detector.py` | `order_date`/`amount`/`issue_date`/`ct.value` | `order_time`/`order_amount`/`issued_at`/`ct.face_value` | 异常检测接口报 no such column，整体失效 |
+| `app/report/generator.py` | `order_date`/`issue_date`/`o.amount` | `order_time`/`issued_at`/`o.order_amount` | 报告 SQL 报错 |
+| `app/api/dashboard.py` | （无）直接 return 写死的 0 值 | 改为真实查询 | 仪表盘永远是空壳，前端展示全为 0 |
+
+**修复**：统一对齐到 `data/schema_sqlite.sql` 的真实列；`dashboard.py` 由空壳改为真实查库（卡券总数 / 核销率 / 各券种表现 / Top5 司机）。提交 `dc45a49`。
+
+**教训**：
+- 改 schema 必须全局检索所有引用点（代码 + 脚本 + 测试），不能只改建库语句。
+- 单测全 mock 数据库会掩盖 schema 契约问题，**必须有一次端到端真实 DB 集成测试**才能证明系统真的能跑。
+- 建议：把列名集中为常量或用 ORM 映射，避免表名/列名字符串散落各处。
+
+### 坑 2：44 个测试全绿 ≠ 系统可用（mock 测试的盲区）
+
+**现象**：`pytest` 报告 44 passed，但 `uvicorn` 一启动、跑真实功能就崩。
+
+**根因**：所有 API / 业务测试都用 mock 把数据库层替换掉了，没有一条用例真正连过 SQLite 执行过建表 / 插入 / 查询。schema 漂移和空壳接口在 mock 下完全不可见。
+
+**修复**：补一次冒烟测试——`generate_data.py` 真实灌库后，逐个请求 `/api/dashboard/`、`/api/anomaly/health`、`/api/monitoring/metrics`，确认返回真实数据。
+
+**教训**：mock 测试只能验证"逻辑对不对"，验证不了"集成通不通"。生产级项目必须保留少量真实 DB 的集成测试（如 pytest 临时建内存 SQLite）。
+
+### 坑 3：.env 不进版本库，跨机器配置丢失
+
+**现象**：在 A 机器配好的 `LLM_API_KEY`，到 B 机器 `git pull` 后 NL2SQL / 报告等 LLM 功能全部不可用。
+
+**根因**：`.env` 被 `.gitignore` 忽略（正确做法，避免泄露密钥），所以不会随仓库同步。
+
+**使用提醒**：
+- 每台机器首次拉取后必须 `cp .env.example .env` 并填 `LLM_API_KEY`。
+- 无 key 时服务仍能启动、非 LLM 功能（仪表盘 / 异常 / 监控）可用；`/api/query/` 会因缺 key 优雅返回 500，这是预期行为。
+
+**教训**：密钥类配置靠 `.env.example` + 文档约定，不要指望自动同步；部署 / 演示前务必先检查 `.env` 是否存在。
+
+### 坑 4："多 Agent 协作"命名与实现一度不符（已纠正）
+
+**现象**：v0.1~v0.4 版本 README 与代码都称"多 Agent 协作"，但实际是固定顺序的流水线（Planner → SQLTool → AnalysisTool → ReportTool），Agent 之间并无自主决策或消息传递。
+
+**根因**：早期为了贴合"Agent 工作流"定位，把"单 Agent + 多工具"表述写成了"多 Agent 协作"，存在过度包装。
+
+**修复**：v0.5.0 真正落地了 Orchestrator + 3 个专业化 Agent（SQLAgent / AnalysisAgent / ReportAgent）+ 共享记忆（SharedMemory）的协作框架，并在文档中诚实区分演进前后。面试讲解时建议如实说明：早期为单 Agent 编排，v0.5.0 才升级为真正的多 Agent 协作。
+
+**教训**：技术叙事要与实际架构一致，面试官很容易追问"这几个 Agent 是怎么通信的"。
+
+### 坑 5：README 表格在终端 / 部分渲染器中错位
+
+**现象**：版本对比表用 Markdown 表格 + ✅/❌ emoji，在 CJK 字符 + emoji 混排下因宽度不一经常对不齐。
+
+**修复**：改用等宽代码块（`text`）+ 固定宽度符号 `✓` / `✗`，保证任何渲染器下对齐。见上方「版本对比」一节。
+
+**教训**：面向"会被原样拷贝 / 终端查看"的文档，优先用等宽 Unicode 表，慎用 emoji。
+
+### 坑 6：旧进程占用端口导致测到旧代码（运维提醒）
+
+**现象**：实测时端口 8001 被一个更早启动的旧 `uvicorn` 实例接管，curl 打到的其实是旧代码，一度让人误以为修复没生效。
+
+**修复**：用 `netstat -ano | findstr :8001` 找到残留 PID，`taskkill /PID <pid> /F` 强杀后，再用最新代码重启实例复验。
+
+**教训**：验证修复前先确认端口没有被旧进程占用；本地开发建议用 `--reload` 或固定前后台任务管理，避免多个实例并存。
+
 ## 贡献指南
 
 1. Fork 项目
