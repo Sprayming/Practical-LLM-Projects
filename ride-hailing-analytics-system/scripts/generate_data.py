@@ -140,9 +140,10 @@ def generate_drivers(conn, count: int):
         drivers.append(driver)
         
         cursor.execute("""
-            INSERT OR REPLACE INTO drivers (id, name, phone, register_date)
-            VALUES (?, ?, ?, ?)
-        """, (driver["id"], driver["name"], driver["phone"], driver["register_date"]))
+            INSERT OR REPLACE INTO drivers (id, name, phone, city, driver_level, register_date)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (driver["id"], driver["name"], driver["phone"], driver["city"],
+              driver["level"], driver["register_date"]))
     
     conn.commit()
     logger.info("司机数据生成完成")

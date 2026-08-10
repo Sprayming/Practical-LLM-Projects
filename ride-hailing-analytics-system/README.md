@@ -372,12 +372,17 @@ ride-hailing-analytics-system/
 ├── scripts/                     # 脚本工具
 │   ├── init_db.py               # 数据库初始化
 │   └── generate_data.py         # 数据模拟生成器
-├── tests/                       # 测试代码（44个测试）
+├── eval/                        # 评测体系
+│   └── nl2sql/                  # NL2SQL 评测集
+│       ├── evaluation_set.json  # 22条中文问题 + gold SQL + 期望断言
+│       └── run_eval.py          # 评测脚本（gold校验 / --with-llm 真实准确率）
+├── tests/                       # 测试代码（66个测试）
 │   ├── conftest.py              # pytest fixtures
 │   ├── test_api.py              # API测试
 │   ├── test_config.py           # 配置测试
 │   ├── test_models.py           # 模型测试
 │   ├── test_nlsql.py            # SQL生成测试
+│   ├── test_nl2sql_eval.py      # NL2SQL评测集集成测试（22条）
 │   └── test_security.py         # 安全测试
 ├── Dockerfile                   # Docker镜像配置
 ├── docker-compose.yml           # Docker Compose（5服务）
@@ -401,7 +406,7 @@ services:
 
 ## 测试
 
-项目包含 **44 个测试用例**，覆盖核心模块：
+项目包含 **66 个测试用例**，覆盖核心模块：
 
 | 测试文件 | 测试数 | 覆盖模块 |
 |----------|--------|----------|
@@ -410,6 +415,7 @@ services:
 | test_nlsql.py | 15 | SQL生成、Schema解析、SQL安全校验 |
 | test_api.py | 7 | API接口（mock测试） |
 | test_security.py | 9 | SQL注入攻击、输入验证 |
+| test_nl2sql_eval.py | 22 | NL2SQL评测集（真实DB端到端执行） |
 
 ```bash
 # 运行所有测试
@@ -424,6 +430,62 @@ pytest --cov=app --cov-report=html
 # 查看测试报告
 # 打开 htmlcov/index.html
 ```
+
+> 注意：`test_api.py` / `test_nlsql.py` 等使用 mock 数据库，**测试全绿不等于系统真的能跑**（详见「踩坑记录与复盘」坑 2）。
+> `test_nl2sql_eval.py` 是唯一走**真实 SQLite 库**端到端执行的测试，专门用来兜住 schema 契约漂移。
+
+## NL2SQL 评测集
+
+Text-to-SQL 系统最容易被追问的一句话是：**"你的准确率是多少？"**
+本项目用一套可复现的评测集把这个问题量化，而不是靠"感觉还行"。
+
+### 评测集设计
+
+`eval/nl2sql/evaluation_set.json` 共 **22 条**中文业务问题，每条包含：
+
+- `question`：运营口吻的自然语言问题（如"上周哪个城市的完成订单最多？"）
+- `gold_sql`：人工编写的标准答案 SQL，严格对齐 `data/schema_sqlite.sql` 真实列名
+- `expect`：结果形态断言（期望列名、行数区间、是否非空等），用于自动判分
+
+题型分布（刻意覆盖 NL2SQL 的典型难度阶梯）：
+
+| 类别 | 条数 | 说明 |
+|------|------|------|
+| single_table_aggregation | 4 | 单表聚合：COUNT / SUM / AVG |
+| filtering | 4 | 条件过滤：状态、金额、枚举值 |
+| join | 4 | 多表 JOIN：订单×司机、卡券×券种×核销 |
+| time_filter | 2 | 时间过滤：近 7 天、按日期分组 |
+| topn | 2 | TopN 排序：GROUP BY + ORDER BY + LIMIT |
+| redemption_rate | 2 | 业务指标计算：核销率（除法 + NULL 处理） |
+| subquery | 2 | 子查询 / CTE：高于整体均值的券种 |
+| dimension | 2 | 运营维度下钻：城市、司机等级 |
+
+### 评测方法
+
+采用 **执行准确率（Execution Accuracy）**，而非字符串比对 SQL——同一个问题可以有多种等价写法，只比对执行结果才公平。
+
+评测脚本会先用固定随机种子生成一份**独立、可复现的评测库** `data/eval_nl2sql.db`（不污染业务库），再逐条执行、判分。
+
+```bash
+# 1) 只校验 gold SQL 本身（不需要 LLM Key，CI 可跑）
+python eval/nl2sql/run_eval.py --seed 42 --drivers 60 --orders 800 --coupons 400
+
+# 2) 跑真实 NL2SQL 管线准确率（需在 .env 配置 LLM_API_KEY）
+python eval/nl2sql/run_eval.py --with-llm
+
+# 3) 作为 pytest 的一部分运行
+pytest tests/test_nl2sql_eval.py -q
+```
+
+### 当前结果
+
+| 指标 | 结果 |
+|------|------|
+| Gold SQL 可执行率 | **22/22 = 100%** |
+| Gold SQL 结果形态校验 | **22/22 = 100%** |
+| 模型 NL2SQL 执行准确率 | 需配置 `LLM_API_KEY` 后运行 `--with-llm` 得出 |
+
+评测集立刻就抓出了一个真实缺陷：**Q19（核销率高于整体的券种）** 的 CTE 里漏乘 `*100`，导致内外层百分比单位不一致、`HAVING` 条件恒成立，把低于整体的券种也误返回了。修正后 Q19 只返回「满减券 7.41%」（整体 5.5%），符合预期。这正是评测集存在的意义——**没有评测集，这类语义错误只会在生产里被业务方发现。**
 
 ## 配置说明
 
@@ -545,6 +607,32 @@ v0.1.0 ──────▶ v0.2.0 ──────▶ v0.3.0 ─────
 - **业务功能**：数据模拟、运营报告、异常检测 — 贴近实际运营场景
 
 ## 更新日志
+
+### v0.6.0 (2026-08-04) — NL2SQL 评测体系
+
+补上项目此前最大的短板：**Text-to-SQL 没有量化指标**。
+
+#### 📏 评测集
+- 新增 `eval/nl2sql/evaluation_set.json` — 22 条中文业务问题 + gold SQL + 结果形态断言
+  - 覆盖 8 类题型：单表聚合(4)、条件过滤(4)、多表JOIN(4)、时间过滤(2)、TopN(2)、核销率计算(2)、子查询/CTE(2)、运营维度下钻(2)
+  - gold SQL 严格对齐 `data/schema_sqlite.sql` 真实列名（`order_time`/`order_amount`/`face_value`/`issued_at`）
+
+#### 🔬 评测脚本
+- 新增 `eval/nl2sql/run_eval.py`：
+  - 固定种子生成**独立可复现评测库** `data/eval_nl2sql.db`，不污染业务库
+  - 采用**执行准确率（Execution Accuracy）**，避免 SQL 字符串比对的等价写法误判
+  - 无 LLM Key 时校验 gold SQL 正确性（CI 可跑）；`--with-llm` 时评测真实 NL2SQL 管线准确率
+  - 用 DROP+CREATE 重建表而非删库文件，兼容只读/受限文件系统
+
+#### ✅ 纳入测试套件
+- 新增 `tests/test_nl2sql_eval.py`（22 条），测试总数 **44 → 66**
+- 这是唯一走**真实 SQLite 库**端到端执行的测试，专门兜住 schema 契约漂移（对应「踩坑记录」坑 1、坑 2）
+
+#### 🐛 评测集抓出的真实缺陷
+- Q19（核销率高于整体的券种）CTE 内漏乘 `*100`，内外层百分比单位不一致导致 `HAVING` 恒成立，误返回低于整体的券种。修正后仅返回「满减券 7.41%」（整体 5.5%）
+
+#### 🔧 附带增强
+- `scripts/generate_data.py` 补充写入 `city` / `driver_level` 字段，使评测集能覆盖城市、司机等级等真实运营维度
 
 ### v0.5.0 (2026-08-05) — 多Agent协作架构
 
