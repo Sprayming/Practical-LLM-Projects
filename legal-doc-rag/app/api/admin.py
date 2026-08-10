@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from typing import Optional
 import app.core.config as cfg
 from app.api.auth import get_user_from_token
-from app.tenant.auth import has_users, list_users, delete_user
+from app.tenant.auth import has_users, list_users as list_users_db, delete_user, set_user_role as set_user_role_db
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -38,12 +38,45 @@ def _require_admin(authorization: str = Header(...)) -> dict:
 @router.get("/users")
 def list_users(admin: dict = Depends(_require_admin)):
     """List all users (admin only)."""
-    users = list_users()
+    users = list_users_db()
     return {"users": users, "total": len(users)}
 
 
 class DeleteUserRequest(BaseModel):
     username: str
+
+
+class SetRoleRequest(BaseModel):
+    role: str  # "super_admin" | "user"
+
+
+@router.put("/users/{username}/role")
+def update_user_role(
+    username: str, req: SetRoleRequest, admin: dict = Depends(_require_admin)
+):
+    """手动设置用户角色：提权为超级管理员 / 降级为普通用户。
+
+    - 不允许修改自己的角色（避免误操作锁死权限）。
+    - 提权为超级管理员时受 cfg.MAX_SUPER_ADMINS 名额上限限制。
+    """
+    if username == admin.get("username"):
+        raise HTTPException(400, "不能修改自己的角色")
+    if req.role not in ("super_admin", "user"):
+        raise HTTPException(400, "无效的角色")
+
+    # 名额校验：提权为超级管理员时检查上限
+    if req.role == "super_admin":
+        users = list_users_db()
+        current = sum(1 for u in users if u.get("role") == "super_admin")
+        if current >= cfg.MAX_SUPER_ADMINS:
+            raise HTTPException(
+                403, f"超级管理员名额已满（最多 {cfg.MAX_SUPER_ADMINS} 个）"
+            )
+
+    ok, msg = set_user_role_db(username, req.role)
+    if not ok:
+        raise HTTPException(404 if "不存在" in msg else 400, msg)
+    return {"success": True, "message": msg}
 
 
 @router.delete("/users/{username}")
@@ -74,9 +107,9 @@ def get_stats(admin: dict = Depends(_require_admin)):
     trace_store = get_trace_store()
 
     # User stats
-    users = list_users()
+    users = list_users_db()
     user_count = len(users)
-    admin_count = sum(1 for u in users.values() if u.get("role") == "super_admin")
+    admin_count = sum(1 for u in users if u.get("role") == "super_admin")
 
     # Document stats
     import os
@@ -131,4 +164,5 @@ def get_config(admin: dict = Depends(_require_admin)):
         "chroma_persist_dir": cfg.CHROMA_PERSIST_DIR,
         "upload_dir": cfg.UPLOAD_DIR,
         "redis_url": cfg.REDIS_URL,
+        "max_super_admins": cfg.MAX_SUPER_ADMINS,
     }

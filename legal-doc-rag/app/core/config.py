@@ -31,5 +31,8 @@ JWT_SECRET = os.getenv("JWT_SECRET", "legal-rag-secret-key-change-in-production"
 # 管理员重置密钥（忘记密码自救用，必须配置且保密，切勿提交到仓库）
 ADMIN_RESET_KEY = os.getenv("ADMIN_RESET_KEY", "")
 
+# 超级管理员名额上限（管理后台手动设置角色时校验，默认 3，可用环境变量覆盖）
+MAX_SUPER_ADMINS = int(os.getenv("MAX_SUPER_ADMINS", "3"))
+
 # Paths
 TENANT_DB = str(BASE_DIR / "tenant_data" / "users.db")

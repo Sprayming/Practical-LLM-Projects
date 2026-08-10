@@ -206,6 +206,28 @@ def delete_user(username: str) -> bool:
         conn.close()
 
 
+def set_user_role(username: str, role: str) -> Tuple[bool, str]:
+    """修改用户角色（super_admin / user）。管理后台提权/降级用。"""
+    if role not in ("super_admin", "user"):
+        return False, "无效的角色"
+    _init_db()
+    conn = sqlite3.connect(_db_path())
+    try:
+        cur = conn.execute("SELECT id FROM users WHERE username=?", (username,))
+        if not cur.fetchone():
+            return False, "用户不存在"
+        conn.execute(
+            "UPDATE users SET role=? WHERE username=?", (role, username)
+        )
+        conn.commit()
+        return True, f"已将 {username} 的角色设为 {role}"
+    except Exception as e:
+        conn.rollback()
+        return False, str(e)
+    finally:
+        conn.close()
+
+
 def change_password(username: str, old_password: str, new_password: str) -> Tuple[bool, str]:
     """修改密码。需先校验原密码，返回 (成功, 消息)。"""
     _init_db()
