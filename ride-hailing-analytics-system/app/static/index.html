@@ -472,6 +472,151 @@
                 grid-template-columns: 1fr;
             }
         }
+        /* ============ 设计升级：顶部问答搜索框 + 单页流布局 ============ */
+        :root {
+            --primary: #4f46e5;
+            --primary-2: #7c3aed;
+            --bg: #f6f8fc;
+            --card: #ffffff;
+            --text: #0f172a;
+            --muted: #64748b;
+            --border: #eef1f6;
+            --radius: 16px;
+            --shadow-sm: 0 1px 2px rgba(15,23,42,.04), 0 1px 3px rgba(15,23,42,.06);
+            --shadow-md: 0 4px 12px rgba(15,23,42,.06), 0 12px 32px rgba(15,23,42,.08);
+        }
+        body { background: var(--bg); color: var(--text); }
+        .container { max-width: 1200px; }
+
+        /* 隐藏 Tab 切换栏，改为单页纵向流 */
+        .nav-tabs { display: none !important; }
+        .tab-content { display: block !important; margin-bottom: 24px; }
+        #tab-query { display: none !important; }
+
+        /* 顶部问答 hero */
+        .qa-hero {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 34px 32px 30px;
+            margin-bottom: 24px;
+            box-shadow: var(--shadow-md);
+            text-align: center;
+        }
+        .qa-hero-title {
+            font-size: 21px;
+            font-weight: 700;
+            margin-bottom: 6px;
+            color: var(--text);
+            letter-spacing: .3px;
+        }
+        .qa-hero-sub {
+            color: var(--muted);
+            font-size: 14px;
+            margin-bottom: 22px;
+        }
+        .qa-search {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #f4f6fb;
+            border: 2px solid #e6e9f2;
+            border-radius: 999px;
+            padding: 6px 6px 6px 18px;
+            max-width: 760px;
+            margin: 0 auto;
+            transition: border-color .2s, box-shadow .2s, background .2s;
+        }
+        .qa-search:focus-within {
+            border-color: var(--primary);
+            background: #fff;
+            box-shadow: 0 0 0 4px rgba(79,70,229,.14);
+        }
+        .qa-search-icon { font-size: 18px; opacity: .55; }
+        .qa-search input {
+            flex: 1;
+            border: none;
+            background: transparent;
+            font-size: 16px;
+            padding: 13px 4px;
+            outline: none;
+            color: var(--text);
+        }
+        .qa-search input::placeholder { color: #9aa3b2; }
+        .qa-search button {
+            padding: 12px 30px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-2) 100%);
+            color: #fff;
+            border: none;
+            border-radius: 999px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform .15s, box-shadow .2s, opacity .2s;
+            box-shadow: 0 6px 16px rgba(79,70,229,.28);
+        }
+        .qa-search button:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(79,70,229,.34); }
+        .qa-search button:disabled { opacity: .6; cursor: not-allowed; transform: none; box-shadow: none; }
+        .qa-suggestions { margin-top: 16px; font-size: 13px; color: var(--muted); }
+        .qa-suggestions-label { margin-right: 4px; }
+        .qa-chip {
+            border: 1px solid #e6e9f2;
+            background: #fff;
+            color: #475569;
+            border-radius: 999px;
+            padding: 7px 15px;
+            margin: 6px 5px 0 0;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all .18s;
+        }
+        .qa-chip:hover { border-color: var(--primary); color: var(--primary); background: #f5f3ff; }
+        #hero-query-result { margin-top: 24px; text-align: left; }
+
+        /* KPI 卡片 */
+        .dashboard { gap: 18px; }
+        .card {
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-sm);
+            padding: 22px 24px;
+        }
+        .card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); }
+        .card h3 { color: var(--muted); font-size: 14px; font-weight: 600; }
+        .card .value { font-size: 30px; color: var(--text); }
+        .card .trend { font-size: 12px; }
+
+        /* section / 图表容器 */
+        .section { border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); padding: 26px; }
+        .section h2 { font-size: 17px; font-weight: 700; }
+        .chart-container { border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm); padding: 22px; }
+        .chart-container h3 { color: var(--text); font-weight: 600; font-size: 15px; }
+
+        /* 问答结果卡片 */
+        .result-card {
+            background: #fff;
+            border: 1px solid var(--border);
+            border-left: 4px solid var(--primary);
+            border-radius: 12px;
+            padding: 18px 20px;
+            margin-bottom: 16px;
+            box-shadow: var(--shadow-sm);
+        }
+        .result-card h4 { color: var(--primary); font-size: 14px; }
+        .result-card p { color: #334155; }
+        .sql-box { background: #0f172a; border-radius: 10px; font-size: 13px; }
+
+        /* header 微调 */
+        header { padding: 26px 0; margin-bottom: 22px; border-radius: 16px; }
+        header h1 { font-size: 2em; }
+
+        footer { color: var(--muted); }
+
+        @media (max-width: 768px) {
+            .qa-search { flex-direction: column; border-radius: 16px; padding: 12px; }
+            .qa-search input { width: 100%; text-align: center; }
+            .qa-search button { width: 100%; }
+        }
     </style>
 </head>
 <body>
@@ -480,6 +625,25 @@
             <h1>🚗 网约车数据分析系统</h1>
             <p>基于自然语言查询的智能数据分析平台</p>
         </header>
+
+        <!-- 全局问答搜索框（页面最顶部，类网页搜索框样式） -->
+        <div class="qa-hero">
+            <div class="qa-hero-title">问问你的运营数据</div>
+            <div class="qa-hero-sub">用自然语言提问，AI 自动生成 SQL 并分析 — 就像和一个数据分析师对话</div>
+            <div class="qa-search">
+                <span class="qa-search-icon">🔍</span>
+                <input type="text" id="hero-question" placeholder="问我任何运营问题，例如：各券种核销率分别是多少？" onkeypress="if(event.key==='Enter')submitHeroQuery()" />
+                <button id="hero-query-btn" onclick="submitHeroQuery()">提问</button>
+            </div>
+            <div class="qa-suggestions">
+                <span class="qa-suggestions-label">试试：</span>
+                <button class="qa-chip" onclick="fillHeroQuestion('上周订单总数是多少')">上周订单总数</button>
+                <button class="qa-chip" onclick="fillHeroQuestion('各券种核销率分别是多少')">各券种核销率</button>
+                <button class="qa-chip" onclick="fillHeroQuestion('哪个价位的卡券核销率最高')">核销率最高的价位</button>
+                <button class="qa-chip" onclick="fillHeroQuestion('Top10 司机订单数')">Top10 司机</button>
+            </div>
+            <div id="hero-query-result" style="display:none;"></div>
+        </div>
 
         <nav class="nav-tabs">
             <button class="nav-tab active" onclick="switchTab('dashboard')">📊 仪表盘</button>
@@ -629,15 +793,21 @@
 
         // 初始化页面
         document.addEventListener('DOMContentLoaded', function() {
-            loadDashboard();
+            // 单页流：先加载数据，再渲染所有图表（不再依赖 Tab 切换）
+            loadDashboard().then(() => {
+                renderTodayCharts();
+                renderAllCharts();
+            });
 
-            // 回车查询
-            document.getElementById('question-input').addEventListener('keypress', function(e) {
+            // 回车查询（原智能查询区输入框，已隐藏但仍保留能力）
+            const qi = document.getElementById('question-input');
+            if (qi) qi.addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') submitQuery();
             });
-            
+
             // 搜索历史
-            document.getElementById('history-search').addEventListener('input', debounce(loadHistory, 300));
+            const hs = document.getElementById('history-search');
+            if (hs) hs.addEventListener('input', debounce(loadHistory, 300));
         });
 
         // 防抖函数
@@ -857,8 +1027,8 @@
         }
 
         // 显示查询结果
-        function displayResult(data) {
-            const resultDiv = document.getElementById('query-result');
+        function displayResult(data, containerId = 'query-result') {
+            const resultDiv = document.getElementById(containerId);
             
             let html = `
                 <div class="result-card">
@@ -911,6 +1081,48 @@
             }
             
             resultDiv.innerHTML = html;
+        }
+
+        // 顶部全局搜索框提交（页面最顶部的问答入口）
+        async function submitHeroQuery() {
+            const questionInput = document.getElementById('hero-question');
+            const queryBtn = document.getElementById('hero-query-btn');
+            const resultDiv = document.getElementById('hero-query-result');
+
+            const question = questionInput.value.trim();
+            if (!question) {
+                alert('请输入查询问题');
+                return;
+            }
+
+            queryBtn.disabled = true;
+            queryBtn.textContent = '分析中...';
+            resultDiv.style.display = 'block';
+            resultDiv.innerHTML = '<div class="loading">正在分析数据，请稍候...</div>';
+
+            try {
+                const response = await fetch('/api/query/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question: question })
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.detail || '查询失败');
+                }
+                displayResult(data, 'hero-query-result');
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">查询失败: ${error.message}</div>`;
+            } finally {
+                queryBtn.disabled = false;
+                queryBtn.textContent = '提问';
+            }
+        }
+
+        // 点击示例问题，自动填入并提交
+        function fillHeroQuestion(q) {
+            document.getElementById('hero-question').value = q;
+            submitHeroQuery();
         }
 
         // 加载查询历史

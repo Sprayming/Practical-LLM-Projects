@@ -112,10 +112,10 @@ if os.path.exists(static_dir):
 
 @app.get("/", tags=["Root"])
 async def root():
-    """根端点 - 问答聊天首页"""
+    """合并首页：顶部问答搜索框 + 仪表盘（单页）"""
     from fastapi.responses import FileResponse
 
-    static_file = os.path.join(os.path.dirname(__file__), "static", "chat.html")
+    static_file = os.path.join(os.path.dirname(__file__), "static", "index.html")
     if os.path.exists(static_file):
         return FileResponse(
             static_file,
@@ -127,6 +127,20 @@ async def root():
         "version": "0.1.0",
         "docs": "/docs",
     }
+
+
+@app.get("/chat", tags=["Root"])
+async def chat_page():
+    """纯对话式问答页（对标 RAG 体验）"""
+    from fastapi.responses import FileResponse
+
+    static_file = os.path.join(os.path.dirname(__file__), "static", "chat.html")
+    if os.path.exists(static_file):
+        return FileResponse(
+            static_file,
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
+    return {"message": "chat.html not found"}
 
 
 @app.get("/dashboard", tags=["Root"])
