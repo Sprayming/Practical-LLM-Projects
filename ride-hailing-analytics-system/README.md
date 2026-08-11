@@ -357,7 +357,8 @@ ride-hailing-analytics-system/
 │   ├── db/                      # 数据库连接
 │   │   └── connection.py        # SQLite连接管理
 │   ├── static/                  # 静态文件
-│   │   └── index.html           # 前端界面（四Tab布局）
+│   │   ├── index.html           # 前端界面（四Tab布局）
+│   │   └── apidocs.html         # 离线自包含 API 文档页（/apiview，不依赖外网CDN）
 │   ├── config.py                # 应用配置
 │   ├── models.py                # Pydantic数据模型
 │   └── main.py                  # 应用入口
@@ -374,13 +375,18 @@ ride-hailing-analytics-system/
 ├── scripts/                     # 脚本工具
 │   ├── init_db.py               # 数据库初始化
 │   └── generate_data.py         # 数据模拟生成器
-├── tests/                       # 测试代码（44个测试）
+├── eval/                        # 评测集
+│   └── nl2sql/                  # NL2SQL 评测集（22条 gold SQL）
+│       ├── evaluation_set.json  # 中文问题 + gold SQL + 结果断言
+│       └── run_eval.py          # 执行准确率评测脚本
+├── tests/                       # 测试代码（66个测试）
 │   ├── conftest.py              # pytest fixtures
 │   ├── test_api.py              # API测试
 │   ├── test_config.py           # 配置测试
 │   ├── test_models.py           # 模型测试
 │   ├── test_nlsql.py            # SQL生成测试
-│   └── test_security.py         # 安全测试
+│   ├── test_security.py         # 安全测试
+│   └── test_nl2sql_eval.py      # 评测集真实DB端到端测试（22条）
 ├── Dockerfile                   # Docker镜像配置
 ├── docker-compose.yml           # Docker Compose（5服务）
 ├── nginx.conf                   # Nginx反向代理配置
@@ -403,7 +409,7 @@ services:
 
 ## 测试
 
-项目包含 **44 个测试用例**，覆盖核心模块：
+项目包含 **66 个测试用例**（44 原有 + 22 评测），覆盖核心模块：
 
 | 测试文件 | 测试数 | 覆盖模块 |
 |----------|--------|----------|
@@ -412,6 +418,7 @@ services:
 | test_nlsql.py | 15 | SQL生成、Schema解析、SQL安全校验 |
 | test_api.py | 7 | API接口（mock测试） |
 | test_security.py | 9 | SQL注入攻击、输入验证 |
+| test_nl2sql_eval.py | 22 | NL2SQL 评测集**真实 DB 端到端执行**（项目内唯一走真实 SQLite 的集成测试） |
 
 ```bash
 # 运行所有测试
@@ -536,7 +543,56 @@ v0.1.0 (原型) ──▶ v0.2.0 (准生产) ──▶ v0.3.0 (生产级) ──
 - **P2（优化）**：监控、历史、可视化、性能 — 提升系统质量和效率
 - **业务功能**：数据模拟、运营报告、异常检测 — 贴近实际运营场景
 
+## NL2SQL 评测集
+
+> 用于**量化** NL2SQL 能力——这是项目里唯一走真实 SQLite 端到端执行的测试，也是面试时能拿出实打实数字的依据。
+
+### 为什么需要
+
+- 之前没有任何评测集，NL2SQL 准确率、复杂 join 能力全靠嘴说，被追问无法量化。
+- 采用**执行准确率（Execution Accuracy）**：比较生成 SQL 与 gold SQL 在数据库上的**执行结果集合**是否相等，而非 SQL 字符串匹配（对空格/别名/等价写法更鲁棒）。
+
+### 文件
+
+- `eval/nl2sql/evaluation_set.json`：22 条中文运营问题 + gold SQL + 结果形态断言。
+  - 8 类题型覆盖难度阶梯：单表聚合 4 / 条件过滤 4 / 多表 JOIN 4 / 时间过滤 2 / TopN 2 / 核销率计算 2 / 子查询或 CTE 2 / 维度下钻（城市、司机等级）2。
+  - gold SQL 严格对齐真实列名（`order_time` / `order_amount` / `face_value` / `issued_at` 等）。
+- `eval/nl2sql/run_eval.py`：用可复现 `--seed` 生成**独立评测库**（不污染业务库 `data/ride_hailing.db`，产物 `data/eval_nl2sql.db` 已被 `.gitignore` 的 `data/*.db` 忽略）；采用 DROP+CREATE 重建保证可复现；无 key 时仅校验 gold SQL 正确性（CI 可跑），`--with-llm` 时跑真实 NL2SQL 准确率。
+- `tests/test_nl2sql_eval.py`：纳入 pytest，保证评测集 gold SQL 本身正确、形态符合预期。
+
+### 用法
+
+```bash
+# 校验评测集 gold SQL（无需 LLM key）
+python eval/nl2sql/run_eval.py --seed 42 --drivers 60 --orders 800 --coupons 400
+
+# 跑真实 NL2SQL 准确率（需要在 .env 中配置 LLM_API_KEY）
+python eval/nl2sql/run_eval.py --with-llm --seed 42 --drivers 60 --orders 800 --coupons 400
+
+# 纳入 pytest
+pytest tests/test_nl2sql_eval.py
+```
+
+### 结果与价值
+
+- 22 条 gold SQL 全部可执行且形态正确（100%）。
+- 评测集曾**当场抓出一个真实 bug**：Q19（核销率高于整体的券种）的 CTE 里算整体核销率漏乘 `*100`，内外层百分比单位不一致，导致 `HAVING` 把低于整体的券种也错误返回；修正后才只返回真正高于整体的券种。这正是"有评测才能发现"的体现。
+- 当前测试数 **44 → 66**（44 原有 + 22 评测），全部通过。
+- 真实 NL2SQL 端到端准确率：需配置 `LLM_API_KEY` 后 `--with-llm` 实测（面试前建议先跑一次拿到数字）。
+
 ## 更新日志
+
+### v0.6.1 (2026-08-11) — 离线 API 文档与可用性修复
+
+- 新增 **`/apiview` 离线自包含 API 文档页**（`app/static/apidocs.html`）：内嵌 CSS/JS，仅 fetch 同源 `/openapi.json` 渲染，支持按方法着色、参数表、搜索、"试一试"发请求。**不依赖任何外网 CDN**，解决 WorkBuddy 预览面板 / 内网 / 离线环境下标准 `/docs`（Swagger UI）空白的问题。
+- 修复被另一台电脑自动同步**回退**的 schema 漂移：`scripts/generate_data.py`、`app/api/dashboard.py`、`app/anomaly/detector.py`、`app/report/generator.py` 列名对齐（`order_time` / `order_amount` / `face_value` / `issued_at` 等），pytest 66 全过。
+
+### v0.6.0 (2026-08-10) — NL2SQL 评测集
+
+- 新增 `eval/nl2sql/`：22 条中文运营问题 + gold SQL 评测集 + 执行准确率评测脚本 `run_eval.py`。
+- 新增 `tests/test_nl2sql_eval.py`：项目内唯一走真实 SQLite 端到端执行的集成测试。
+- 测试数 **44 → 66**，全部通过。
+- 详见上方「NL2SQL 评测集」章节。
 
 ### v0.5.0 (2026-08-05) — 多Agent协作架构
 
@@ -732,6 +788,60 @@ v0.1.0 (原型) ──▶ v0.2.0 (准生产) ──▶ v0.3.0 (生产级) ──
 - ✅ 数据分析与运营建议
 - ✅ Agent 编排（Planner → SQLTool → AnalysisTool → ReportTool）
 - ✅ 仪表盘 API
+
+## 踩坑记录与复盘（真实记录）
+
+> 以下均为项目演进中**真实踩过**的坑，如实记录，供面试复盘与后人避坑。每条都给出「现象 / 根因 / 故障点 / 修复 / 教训」。
+
+### 1. Schema 列名漂移（最严重）
+
+- **现象**：数据模拟、异常检测、运营报告、仪表盘全部失效。`generate_data.py` 报 `coupon_types has no column named value`；`/api/anomaly/health` 报 `no such column: order_date`；`/api/report/*` 报 `no such column: amount` / `ct.value`。
+- **根因**：`data/schema_sqlite.sql` 把列名从 `order_date→order_time`、`amount→order_amount`、`value→face_value`、`issue_date→issued_at`、`validity_days→valid_days` 改了，但消费方代码没同步；且一次修复提交本身还漏改了几处 `amount` / `ct.value`。
+- **故障点**：`scripts/generate_data.py`、`app/anomaly/detector.py`、`app/report/generator.py`、`app/api/dashboard.py`。
+- **修复**：统一对齐真实列名；`generator.py` 补改 4 处 `SUM(amount)→SUM(order_amount)`、3 处 `ct.value→ct.face_value`。
+- **教训**：Schema 是契约，改名必须全量 grep 校验所有引用；单测 mock 发现不了（见下条）。
+
+### 2. 44 个测试全绿 ≠ 系统可用
+
+- **现象**：CI 全绿，实际启动后接口全是空壳 / 报错。
+- **根因**：44 个测试全部 mock 数据库，没走真实 SQLite，掩盖了 schema 契约不一致。
+- **修复**：新增 `tests/test_nl2sql_eval.py` 用真实库端到端执行（测试数 44→66），大改后必做手动冒烟。
+- **教训**：核心链路必须有至少一条真实 DB 的集成测试 + 手动冒烟。
+
+### 3. .env 不进版本库
+
+- **现象**：跨机器 `git pull` 后 LLM / NL2SQL 功能 500。
+- **根因**：`.env` 被 `.gitignore` 忽略，不随仓库同步（这是正确的安全做法）。
+- **规避**：每台机器 `cp .env.example .env` 填 `LLM_API_KEY`；接口无 key 时优雅降级（明确错误提示）。
+- **教训**：密钥不入库正确，但要在 README 写清初始化步骤，避免"拉下来跑不起来"。
+
+### 4. "多Agent协作"早期名实不符
+
+- **现象**：v0.1~v0.4 自称多Agent，实为固定顺序流水线（Orchestrator 串行调工具）。
+- **根因**：架构演进分期，命名超前于实现。
+- **修复**：v0.5.0 真落地 Orchestrator + 3 专业化 Agent（SQL / Analysis / Report）+ SharedMemory 共享黑板。
+- **教训**：面试如实说明演进，不夸大；能讲清"为什么需要协作、各 Agent 职责边界"比名头重要。
+
+### 5. README 表格 CJK + emoji 宽度错位
+
+- **现象**：Markdown 表格里 ✅/❌ 与中文混排，列对不齐。
+- **根因**：emoji 与 CJK 字符显示宽度不一致。
+- **修复**：改用等宽代码块表 + 固定宽度符号 `✓` / `✗`。
+- **教训**：对不齐就用等宽字体 + 定宽符号。
+
+### 6. 旧进程占端口误测旧代码
+
+- **现象**：改了代码但接口行为没变，以为没生效。
+- **根因**：上一次 `uvicorn` 进程没杀，占着 8001，新进程起不来或打到了旧实例。
+- **修复**：`netstat -ano | findstr :8001` 找 PID，`taskkill /PID <pid> /F` 强杀后再复验。
+- **教训**：冒烟前先确认端口无残留监听进程。
+
+### 7. Swagger UI 默认走外网 CDN，离线/沙箱环境 /docs 空白
+
+- **现象**：`/docs` 返回 HTTP 200 但页面全白（`<div id="swagger-ui">` 为空）。
+- **根因**：FastAPI 默认 `/docs` 从 `cdn.jsdelivr.net` 加载 `swagger-ui-bundle.js` / `swagger-ui.css`；在 WorkBuddy 预览面板（沙箱）、内网、离线环境访问不了外网 CDN，JS 拉不到 → 页面空白。（本机浏览器有外网时正常。）
+- **修复**：新增**完全自包含、零外网依赖**的离线文档页 `app/static/apidocs.html`（内嵌 CSS/JS，仅 fetch 同源 `/openapi.json` 渲染），路由 `/apiview` 直接返回；支持按方法着色、参数表、搜索、"试一试"发请求。
+- **教训**：面向演示 / 内网交付的 API 文档，优先用自托管 UI 资源，别依赖公共 CDN——也顺带避免 CDN 故障或网络隔离导致的不可用。
 
 ## 贡献指南
 
