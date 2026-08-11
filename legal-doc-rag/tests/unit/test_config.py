@@ -1,5 +1,5 @@
 """
-Unit tests for app.core.config module.
+app.core.config 模块的单元测试
 """
 import os
 import pytest
@@ -8,67 +8,125 @@ from unittest.mock import patch
 
 
 class TestConfig:
-    """Tests for configuration module."""
+    """配置模块的测试类"""
 
     def test_base_dir_is_path(self):
-        """Test that BASE_DIR is a Path object."""
+        """
+        测试 BASE_DIR 是 Path 对象
+        
+        验证：
+        1. BASE_DIR 类型正确
+        """
         from app.core.config import BASE_DIR
         assert isinstance(BASE_DIR, Path)
 
     def test_base_dir_exists(self):
-        """Test that BASE_DIR directory exists."""
+        """
+        测试 BASE_DIR 目录存在
+        
+        验证：
+        1. BASE_DIR 指向的目录确实存在
+        """
         from app.core.config import BASE_DIR
         assert BASE_DIR.exists()
 
     def test_llm_config_defaults(self):
-        """Test LLM configuration defaults."""
+        """
+        测试 LLM 配置默认值
+        
+        验证：
+        1. LLM_BASE_URL 有默认值
+        2. LLM_MODEL 有默认值
+        """
         from app.core.config import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
-        # These should have default values or be read from env
+        # 这些应该有默认值或从环境变量读取
         assert isinstance(LLM_BASE_URL, str)
         assert isinstance(LLM_MODEL, str)
 
     def test_embedding_config_defaults(self):
-        """Test embedding configuration defaults."""
+        """
+        测试嵌入模型配置默认值
+        
+        验证：
+        1. EMBEDDER_TYPE 有默认值
+        2. EMBEDDING_BASE_URL 有默认值
+        3. EMBEDDING_MODEL 有默认值
+        """
         from app.core.config import EMBEDDER_TYPE, EMBEDDING_BASE_URL, EMBEDDING_MODEL
         assert isinstance(EMBEDDER_TYPE, str)
         assert isinstance(EMBEDDING_BASE_URL, str)
         assert isinstance(EMBEDDING_MODEL, str)
 
     def test_storage_config_defaults(self):
-        """Test storage configuration defaults."""
+        """
+        测试存储配置默认值
+        
+        验证：
+        1. CHROMA_PERSIST_DIR 有默认值
+        2. UPLOAD_DIR 有默认值
+        """
         from app.core.config import CHROMA_PERSIST_DIR, UPLOAD_DIR
         assert isinstance(CHROMA_PERSIST_DIR, str)
         assert isinstance(UPLOAD_DIR, str)
 
     def test_redis_config_default(self):
-        """Test Redis configuration default."""
+        """
+        测试 Redis 配置默认值
+        
+        验证：
+        1. REDIS_URL 有默认值
+        2. 默认值包含 redis:// 协议
+        """
         from app.core.config import REDIS_URL
         assert isinstance(REDIS_URL, str)
         assert "redis://" in REDIS_URL
 
     def test_jwt_secret_default(self):
-        """Test JWT secret configuration."""
+        """
+        测试 JWT 密钥配置
+        
+        验证：
+        1. JWT_SECRET 是字符串
+        2. JWT_SECRET 不为空
+        """
         from app.core.config import JWT_SECRET
         assert isinstance(JWT_SECRET, str)
         assert len(JWT_SECRET) > 0
 
     def test_tenant_db_path(self):
-        """Test tenant database path."""
+        """
+        测试租户数据库路径
+        
+        验证：
+        1. TENANT_DB 是字符串
+        2. 路径以 users.db 结尾
+        """
         from app.core.config import TENANT_DB
         assert isinstance(TENANT_DB, str)
         assert TENANT_DB.endswith("users.db")
 
     def test_env_override(self):
-        """Test that environment variables override defaults."""
+        """
+        测试环境变量覆盖默认值
+        
+        验证：
+        1. 环境变量可以覆盖配置值
+        2. 重新导入模块后能获取到新值
+        """
         with patch.dict(os.environ, {"LLM_API_KEY": "test-key"}):
-            # Reimport to get fresh values
+            # 重新导入以获取新值
             import importlib
             import app.core.config
             importlib.reload(app.core.config)
             assert app.core.config.LLM_API_KEY == "test-key"
 
     def test_base_dir_parent(self):
-        """Test that BASE_DIR is correctly calculated."""
+        """
+        测试 BASE_DIR 的正确计算
+        
+        验证：
+        1. BASE_DIR 指向正确的项目根目录
+        """
         from app.core.config import BASE_DIR
-        # BASE_DIR should be project root (legal-doc-rag/)
-        assert BASE_DIR.name == "legal-doc-rag" or BASE_DIR.name == "app"  # Depending on structure
+        # BASE_DIR 应该指向项目根目录（legal-doc-rag/）
+        assert BASE_DIR.name == "legal-doc-rag" or BASE_DIR.name == "app"  # 根据项目结构可能不同

@@ -1,5 +1,5 @@
 """
-Pytest configuration and fixtures for Legal-DOC-RAG tests.
+Legal-DOC-RAG 测试的 pytest 配置和固定装置 (fixtures)
 """
 import sys
 import importlib
@@ -23,33 +23,55 @@ _HEAVY_OPTIONAL = (
 
 
 class _LazyStubLoader(importlib.abc.Loader):
-    """为桩包返回一个 MagicMock 模块；子模块按需递归创建。"""
+    """
+    为桩包返回一个 MagicMock 模块；子模块按需递归创建。
+    
+    这个加载器的作用是：
+    1. 当导入未安装的包时，返回一个 MagicMock
+    2. 支持 多级导入（from X.sub import Y）
+    3. 保持模块的包特性
+    """
 
     def create_module(self, spec):
+        """创建模块"""
         mod = sys.modules.get(spec.name)
         if mod is None:
             mod = MagicMock()
-            mod.__path__ = []            # 当作包，支持多级导入 `from X.sub import Y`
+            mod.__path__ = []            # 当作包，支持多级导入
             mod.__spec__ = spec
             sys.modules[spec.name] = mod
         return mod
 
     def exec_module(self, module):
+        """执行模块（空实现）"""
         return None
 
 
 class _LazyStubFinder(importlib.abc.MetaPathFinder):
+    """
+    惰性桩查找器
+    
+    作用：
+    1. 拦截未安装包的导入
+    2. 返回桩加载器
+    3. 不影响已安装的包
+    """
     def __init__(self, names):
         self.names = set(names)
 
     def find_spec(self, fullname, path, target=None):
+        """查找模块规范"""
+        # 检查是否是我们要桩化的包
         if fullname.split(".")[0] not in self.names:
             return None
+        # 如果模块已存在（真实模块或已桩），交给默认机制
         if fullname in sys.modules:
-            return None  # 已存在（真实模块或已桩），交给默认机制
+            return None
+        # 返回桩加载器的规范
         return importlib.machinery.ModuleSpec(fullname, _LazyStubLoader(), is_package=True)
 
 
+# 收集需要桩化的包名
 _stub_names = []
 for _n in _HEAVY_OPTIONAL:
     try:
@@ -57,29 +79,41 @@ for _n in _HEAVY_OPTIONAL:
     except Exception:
         _stub_names.append(_n)
 
+# 如果有需要桩化的包，注册查找器
 if _stub_names:
     sys.meta_path.insert(0, _LazyStubFinder(set(_stub_names)))
 
+# 导入 pytest 和其他测试工具
 import pytest
 import tempfile
 import shutil
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-# Add project root to path
+# 添加项目根目录到 Python 路径
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
 @pytest.fixture(scope="session")
 def project_root():
-    """Return the project root directory."""
+    """
+    返回项目根目录
+    
+    Returns:
+        Path: 项目根目录的 Path 对象
+    """
     return Path(__file__).parent.parent
 
 
 @pytest.fixture
 def temp_dir():
-    """Create a temporary directory for test files."""
+    """
+    创建临时目录用于测试文件
+    
+    Returns:
+        str: 临时目录路径
+    """
     temp_dir = tempfile.mkdtemp()
     yield temp_dir
     shutil.rmtree(temp_dir)
@@ -87,8 +121,14 @@ def temp_dir():
 
 @pytest.fixture
 def mock_config():
-    """Mock the configuration module."""
+    """
+    模拟配置模块
+    
+    Returns:
+        Mock: 模拟的配置模块
+    """
     with patch("app.core.config") as mock:
+        # 设置各种配置项的默认值
         mock.LLM_API_KEY = "test-key"
         mock.LLM_BASE_URL = "http://localhost:8000"
         mock.LLM_MODEL = "test-model"
@@ -106,7 +146,12 @@ def mock_config():
 
 @pytest.fixture
 def mock_redis():
-    """Mock Redis client."""
+    """
+    模拟 Redis 客户端
+    
+    Returns:
+        Mock: 模拟的 Redis 客户端
+    """
     with patch("app.memory.redis_client.Redis") as mock:
         client = Mock()
         client.get.return_value = None
@@ -118,7 +163,12 @@ def mock_redis():
 
 @pytest.fixture
 def mock_chroma():
-    """Mock ChromaDB client."""
+    """
+    模拟 ChromaDB 客户端
+    
+    Returns:
+        Mock: 模拟的 ChromaDB 客户端
+    """
     with patch("app.retrieval.hybrid_retriever.chromadb") as mock:
         client = Mock()
         collection = Mock()
@@ -134,7 +184,12 @@ def mock_chroma():
 
 @pytest.fixture
 def mock_llm():
-    """Mock LLM API calls."""
+    """
+    模拟 LLM API 调用
+    
+    Returns:
+        Mock: 模拟的 LLM 客户端
+    """
     with patch("httpx.AsyncClient") as mock:
         client = Mock()
         response = Mock()
@@ -150,7 +205,12 @@ def mock_llm():
 
 @pytest.fixture
 def sample_document():
-    """Sample document for testing."""
+    """
+    测试用示例文档
+    
+    Returns:
+        dict: 示例文档数据
+    """
     return {
         "content": "This is a test legal document.",
         "metadata": {
@@ -163,7 +223,12 @@ def sample_document():
 
 @pytest.fixture
 def sample_query():
-    """Sample query for testing."""
+    """
+    测试用示例查询
+    
+    Returns:
+        dict: 示例查询数据
+    """
     return {
         "query": "What is the penalty for breach of contract?",
         "tenant_id": "test-tenant",
@@ -173,7 +238,12 @@ def sample_query():
 
 @pytest.fixture
 def sample_user():
-    """Sample user for testing."""
+    """
+    测试用示例用户
+    
+    Returns:
+        dict: 示例用户数据
+    """
     return {
         "username": "testuser",
         "password": "testpass123",
@@ -183,7 +253,12 @@ def sample_user():
 
 @pytest.fixture
 def authenticated_headers():
-    """Headers with JWT token for authenticated requests."""
+    """
+    带认证头的请求头
+    
+    Returns:
+        dict: 包含 JWT token 的请求头
+    """
     return {
         "Authorization": "Bearer test-jwt-token"
     }

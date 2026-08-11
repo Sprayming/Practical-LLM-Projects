@@ -1,5 +1,5 @@
 """
-Unit tests for app.retrieval.hybrid_retriever module - version 3.
+app.retrieval.hybrid_retriever 模块的单元测试 - 版本 3
 """
 import pytest
 from unittest.mock import Mock, patch, MagicMock
@@ -7,11 +7,18 @@ from langchain_core.documents import Document
 
 
 class TestReranker:
-    """Tests for Reranker class."""
+    """重排序器（Reranker）类的测试"""
 
     @patch("sentence_transformers.CrossEncoder")
     def test_reranker_init_success(self, mock_ce):
-        """Test Reranker initialization succeeds."""
+        """
+        测试重排序器初始化成功
+        
+        验证：
+        1. CrossEncoder 模型正确加载
+        2. available 标志设置为 True
+        3. model 属性正确设置
+        """
         from app.retrieval.hybrid_retriever import Reranker
 
         mock_model = Mock()
@@ -23,7 +30,14 @@ class TestReranker:
 
     @patch("sentence_transformers.CrossEncoder", side_effect=Exception("Model not found"))
     def test_reranker_init_failure(self, mock_ce):
-        """Test Reranker initialization fails gracefully."""
+        """
+        测试重排序器初始化失败时的处理
+        
+        验证：
+        1. 异常被正确捕获
+        2. available 标志设置为 False
+        3. model 属性设置为 None
+        """
         from app.retrieval.hybrid_retriever import Reranker
 
         reranker = Reranker("test-model")
@@ -31,7 +45,13 @@ class TestReranker:
         assert reranker.model is None
 
     def test_rerank_without_model(self):
-        """Test rerank when model is not available."""
+        """
+        测试没有可用模型时的重排序
+        
+        验证：
+        1. 返回原始文档（不排序）
+        2. 保持文档顺序
+        """
         from app.retrieval.hybrid_retriever import Reranker
 
         reranker = Reranker.__new__(Reranker)
@@ -45,7 +65,12 @@ class TestReranker:
         assert result[0].page_content == "doc1"
 
     def test_rerank_with_empty_documents(self):
-        """Test rerank with empty document list."""
+        """
+        测试空文档列表的重排序
+        
+        验证：
+        1. 返回空列表
+        """
         from app.retrieval.hybrid_retriever import Reranker
 
         reranker = Reranker.__new__(Reranker)
@@ -57,7 +82,14 @@ class TestReranker:
 
     @patch("sentence_transformers.CrossEncoder")
     def test_rerank_with_model(self, mock_ce):
-        """Test rerank when model is available."""
+        """
+        测试有可用模型时的重排序
+        
+        验证：
+        1. 模型被正确调用
+        2. 结果按分数排序
+        3. 返回指定数量的结果
+        """
         from app.retrieval.hybrid_retriever import Reranker
 
         mock_model = Mock()
@@ -78,11 +110,17 @@ class TestReranker:
 
 
 class TestHybridRetriever:
-    """Tests for HybridRetriever class."""
+    """混合检索器（HybridRetriever）类的测试"""
 
     @patch("app.retrieval.hybrid_retriever.BM25Okapi")
     def test_init(self, mock_bm25):
-        """Test HybridRetriever initialization."""
+        """
+        测试混合检索器初始化
+        
+        验证：
+        1. 所有参数正确设置
+        2. BM25 初始化被调用
+        """
         from app.retrieval.hybrid_retriever import HybridRetriever
 
         mock_store = Mock()
@@ -103,7 +141,15 @@ class TestHybridRetriever:
         assert retriever.reranker is None
 
     def test_tokenize(self):
-        """Test _tokenize: 英文按词、中文单字+bigram、停用词过滤、中英混合。"""
+        """
+        测试分词功能
+        
+        验证：
+        1. 英文按词切分
+        2. 中文按单字和bigram切分
+        3. 停用词过滤
+        4. 中英混合处理
+        """
         from app.retrieval.hybrid_retriever import HybridRetriever
 
         retriever = HybridRetriever.__new__(HybridRetriever)
@@ -113,7 +159,7 @@ class TestHybridRetriever:
         assert "hello" in tokens
         assert "world" in tokens
 
-        # 中文：单字切分 + bigram（"违约责任条款" 均非停用词）
+        # 中文：单字切分 + bigram
         tokens = retriever._tokenize("违约责任条款")
         for ch in ("违", "约", "责", "任", "条", "款"):
             assert ch in tokens
@@ -121,7 +167,7 @@ class TestHybridRetriever:
         assert "责任" in tokens
         assert "条款" in tokens
 
-        # 停用词过滤："你"/"好" 在停用词表中应被剔除，但 bigram 仍生成
+        # 停用词过滤
         tokens = retriever._tokenize("你好世界")
         assert "你" not in tokens
         assert "好" not in tokens
@@ -135,7 +181,13 @@ class TestHybridRetriever:
 
     @patch("app.retrieval.hybrid_retriever.BM25Okapi")
     def test_sparse_search(self, mock_bm25):
-        """Test _sparse_search method."""
+        """
+        测试稀疏检索
+        
+        验证：
+        1. BM25 模型正确调用
+        2. 结果按分数排序
+        """
         from app.retrieval.hybrid_retriever import HybridRetriever
 
         mock_bm25_instance = Mock()
@@ -154,7 +206,13 @@ class TestHybridRetriever:
 
     @patch("app.retrieval.hybrid_retriever.BM25Okapi")
     def test_dense_search(self, mock_bm25):
-        """Test _dense_search method."""
+        """
+        测试稠密检索
+        
+        验证：
+        1. 向量存储正确调用
+        2. 分数正确归一化
+        """
         from app.retrieval.hybrid_retriever import HybridRetriever
 
         mock_store = Mock()
@@ -175,7 +233,13 @@ class TestHybridRetriever:
 
     @patch("app.retrieval.hybrid_retriever.BM25Okapi")
     def test_rrf_fuse(self, mock_bm25):
-        """Test _rrf_fuse method."""
+        """
+        测试 RRF 融合
+        
+        验证：
+        1. 稠密和稀疏结果正确融合
+        2. 每个文档包含 RRF 分数
+        """
         from app.retrieval.hybrid_retriever import HybridRetriever
 
         retriever = HybridRetriever.__new__(HybridRetriever)
@@ -201,7 +265,13 @@ class TestHybridRetriever:
 
     @patch("app.retrieval.hybrid_retriever.BM25Okapi")
     def test_retrieve(self, mock_bm25):
-        """Test retrieve method."""
+        """
+        测试检索功能
+        
+        验证：
+        1. 正确调用稠密和稀疏检索
+        2. 结果正确融合
+        """
         from app.retrieval.hybrid_retriever import HybridRetriever
 
         mock_store = Mock()
@@ -227,7 +297,13 @@ class TestHybridRetriever:
 
     @patch("app.retrieval.hybrid_retriever.BM25Okapi")
     def test_invoke(self, mock_bm25):
-        """Test invoke method (LangChain interface)."""
+        """
+        测试 LangChain 接口（invoke 方法）
+        
+        验证：
+        1. 与 retrieve 方法行为一致
+        2. 返回正确格式的结果
+        """
         from app.retrieval.hybrid_retriever import HybridRetriever
 
         mock_store = Mock()
