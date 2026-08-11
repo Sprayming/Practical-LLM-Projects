@@ -1,38 +1,67 @@
 import os
 from pathlib import Path
 
+# 获取项目根目录的绝对路径，用于后续构建其他目录的相对路径
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-# LLM
+# ========================================
+# 大语言模型 (LLM) 配置
+# ========================================
+# API 密钥：用于鉴权访问第三方大模型服务
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")
+# API 基础 URL：大模型服务的接入点，默认为 DeepSeek API
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1")
+# 模型名称：指定使用的大模型版本，默认为 deepseek-chat
 LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-chat")
 
-# Embedding
-# 默认本地 HuggingFace(BGE-M3, 零成本/零泄露)。需线上则 EMBEDDER_TYPE=openai + EMBEDDING_API_KEY
+# ========================================
+# 文本嵌入模型 (Embedding) 配置
+# ========================================
+# 嵌入模型类型：支持 "huggingface"（本地部署）或 "openai"（在线调用）
 EMBEDDER_TYPE = os.getenv("EMBEDDER_TYPE", "huggingface")
+# 在线嵌入 API 密钥：当 EMBEDDER_TYPE=openai 时使用
 EMBEDDING_API_KEY = os.getenv("EMBEDDING_API_KEY", "")
+# 在线嵌入 API 基础 URL：当 EMBEDDER_TYPE=openai 时使用
 EMBEDDING_BASE_URL = os.getenv("EMBEDDING_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3")
+# 在线嵌入模型名称：当 EMBEDDER_TYPE=openai 时使用
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "ep-m-20251117205847-trwgz")
-# 本地 HuggingFace embedding 配置（EMBEDDER_TYPE=huggingface 时生效）
+
+# 本地 HuggingFace embedding 配置（仅在 EMBEDDER_TYPE=huggingface 时生效）
+# 模型名称：指定使用的本地嵌入模型，默认为 BGE-M3
 HF_MODEL_NAME = os.getenv("HF_MODEL_NAME", "BAAI/bge-m3")
+# 模型缓存目录：用于存放下载的 HuggingFace 模型文件
 HF_CACHE_DIR = os.getenv("HF_CACHE_DIR", "./model_cache")
 
-# Storage
+# ========================================
+# 数据存储配置
+# ========================================
+# 向量数据库持久化目录：存放 ChromaDB 的索引数据
 CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "./chroma_db")
+# 文件上传目录：存放用户上传的文档
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "./uploads")
 
-# Redis
+# ========================================
+# Redis 缓存配置
+# ========================================
+# Redis 连接 URL：用于缓存、会话存储等场景
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
-# JWT
+# ========================================
+# JWT 安全配置
+# ========================================
+# JWT 签名密钥：用于生成和验证用户登录 Token
 JWT_SECRET = os.getenv("JWT_SECRET", "legal-rag-secret-key-change-in-production")
 
-# 管理员重置密钥（忘记密码自救用，必须配置且保密，切勿提交到仓库）
+# ========================================
+# 管理员配置
+# ========================================
+# 管理员重置密钥：用于用户忘记密码时的安全重置，必须配置且保密，切勿提交到仓库
 ADMIN_RESET_KEY = os.getenv("ADMIN_RESET_KEY", "")
-
-# 超级管理员名额上限（管理后台手动设置角色时校验，默认 3，可用环境变量覆盖）
+# 超级管理员名额上限：管理后台手动设置角色时进行校验，防止超级管理员过多
 MAX_SUPER_ADMINS = int(os.getenv("MAX_SUPER_ADMINS", "3"))
 
-# Paths
+# ========================================
+# 路径配置
+# ========================================
+# 租户数据库路径：SQLite 数据库文件，用于存储租户和用户信息
 TENANT_DB = str(BASE_DIR / "tenant_data" / "users.db")

@@ -1,5 +1,8 @@
 import os, sys, json, tempfile
+
+# 将项目根目录添加到系统路径中，以便正确导入项目内的其他模块
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+
 import os
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from loguru import logger
@@ -16,40 +19,58 @@ from app.tasks.task_store import (
     submit_indexing_job,
 )
 
+# 创建 API 路由器实例，统一添加 /api/documents 前缀，并打上 "documents" 标签用于文档分类
 router = APIRouter(prefix="/api/documents", tags=["documents"])
 
-# Allowed file extensions
+# 允许上传的文件扩展名白名单
 ALLOWED_EXTENSIONS = {".pdf"}
 
-# Max file size: 100MB
+# 最大文件大小限制：100MB
 MAX_FILE_SIZE = 100 * 1024 * 1024
+
 
 @router.post("/upload")
 async def upload_document(
     file: UploadFile = File(...),
     user: dict = Depends(require_user),
 ):
+    """
+    上传文档接口。
+    
+    接收前端上传的 PDF 文件，进行安全与大小校验后保存到租户目录，
+    并立即创建后台索引任务返回 task_id，避免大文档索引阻塞主服务。
+    
+    Args:
+        file (UploadFile): FastAPI 注入的上传文件对象。
+        user (dict): 依赖注入获取的当前登录用户信息，用于提取 tenant_id。
+        
+    Raises:
+        HTTPException: 缺少文件名抛出 400；文件类型不允许抛出 400；文件过大抛出 413。
+        
+    Returns:
+        dict: 包含成功标志、任务ID、文件名、初始状态和提示消息。
+    """
     tenant_id = user["tenant_id"]
 
-    # Validate file extension
+    # 1. 校验文件扩展名是否在白名单内
     if not file.filename:
         raise HTTPException(400, "No filename provided")
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(400, f"File type not allowed. Allowed: {ALLOWED_EXTENSIONS}")
 
-    # Read content and check size
+    # 2. 读取文件内容并校验体积大小
     content = await file.read()
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(413, f"File too large. Maximum size: {MAX_FILE_SIZE // (1024*1024)}MB")
 
-    # Get safe file path (prevents path traversal)
+    # 3. 获取安全的文件存储路径（防止目录遍历攻击）并写入磁盘
     file_path = get_safe_upload_path(cfg.UPLOAD_DIR, tenant_id, file.filename)
     os.makedirs(os.path.dirname(file_path), exist_ok=True)
     with open(file_path, "wb") as f:
         f.write(content)
 
-    # 异步索引：立即返回 task_id，CPU 密集的抽取+嵌入+建索引在后台线程执行，
+    # 4. 提交异步索引任务：立即返回 task_id，CPU 密集的抽取+嵌入+建索引在后台线程执行，
     # 不阻塞主服务（避免大文档上传卡死整个 uvicorn 进程）。
     task_id = create_task(tenant_id, file.filename)
     submit_indexing_job(_run_indexing, task_id, tenant_id, file_path, file.filename)
@@ -64,8 +85,24 @@ async def upload_document(
 
 
 def _run_indexing(task_id: str, tenant_id: str, file_path: str, filename: str):
-    """后台线程：抽取 + 嵌入 + 建索引，全程更新任务状态。"""
+    """
+    后台线程执行函数：抽取文本 + 生成向量 + 建立索引，全程更新任务状态。
+    
+    该函数在后台 Worker 线程中运行，处理流程分为四个阶段：
+    1. extracting (文本抽取)：使用 MultimodalPipeline 解析 PDF。
+    2. embedding (稀疏向量化)：尝试生成并持久化 BGE-M3 稀疏向量（用于混合检索增强）。
+    3. building_index (稠密向量化与建库)：调用 LangChain 与 ChromaDB 构建稠密向量索引。
+    4. completed (完成)：更新任务状态为 done。
+    任何环节出现致命错误，将任务状态标记为 failed。
+    
+    Args:
+        task_id (str): 当前索引任务的唯一标识。
+        tenant_id (str): 租户ID，用于数据隔离存储。
+        file_path (str): 已上传文件的绝对路径。
+        filename (str): 文件原始名称，用于在向量库中标记来源。
+    """
     try:
+        # 阶段1：文本抽取
         update_task(task_id, status="processing", stage="extracting", progress=10)
         pipeline = MultimodalPipeline()
         chunks = pipeline.process(file_path)
@@ -80,14 +117,14 @@ def _run_indexing(task_id: str, tenant_id: str, file_path: str, filename: str):
                         error="No text extracted from PDF")
             return
 
+        # 阶段2：生成并持久化 BGE-M3 稀疏向量（失败不影响稠密入库，检索时自动降级）
         update_task(task_id, stage="embedding", progress=40)
         embedder = create_embedder()
-
-        # 生成并持久化 BGE-M3 稀疏向量（失败不影响稠密入库，检索时自动降级）
         try:
             from app.retrieval.bge_m3_embedder import BGEM3Embedder
             from app.retrieval.sparse_store import save_sparse
 
+            # 仅当配置的嵌入器为 BGE-M3 时才生成稀疏向量
             if isinstance(embedder, BGEM3Embedder):
                 sp_items = [
                     {"key": t[:200], "sp": sp}
@@ -98,6 +135,7 @@ def _run_indexing(task_id: str, tenant_id: str, file_path: str, filename: str):
         except Exception as e:  # noqa: BLE001
             logger.warning("稀疏向量生成失败（不影响稠密入库）: {}", e)
 
+        # 阶段3：构建稠密向量索引并存入 ChromaDB
         update_task(task_id, stage="building_index", progress=70)
         persist_dir = os.path.join(cfg.CHROMA_PERSIST_DIR, tenant_id)
         vector_store = Chroma.from_texts(
@@ -108,6 +146,7 @@ def _run_indexing(task_id: str, tenant_id: str, file_path: str, filename: str):
         )
         vector_store.persist()
 
+        # 阶段4：全部完成
         update_task(
             task_id,
             status="done",
@@ -116,16 +155,32 @@ def _run_indexing(task_id: str, tenant_id: str, file_path: str, filename: str):
             result={"filename": filename, "chunks": len(texts), "tenant_id": tenant_id},
         )
     except Exception as e:  # noqa: BLE001
+        # 捕获所有未预料到的异常，防止后台线程静默崩溃，将任务标记为失败
         logger.exception("文档索引失败: {}", e)
         update_task(task_id, status="failed", stage="error", progress=100, error=str(e))
 
 
 @router.get("/task/{task_id}")
 def get_upload_task(task_id: str, user: dict = Depends(require_user)):
-    """查询文档索引任务的进度与状态。"""
+    """
+    查询文档索引任务的进度与状态。
+    
+    前端轮询此接口以获取大文档后台解析的实时进度。
+    
+    Args:
+        task_id (str): 路径参数，上传时返回的任务 ID。
+        user (dict): 依赖注入获取的当前登录用户信息。
+        
+    Raises:
+        HTTPException: 任务不存在抛出 404；无权查看其他租户任务抛出 403。
+        
+    Returns:
+        dict: 包含任务状态、进度、当前阶段及错误信息的任务详情。
+    """
     task = get_task(task_id)
     if not task:
         raise HTTPException(404, "Task not found")
+    # 安全校验：防止跨租户越权查询任务进度
     if task["tenant_id"] != user["tenant_id"]:
         raise HTTPException(403, "Forbidden")
     return task
@@ -133,6 +188,17 @@ def get_upload_task(task_id: str, user: dict = Depends(require_user)):
 
 @router.get("")
 def list_documents(user: dict = Depends(require_user)):
+    """
+    获取当前租户已上传的文档列表。
+    
+    仅列出上传目录中的 PDF 文件名，不包含索引状态等详细信息。
+    
+    Args:
+        user (dict): 依赖注入获取的当前登录用户信息，用于提取 tenant_id。
+        
+    Returns:
+        dict: 包含文档文件名列表 documents。
+    """
     tenant_id = user["tenant_id"]
     upload_dir = os.path.join(cfg.UPLOAD_DIR, tenant_id)
     if not os.path.exists(upload_dir):
@@ -140,26 +206,41 @@ def list_documents(user: dict = Depends(require_user)):
     files = [f for f in os.listdir(upload_dir) if f.endswith(".pdf")]
     return {"documents": files}
 
+
 @router.get("/preview/{filename}")
 async def preview_document(filename: str, user: dict = Depends(require_user)):
-    """预览PDF文档"""
+    """
+    在线预览 PDF 文档。
+    
+    对文件名进行安全清洗和路径校验后，以 FileResponse 流式返回 PDF 文件供前端渲染。
+    
+    Args:
+        filename (str): 路径参数，待预览的文件名。
+        user (dict): 依赖注入获取的当前登录用户信息，用于提取 tenant_id。
+        
+    Raises:
+        HTTPException: 文件名非法抛出 400；文件不存在抛出 404。
+        
+    Returns:
+        FileResponse: FastAPI 的文件响应对象，Content-Type 为 application/pdf。
+    """
     tenant_id = user["tenant_id"]
 
-    # Sanitize filename
+    # 清洗文件名，防止目录遍历攻击（如 ../../etc/passwd）
     safe_filename = sanitize_filename(filename)
     upload_dir = os.path.join(cfg.UPLOAD_DIR, tenant_id)
     file_path = os.path.join(upload_dir, safe_filename)
 
-    # Verify path is safe
+    # 二次验证合成后的路径是否仍在合法的上传目录内
     from app.security.middleware import is_safe_path
     if not is_safe_path(upload_dir, file_path):
         raise HTTPException(400, "Invalid filename")
 
-    # Check if file exists
+    # 检查文件是否存在
     if not os.path.exists(file_path):
         raise HTTPException(404, "Document not found")
 
-    # Return file for preview
+    # 返回文件流用于前端预览
     from fastapi.responses import FileResponse
     return FileResponse(
         path=file_path,
@@ -167,31 +248,51 @@ async def preview_document(filename: str, user: dict = Depends(require_user)):
         filename=safe_filename,
     )
 
+
 @router.delete("/{filename}")
 def delete_document(filename: str, user: dict = Depends(require_user)):
-    """删除文档（仅管理员）"""
+    """
+    删除指定文档及其关联的所有向量数据（仅管理员可操作）。
+    
+    执行删除操作包括：
+    1. 删除源 PDF 文件。
+    2. 删除 ChromaDB 中的稠密向量数据。
+    3. 删除 BGE-M3 稀疏向量数据文件。
+    
+    Args:
+        filename (str): 路径参数，待删除的文件名。
+        user (dict): 依赖注入获取的当前登录用户信息，用于提取 tenant_id 和 role。
+        
+    Raises:
+        HTTPException: 非管理员抛出 403；文件名非法抛出 400；文件不存在抛出 404。
+        
+    Returns:
+        dict: 包含成功标志和确认消息。
+    """
     tenant_id = user["tenant_id"]
     role = user.get("role", "user")
 
+    # 权限校验：仅超级管理员可执行删除
     if role != "super_admin":
         raise HTTPException(403, "仅管理员可以删除文档")
 
-    # Sanitize filename to prevent path traversal
+    # 清洗文件名，防止目录遍历攻击
     safe_filename = sanitize_filename(filename)
     upload_dir = os.path.join(cfg.UPLOAD_DIR, tenant_id)
     file_path = os.path.join(upload_dir, safe_filename)
 
-    # Verify path is safe
+    # 二次验证路径安全性
     from app.security.middleware import is_safe_path
     if not is_safe_path(upload_dir, file_path):
         raise HTTPException(400, "Invalid filename")
 
+    # 步骤1：删除磁盘上的源 PDF 文件
     deleted = False
     if os.path.exists(file_path):
         os.remove(file_path)
         deleted = True
 
-    # 从 ChromaDB 删除对应的向量数据。
+    # 步骤2：从 ChromaDB 删除对应的稠密向量数据。
     # 注意：删除只需按 source 元数据过滤，无需加载 embedding 模型
     # （原先 create_embedder() 会触发 BGE-M3 加载，慢且易在内存压力下失败，
     # 失败被静默吞掉会导致向量残留、文档"删不干净"）。
@@ -202,7 +303,7 @@ def delete_document(filename: str, user: dict = Depends(require_user)):
 
             client = chromadb.PersistentClient(path=persist_dir)
             col = client.get_or_create_collection("langchain")
-            # source 在历史上可能以原始名或 sanitize 名存储，两者都尝试删除
+            # source 在历史上可能以原始名或 sanitize 名存储，两者都尝试删除以确保彻底清理
             for src in (filename, safe_filename):
                 try:
                     col.delete(where={"source": src})
@@ -211,7 +312,7 @@ def delete_document(filename: str, user: dict = Depends(require_user)):
         except Exception:
             pass
 
-    # 同步删除 BGE-M3 稀疏向量文件
+    # 步骤3：同步删除 BGE-M3 稀疏向量文件
     try:
         from app.retrieval.sparse_store import delete_sparse
 
@@ -219,8 +320,8 @@ def delete_document(filename: str, user: dict = Depends(require_user)):
     except Exception:
         pass
 
+    # 如果源文件不存在且未被执行删除，则向客户端返回 404
     if not deleted:
         raise HTTPException(404, "Document not found")
 
     return {"success": True, "message": f"{filename} 已删除"}
-

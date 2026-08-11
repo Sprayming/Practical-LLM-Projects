@@ -1,11 +1,11 @@
 """
 A/B Testing Framework for Legal-DOC-RAG.
 
-Provides:
-- Experiment configuration and management
-- Traffic allocation
-- Result recording
-- Multi-variable testing
+提供以下功能：
+- 实验配置与管理（创建、启动、停止、删除）
+- 流量分配（基于权重和用户哈希的确定性分配）
+- 事件记录（跟踪用户行为和转化）
+- 多变量测试（支持多个变体并行对比）
 """
 import json
 import hashlib
@@ -18,7 +18,14 @@ import threading
 
 
 def _db_path() -> str:
-    """返回 ab_testing.db 的路径"""
+    """
+    返回 ab_testing.db 数据库文件的路径。
+    
+    该函数会自动在项目根目录下的 tenant_data 目录中创建数据库文件。
+    
+    Returns:
+        str: 数据库文件的绝对路径。
+    """
     base = Path(__file__).resolve().parent.parent.parent
     db_dir = base / "tenant_data"
     db_dir.mkdir(parents=True, exist_ok=True)
@@ -26,32 +33,45 @@ def _db_path() -> str:
 
 
 def _init_db():
-    """初始化A/B测试数据库表"""
+    """
+    初始化 A/B 测试所需的数据库表。
+    
+    创建四个核心表：
+    1. experiments - 实验主表（名称、描述、状态、流量占比等）
+    2. variants - 实验变体表（名称、权重、配置等）
+    3. assignments - 用户分配记录表（实验-用户-变体的关联）
+    4. events - 事件记录表（用户行为追踪）
+    
+    所有表都设置了适当的约束和外键关系，确保数据完整性。
+    """
     db = _db_path()
     conn = sqlite3.connect(db)
+    # 实验主表：存储实验的基本信息和状态
     conn.execute("""
         CREATE TABLE IF NOT EXISTS experiments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT UNIQUE NOT NULL,
             description TEXT,
-            status TEXT DEFAULT 'draft',
+            status TEXT DEFAULT 'draft',  # draft/active/stopped
             traffic_percent INTEGER DEFAULT 100,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    # 变体表：存储每个实验的不同版本配置
     conn.execute("""
         CREATE TABLE IF NOT EXISTS variants (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             experiment_id INTEGER NOT NULL,
             name TEXT NOT NULL,
-            weight INTEGER DEFAULT 1,
-            config TEXT,
+            weight INTEGER DEFAULT 1,  # 权重，用于流量分配比例
+            config TEXT,  # JSON 格式的变体配置参数
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (experiment_id) REFERENCES experiments(id) ON DELETE CASCADE,
-            UNIQUE(experiment_id, name)
+            UNIQUE(experiment_id, name)  # 同一实验内变体名唯一
         )
     """)
+    # 分配表：记录用户被分配到哪个实验的哪个变体
     conn.execute("""
         CREATE TABLE IF NOT EXISTS assignments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,17 +81,18 @@ def _init_db():
             assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (experiment_id) REFERENCES experiments(id),
             FOREIGN KEY (variant_id) REFERENCES variants(id),
-            UNIQUE(experiment_id, user_id)
+            UNIQUE(experiment_id, user_id)  # 同一实验内用户只分配一次
         )
     """)
+    # 事件表：记录用户在实验中的各种行为
     conn.execute("""
         CREATE TABLE IF NOT EXISTS events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             experiment_id INTEGER NOT NULL,
             variant_id INTEGER NOT NULL,
-            user_id TEXT,
-            event_type TEXT NOT NULL,
-            event_data TEXT,
+            user_id TEXT,  # 可选，匿名事件可不填
+            event_type TEXT NOT NULL,  # 事件类型（如 click, purchase 等）
+            event_data TEXT,  # JSON 格式的事件附加数据
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (experiment_id) REFERENCES experiments(id),
             FOREIGN KEY (variant_id) REFERENCES variants(id)
@@ -82,9 +103,22 @@ def _init_db():
 
 
 class ABTestManager:
-    """A/B测试管理器"""
-
+    """
+    A/B 测试管理器核心类。
+    
+    提供完整的 A/B 测试功能：
+    - 实验生命周期管理（创建、启动、停止、删除）
+    - 变体管理（添加、权重配置）
+    - 流量分配（基于用户哈希的确定性分配）
+    - 事件记录与统计分析
+    """
+    
     def __init__(self):
+        """
+        初始化 A/B 测试管理器。
+        
+        执行数据库初始化，并创建线程锁用于保证并发安全。
+        """
         _init_db()
         self._lock = threading.Lock()
 
@@ -95,15 +129,15 @@ class ABTestManager:
         traffic_percent: int = 100,
     ) -> Tuple[bool, str, int]:
         """
-        创建新实验
-
+        创建新的 A/B 测试实验。
+        
         Args:
-            name: 实验名称
-            description: 实验描述
-            traffic_percent: 流量百分比 (0-100)
-
+            name (str): 实验名称，必须唯一。
+            description (str, optional): 实验描述信息。
+            traffic_percent (int, optional): 参与实验的用户流量占比（0-100），默认为 100。
+            
         Returns:
-            (成功, 消息, 实验ID)
+            Tuple[bool, str, int]: (是否成功, 消息, 实验ID)。如果名称重复，返回失败和错误信息。
         """
         conn = sqlite3.connect(_db_path())
         try:
@@ -130,16 +164,16 @@ class ABTestManager:
         config: Dict = None,
     ) -> Tuple[bool, str, int]:
         """
-        添加实验变体
-
+        为指定实验添加新的变体。
+        
         Args:
-            experiment_id: 实验ID
-            name: 变体名称
-            weight: 权重
-            config: 变体配置
-
+            experiment_id (int): 实验 ID。
+            name (str): 变体名称，在实验内必须唯一。
+            weight (int, optional): 变体权重，用于流量分配比例，默认为 1。
+            config (Dict, optional): 变体的自定义配置参数（JSON 格式存储）。
+            
         Returns:
-            (成功, 消息, 变体ID)
+            Tuple[bool, str, int]: (是否成功, 消息, 变体ID)。如果名称重复，返回失败和错误信息。
         """
         conn = sqlite3.connect(_db_path())
         try:
@@ -160,7 +194,15 @@ class ABTestManager:
             conn.close()
 
     def start_experiment(self, experiment_id: int) -> Tuple[bool, str]:
-        """启动实验"""
+        """
+        启动指定实验，开始分配流量。
+        
+        Args:
+            experiment_id (int): 要启动的实验 ID。
+            
+        Returns:
+            Tuple[bool, str]: (是否成功, 消息)。如果操作失败，返回错误信息。
+        """
         conn = sqlite3.connect(_db_path())
         try:
             conn.execute(
@@ -176,7 +218,15 @@ class ABTestManager:
             conn.close()
 
     def stop_experiment(self, experiment_id: int) -> Tuple[bool, str]:
-        """停止实验"""
+        """
+        停止指定实验，停止分配流量。
+        
+        Args:
+            experiment_id (int): 要停止的实验 ID。
+            
+        Returns:
+            Tuple[bool, str]: (是否成功, 消息)。如果操作失败，返回错误信息。
+        """
         conn = sqlite3.connect(_db_path())
         try:
             conn.execute(
@@ -197,19 +247,26 @@ class ABTestManager:
         user_id: str,
     ) -> Optional[Dict]:
         """
-        为用户分配变体
-
+        为用户分配实验变体（核心分配逻辑）。
+        
+        采用确定性分配策略：
+        1. 检查用户是否已分配过变体（避免多次分配）
+        2. 检查实验是否处于活跃状态及用户是否在流量范围内
+        3. 基于用户 ID 的哈希值进行确定性分配（同一用户始终分配到同一变体）
+        4. 根据变体权重按比例分配流量
+        
         Args:
-            experiment_id: 实验ID
-            user_id: 用户ID
-
+            experiment_id (int): 实验 ID。
+            user_id (str): 用户唯一标识。
+            
         Returns:
-            变体字典或None
+            Optional[Dict]: 分配的变体信息字典（包含 variant_id, name, config），
+                           如果不符合分配条件则返回 None。
         """
         with self._lock:
             conn = sqlite3.connect(_db_path())
             try:
-                # 检查是否已分配
+                # 1. 检查是否已分配过变体
                 cur = conn.execute(
                     """SELECT v.id, v.name, v.config
                        FROM assignments a
@@ -225,7 +282,7 @@ class ABTestManager:
                         "config": json.loads(row[2]) if row[2] else {},
                     }
 
-                # 检查实验状态
+                # 2. 检查实验状态和流量范围
                 cur = conn.execute(
                     "SELECT status, traffic_percent FROM experiments WHERE id=?",
                     (experiment_id,)
@@ -236,12 +293,12 @@ class ABTestManager:
 
                 traffic_percent = exp[1]
 
-                # 检查用户是否在流量范围内
+                # 3. 检查用户是否在流量范围内（基于用户哈希）
                 user_hash = int(hashlib.md5(f"{experiment_id}:{user_id}".encode()).hexdigest(), 16) % 100
                 if user_hash >= traffic_percent:
                     return None
 
-                # 获取所有变体
+                # 4. 获取所有变体及其权重
                 cur = conn.execute(
                     "SELECT id, name, weight, config FROM variants WHERE experiment_id=?",
                     (experiment_id,)
@@ -250,7 +307,7 @@ class ABTestManager:
                 if not variants:
                     return None
 
-                # 根据权重选择变体
+                # 5. 根据权重选择变体（确定性分配）
                 total_weight = sum(v[2] for v in variants)
                 if total_weight == 0:
                     return None
@@ -268,7 +325,7 @@ class ABTestManager:
                 if not selected_variant:
                     selected_variant = variants[0]
 
-                # 记录分配
+                # 6. 记录分配结果
                 conn.execute(
                     "INSERT INTO assignments (experiment_id, user_id, variant_id) VALUES (?, ?, ?)",
                     (experiment_id, user_id, selected_variant[0])
@@ -295,17 +352,17 @@ class ABTestManager:
         event_data: Dict = None,
     ) -> bool:
         """
-        记录实验事件
-
+        记录用户在实验中的行为事件。
+        
         Args:
-            experiment_id: 实验ID
-            variant_id: 变体ID
-            event_type: 事件类型
-            user_id: 用户ID
-            event_data: 事件数据
-
+            experiment_id (int): 事件所属的实验 ID。
+            variant_id (int): 事件发生的变体 ID。
+            event_type (str): 事件类型（如 click, purchase 等）。
+            user_id (str, optional): 用户 ID，匿名事件可不填。
+            event_data (Dict, optional): 事件的附加数据（JSON 格式）。
+            
         Returns:
-            是否成功
+            bool: 事件记录是否成功。
         """
         conn = sqlite3.connect(_db_path())
         try:
@@ -325,17 +382,22 @@ class ABTestManager:
 
     def get_experiment_results(self, experiment_id: int) -> Dict:
         """
-        获取实验结果
-
+        获取指定实验的统计结果。
+        
+        返回包含以下信息的字典：
+        - 实验基本信息
+        - 各变体的用户数和事件数统计
+        - 按事件类型和变体的交叉统计
+        
         Args:
-            experiment_id: 实验ID
-
+            experiment_id (int): 要查询的实验 ID。
+            
         Returns:
-            实验结果字典
+            Dict: 包含实验详细统计结果的数据字典。
         """
         conn = sqlite3.connect(_db_path())
         try:
-            # 获取实验信息
+            # 1. 获取实验基本信息
             cur = conn.execute(
                 "SELECT name, description, status, traffic_percent FROM experiments WHERE id=?",
                 (experiment_id,)
@@ -344,7 +406,7 @@ class ABTestManager:
             if not exp:
                 return {"error": "实验不存在"}
 
-            # 获取变体统计
+            # 2. 获取各变体的统计信息
             cur = conn.execute(
                 """SELECT v.id, v.name, v.weight,
                           COUNT(DISTINCT a.user_id) as user_count,
@@ -358,7 +420,7 @@ class ABTestManager:
             )
             variants = cur.fetchall()
 
-            # 获取事件类型统计
+            # 3. 获取事件类型统计
             cur = conn.execute(
                 """SELECT e.event_type, v.name, COUNT(*) as count
                    FROM events e
@@ -395,7 +457,14 @@ class ABTestManager:
             conn.close()
 
     def list_experiments(self) -> List[Dict]:
-        """列出所有实验"""
+        """
+        获取所有实验的列表。
+        
+        按创建时间倒序返回实验的基本信息。
+        
+        Returns:
+            List[Dict]: 实验列表，每个元素是一个包含实验基本信息的字典。
+        """
         conn = sqlite3.connect(_db_path())
         try:
             cur = conn.execute(
@@ -417,10 +486,24 @@ class ABTestManager:
             conn.close()
 
     def delete_experiment(self, experiment_id: int) -> Tuple[bool, str]:
-        """删除实验"""
+        """
+        删除指定实验及其所有相关数据。
+        
+        采用级联删除策略：
+        1. 先删除事件记录
+        2. 再删除用户分配记录
+        3. 然后删除变体
+        4. 最后删除实验本身
+        
+        Args:
+            experiment_id (int): 要删除的实验 ID。
+            
+        Returns:
+            Tuple[bool, str]: (是否成功, 消息)。如果操作失败，返回错误信息。
+        """
         conn = sqlite3.connect(_db_path())
         try:
-            # 删除相关数据
+            # 按照依赖关系逆序删除，避免外键约束冲突
             conn.execute("DELETE FROM events WHERE experiment_id=?", (experiment_id,))
             conn.execute("DELETE FROM assignments WHERE experiment_id=?", (experiment_id,))
             conn.execute("DELETE FROM variants WHERE experiment_id=?", (experiment_id,))
@@ -434,12 +517,19 @@ class ABTestManager:
             conn.close()
 
 
-# 全局单例
+# 全局单例实例
 _ab_manager: Optional[ABTestManager] = None
 
 
 def get_ab_manager() -> ABTestManager:
-    """获取A/B测试管理器单例"""
+    """
+    获取 A/B 测试管理器的单例实例。
+    
+    采用延迟初始化策略，仅在首次调用时创建实例。
+    
+    Returns:
+        ABTestManager: A/B 测试管理器的单例实例。
+    """
     global _ab_manager
     if _ab_manager is None:
         _ab_manager = ABTestManager()
