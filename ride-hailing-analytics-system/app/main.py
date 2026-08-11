@@ -129,20 +129,6 @@ async def root():
     }
 
 
-@app.get("/chat", tags=["Root"])
-async def chat_page():
-    """纯对话式问答页（对标 RAG 体验）"""
-    from fastapi.responses import FileResponse
-
-    static_file = os.path.join(os.path.dirname(__file__), "static", "chat.html")
-    if os.path.exists(static_file):
-        return FileResponse(
-            static_file,
-            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
-        )
-    return {"message": "chat.html not found"}
-
-
 @app.get("/dashboard", tags=["Root"])
 async def dashboard_page():
     """数据分析仪表盘（次级页）"""

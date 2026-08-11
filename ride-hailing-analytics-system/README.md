@@ -112,7 +112,7 @@
 
 | 层级 | 技术 | 说明 |
 |------|------|------|
-| **前端** | HTML/CSS/JS（零外网依赖，原生Canvas图表） | 对话式问答页 `chat.html` + 数据仪表盘 `index.html`，离线可用 |
+| **前端** | HTML/CSS/JS（零外网依赖，原生Canvas图表） | 单页应用：顶部问答搜索框 + 数据仪表盘（`index.html`），离线可用 |
 | **后端** | FastAPI + Uvicorn | 高性能异步Python Web框架 |
 | **AI引擎** | DeepSeek LLM | 可替换为OpenAI/本地模型 |
 | **Agent框架** | 多Agent协作 | 4个Agent自主决策、消息传递、共享记忆 |
@@ -358,8 +358,7 @@ ride-hailing-analytics-system/
 │   ├── db/                      # 数据库连接
 │   │   └── connection.py        # SQLite连接管理
 │   ├── static/                  # 静态文件（均零外网依赖）
-│   │   ├── chat.html            # 对话式问答前端（首页 /，调用 /api/query/）
-│   │   ├── index.html           # 数据仪表盘前端（/dashboard，原生Canvas图表）
+│   │   ├── index.html           # 单页前端：顶部问答搜索框 + 数据仪表盘（/，原生Canvas图表）
 │   │   └── apidocs.html         # 离线自包含 API 文档页（/apiview，不依赖外网CDN）
 │   ├── config.py                # 应用配置
 │   ├── models.py                # Pydantic数据模型
