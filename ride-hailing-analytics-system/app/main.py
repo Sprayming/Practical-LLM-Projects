@@ -127,6 +127,16 @@ async def root():
     }
 
 
+@app.get("/apiview", tags=["Root"])
+async def api_view():
+    """离线版 API 文档（不依赖外网 CDN，WorkBuddy 预览面板可用）"""
+    from fastapi.responses import FileResponse
+    f = os.path.join(os.path.dirname(__file__), "static", "apidocs.html")
+    if os.path.exists(f):
+        return FileResponse(f)
+    return {"message": "apidocs.html not found"}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app.main:app", host="127.0.0.1", port=8001, reload=True)

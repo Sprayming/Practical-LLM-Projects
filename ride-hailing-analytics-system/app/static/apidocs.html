@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ride-Hailing API 文档（离线版）</title>
+<style>
+  :root{
+    --bg:#f7f8fa; --panel:#fff; --text:#1f2329; --muted:#6b7280; --border:#e5e7eb;
+    --primary:#2563eb; --get:#16a34a; --post:#d97706; --put:#2563eb; --del:#dc2626; --patch:#7c3aed;
+    --code-bg:#0f172a; --code-fg:#e2e8f0;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#0f1115; --panel:#171a21; --text:#e5e7eb; --muted:#9aa4b2; --border:#2a2f3a; --code-bg:#000; --code-fg:#d1d5db; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);line-height:1.5}
+  header{padding:20px 24px;background:var(--panel);border-bottom:1px solid var(--border)}
+  header h1{margin:0;font-size:20px}
+  header .meta{color:var(--muted);font-size:13px;margin-top:4px}
+  .container{max-width:1080px;margin:0 auto;padding:20px 24px}
+  .search{width:100%;max-width:420px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--panel);color:var(--text);margin-bottom:16px}
+  .ep{background:var(--panel);border:1px solid var(--border);border-radius:10px;margin-bottom:12px;overflow:hidden}
+  .ep-head{display:flex;align-items:center;gap:10px;padding:12px 16px;cursor:pointer}
+  .ep-head:hover{background:rgba(37,99,235,.05)}
+  .method{font-weight:700;font-size:12px;color:#fff;padding:3px 8px;border-radius:6px;min-width:54px;text-align:center}
+  .m-GET{background:var(--get)} .m-POST{background:var(--post)} .m-PUT{background:var(--put)} .m-DELETE{background:var(--del)} .m-PATCH{background:var(--patch)}
+  .path{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
+  .summary{color:var(--muted);font-size:13px;margin-left:auto;text-align:right}
+  .ep-body{padding:0 16px 16px;display:none;border-top:1px solid var(--border)}
+  .ep.open .ep-body{display:block}
+  .ep-body h4{margin:14px 0 6px;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--muted);font-weight:600;width:120px}
+  code{background:var(--code-bg);color:var(--code-fg);padding:1px 6px;border-radius:4px;font-size:12px}
+  .req{color:var(--del);font-weight:700}
+  .desc{font-size:13px;color:var(--text);margin-top:10px}
+  .tag{display:inline-block;background:rgba(37,99,235,.1);color:var(--primary);font-size:11px;padding:2px 8px;border-radius:10px;margin:0 6px 6px 0}
+  .trybtn{margin-top:12px;background:var(--primary);color:#fff;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px}
+  .trybtn:hover{opacity:.9}
+  .resp{margin-top:10px;background:var(--code-bg);color:var(--code-fg);padding:10px;border-radius:8px;font-size:12px;white-space:pre-wrap;max-height:300px;overflow:auto;display:none}
+  .loading{padding:40px;text-align:center;color:var(--muted)}
+  input,select{padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:240px;background:var(--panel);color:var(--text)}
+  .note{padding:10px 14px;background:rgba(37,99,235,.08);border:1px solid rgba(37,99,235,.2);border-radius:8px;font-size:13px;color:var(--text);margin-bottom:16px}
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">API 文档</h1>
+  <div class="meta" id="meta">加载中…</div>
+</header>
+<div class="container">
+  <div class="note">这是<b>离线版</b> API 文档，不依赖任何外网 CDN，可在 WorkBuddy 预览面板内直接使用。若本机有外网，也可访问 <code>/docs</code> 查看标准 Swagger UI。</div>
+  <input class="search" id="search" placeholder="搜索路径或说明…" />
+  <div id="list"><div class="loading">正在加载 /openapi.json …</div></div>
+</div>
+<script>
+async function load(){
+  let spec;
+  try{
+    const r = await fetch('/openapi.json');
+    spec = await r.json();
+  }catch(e){
+    document.getElementById('list').innerHTML = '<div class="loading">无法加载 /openapi.json：'+e.message+'</div>';
+    return;
+  }
+  document.getElementById('title').textContent = (spec.info&&spec.info.title)||'API 文档';
+  const ver = spec.info&&spec.info.version? ' v'+spec.info.version : '';
+  const cnt = spec.paths?Object.keys(spec.paths).length:0;
+  document.getElementById('meta').textContent = ((spec.info&&spec.info.description)||'') + ' ·' + ver + ' · ' + cnt + ' 个路径';
+
+  const wrap = document.getElementById('list');
+  wrap.innerHTML='';
+  const paths = spec.paths||{};
+  Object.keys(paths).sort().forEach(p=>{
+    const methods = paths[p];
+    Object.keys(methods).forEach(m=>{
+      const op = methods[m];
+      if(!['get','post','put','delete','patch'].includes(m)) return;
+      const el = document.createElement('div');
+      el.className='ep';
+      const tags = (op.tags||[]).map(t=>'<span class="tag">'+t+'</span>').join('');
+      const params = op.parameters||[];
+      let rows='';
+      params.forEach(pr=>{
+        rows+='<tr><td><code>'+pr.name+'</code></td><td>'+(pr.in||'')+'</td><td>'+(pr.required?'<span class="req">必填</span>':'可选')+'</td><td>'+(pr.schema&&pr.schema.type||'')+'</td><td>'+(pr.description||'')+'</td></tr>';
+      });
+      const bodySchema = op.requestBody&&op.requestBody.content&&op.requestBody.content['application/json']&&op.requestBody.content['application/json'].schema;
+      let bodyRows='';
+      if(bodySchema&&bodySchema.properties){
+        Object.keys(bodySchema.properties).forEach(k=>{
+          const prop=bodySchema.properties[k];
+          bodyRows+='<tr><td><code>'+k+'</code></td><td>body</td><td>'+(bodySchema.required&&bodySchema.required.includes(k)?'<span class="req">必填</span>':'可选')+'</td><td>'+(prop.type||'')+'</td><td>'+(prop.description||'')+'</td></tr>';
+        });
+      }
+      el.innerHTML =
+        '<div class="ep-head"><span class="method m-'+m.toUpperCase()+'">'+m.toUpperCase()+'</span><span class="path">'+p+'</span><span class="summary">'+(op.summary||'')+'</span></div>'+
+        '<div class="ep-body">'+tags+
+          (op.description?'<div class="desc">'+op.description+'</div>':'')+
+          (rows?'<h4>查询 / 路径参数</h4><table><tr><th>名称</th><th>位置</th><th>必填</th><th>类型</th><th>说明</th></tr>'+rows+'</table>':'')+
+          (bodyRows?'<h4>请求体 (application/json)</h4><table><tr><th>字段</th><th>位置</th><th>必填</th><th>类型</th><th>说明</th></tr>'+bodyRows+'</table>':'')+
+          '<button class="trybtn" onclick="tryIt(this)" data-method="'+m+'" data-path="'+p+'">试一试</button>'+
+          '<div class="resp"></div>'+
+        '</div>';
+      wrap.appendChild(el);
+    });
+  });
+  wrap.querySelectorAll('.ep-head').forEach(h=>h.addEventListener('click',()=>h.parentElement.classList.toggle('open')));
+  document.getElementById('search').addEventListener('input',function(){
+    const q=this.value.toLowerCase();
+    wrap.querySelectorAll('.ep').forEach(e=>{ e.style.display = e.textContent.toLowerCase().includes(q)?'':'none'; });
+  });
+}
+async function tryIt(btn){
+  const method=btn.dataset.method, path=btn.dataset.path;
+  const resp=btn.nextElementSibling;
+  resp.style.display='block';
+  resp.textContent='请求中…';
+  try{
+    const opt={method:method.toUpperCase()};
+    if(['post','put','patch'].includes(method)){
+      opt.headers={'Content-Type':'application/json'};
+      opt.body='{}';
+    }
+    const r=await fetch(path,opt);
+    const txt=await r.text();
+    let pretty=txt;
+    try{pretty=JSON.stringify(JSON.parse(txt),null,2);}catch(e){}
+    resp.textContent='['+r.status+'] '+pretty;
+  }catch(e){
+    resp.textContent='错误: '+e.message;
+  }
+}
+load();
+</script>
+</body>
+</html>
