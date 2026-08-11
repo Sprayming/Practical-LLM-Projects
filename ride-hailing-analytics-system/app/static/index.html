@@ -521,13 +521,13 @@
                 <h2>📊 今日概览</h2>
                 <div class="charts-grid">
                     <div class="chart-container">
-                        <h3>今日查询趋势</h3>
+                        <h3>订单量趋势（近14天）</h3>
                         <div class="chart-wrapper">
                             <canvas id="todayTrendChart"></canvas>
                         </div>
                     </div>
                     <div class="chart-container">
-                        <h3>查询状态分布</h3>
+                        <h3>卡券核销状态</h3>
                         <div class="chart-wrapper">
                             <canvas id="statusChart"></canvas>
                         </div>
@@ -560,7 +560,7 @@
                         </div>
                     </div>
                     <div class="chart-container">
-                        <h3>核销趋势（近7天）</h3>
+                        <h3>核销趋势（近14天）</h3>
                         <div class="chart-wrapper">
                             <canvas id="trendChart"></canvas>
                         </div>
@@ -609,6 +609,7 @@
     <script>
         // 全局变量
         let charts = {};
+        let dashboardData = null;
         let currentHistoryPage = 1;
 
         // Tab切换
@@ -623,14 +624,13 @@
             
             // 加载对应数据
             if (tabName === 'history') loadHistory();
-            if (tabName === 'charts') initAllCharts();
+            if (tabName === 'charts') renderAllCharts();
         }
 
         // 初始化页面
         document.addEventListener('DOMContentLoaded', function() {
             loadDashboard();
-            initTodayCharts();
-            
+
             // 回车查询
             document.getElementById('question-input').addEventListener('keypress', function(e) {
                 if (e.key === 'Enter') submitQuery();
@@ -658,16 +658,22 @@
             try {
                 const response = await fetch('/api/dashboard/');
                 const data = await response.json();
-                
+                dashboardData = data;
+
                 document.getElementById('total-coupons').textContent = formatNumber(data.total_coupons || 0);
                 document.getElementById('total-redemptions').textContent = formatNumber(data.total_redemptions || 0);
                 document.getElementById('redemption-rate').textContent = (data.redemption_rate || 0).toFixed(1) + '%';
-                
-                // 模拟趋势数据
-                document.getElementById('coupons-trend').textContent = '↑ 12% 较昨日';
-                document.getElementById('redemptions-trend').textContent = '↑ 8% 较昨日';
-                document.getElementById('rate-trend').textContent = '↑ 2% 较昨日';
+                document.getElementById('total-drivers').textContent = formatNumber(data.total_drivers || 0);
+
+                // 卡片副标题（基于真实数据）
+                document.getElementById('coupons-trend').textContent = '累计已发放';
+                document.getElementById('redemptions-trend').textContent = '累计已核销';
+                document.getElementById('rate-trend').textContent = '整体核销率';
                 document.getElementById('rate-trend').className = 'trend up';
+                document.getElementById('drivers-trend').textContent = '注册司机总数';
+
+                // 首屏图表（仪表盘 Tab）
+                renderTodayCharts();
             } catch (error) {
                 console.error('加载仪表盘失败:', error);
             }
@@ -681,17 +687,20 @@
             return num.toLocaleString();
         }
 
-        // 初始化今日图表
-        function initTodayCharts() {
-            // 今日查询趋势
+        // 渲染仪表盘首屏图表（真实数据）
+        function renderTodayCharts() {
+            if (!dashboardData) return;
+
+            // 订单量趋势（近14天）
             const todayCtx = document.getElementById('todayTrendChart').getContext('2d');
+            const ot = dashboardData.order_trend_14d || [];
             charts.todayTrend = new Chart(todayCtx, {
                 type: 'line',
                 data: {
-                    labels: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '现在'],
+                    labels: ot.map(r => r.date),
                     datasets: [{
-                        label: '查询次数',
-                        data: [5, 2, 15, 45, 38, 28, 32],
+                        label: '订单数',
+                        data: ot.map(r => r.count),
                         borderColor: '#667eea',
                         backgroundColor: 'rgba(102, 126, 234, 0.1)',
                         tension: 0.4,
@@ -701,19 +710,21 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false } }
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
                 }
             });
 
-            // 查询状态分布
+            // 卡券核销状态
             const statusCtx = document.getElementById('statusChart').getContext('2d');
+            const rs = dashboardData.redemption_status || {};
             charts.status = new Chart(statusCtx, {
                 type: 'doughnut',
                 data: {
-                    labels: ['成功', '失败', '进行中'],
+                    labels: ['已核销', '未核销'],
                     datasets: [{
-                        data: [85, 10, 5],
-                        backgroundColor: ['#10b981', '#ef4444', '#f59e0b']
+                        data: [rs.redeemed || 0, rs.unredeemed || 0],
+                        backgroundColor: ['#10b981', '#ef4444']
                     }]
                 },
                 options: {
@@ -723,34 +734,42 @@
             });
         }
 
-        // 初始化所有图表
-        function initAllCharts() {
-            // 卡券面值分布饼图
+        // 渲染数据图表 Tab（真实数据）
+        function renderAllCharts() {
+            if (!dashboardData) {
+                // 数据未就绪时先拉一次再渲染
+                loadDashboard().then(renderAllCharts);
+                return;
+            }
+
+            // 各券种发放量
             if (!charts.coupon) {
+                const cv = dashboardData.coupon_value_distribution || [];
                 const couponCtx = document.getElementById('couponChart').getContext('2d');
                 charts.coupon = new Chart(couponCtx, {
                     type: 'doughnut',
                     data: {
-                        labels: ['10元', '20元', '50元', '100元'],
+                        labels: cv.map(r => r.name),
                         datasets: [{
-                            data: [35, 25, 25, 15],
-                            backgroundColor: ['#667eea', '#764ba2', '#f093fb', '#f5576c']
+                            data: cv.map(r => r.count),
+                            backgroundColor: ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#fbbf24', '#10b981', '#ef4444']
                         }]
                     },
                     options: { responsive: true, maintainAspectRatio: false }
                 });
             }
 
-            // 核销趋势折线图
+            // 核销趋势（近14天）
             if (!charts.trend) {
+                const rt = dashboardData.redemption_trend_14d || [];
                 const trendCtx = document.getElementById('trendChart').getContext('2d');
                 charts.trend = new Chart(trendCtx, {
                     type: 'line',
                     data: {
-                        labels: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
+                        labels: rt.map(r => r.date),
                         datasets: [{
-                            label: '核销数量',
-                            data: [120, 190, 170, 220, 280, 350, 320],
+                            label: '核销数',
+                            data: rt.map(r => r.count),
                             borderColor: '#667eea',
                             backgroundColor: 'rgba(102, 126, 234, 0.1)',
                             tension: 0.4,
@@ -763,14 +782,15 @@
 
             // 订单金额分布
             if (!charts.amount) {
+                const am = dashboardData.order_amount_distribution || [];
                 const amountCtx = document.getElementById('amountChart').getContext('2d');
                 charts.amount = new Chart(amountCtx, {
                     type: 'bar',
                     data: {
-                        labels: ['0-20', '20-50', '50-100', '100-200', '200+'],
+                        labels: am.map(r => r.label),
                         datasets: [{
                             label: '订单数',
-                            data: [150, 280, 420, 180, 60],
+                            data: am.map(r => r.count),
                             backgroundColor: ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#fbbf24']
                         }]
                     },
@@ -778,22 +798,21 @@
                 });
             }
 
-            // 司机活跃度
+            // 司机活跃度（Top 司机订单数，真实数据）
             if (!charts.driver) {
+                const da = dashboardData.driver_activity || [];
                 const driverCtx = document.getElementById('driverChart').getContext('2d');
                 charts.driver = new Chart(driverCtx, {
-                    type: 'radar',
+                    type: 'bar',
                     data: {
-                        labels: ['接单率', '准时率', '评分', '活跃度', '投诉率'],
+                        labels: da.map(r => r.name),
                         datasets: [{
-                            label: '平均值',
-                            data: [85, 92, 4.8, 78, 2],
-                            backgroundColor: 'rgba(102, 126, 234, 0.2)',
-                            borderColor: '#667eea',
-                            pointBackgroundColor: '#667eea'
+                            label: '订单数',
+                            data: da.map(r => r.order_count),
+                            backgroundColor: '#667eea'
                         }]
                     },
-                    options: { responsive: true, maintainAspectRatio: false }
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
                 });
             }
         }

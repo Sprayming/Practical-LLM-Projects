@@ -31,3 +31,11 @@ class DashboardResponse(BaseModel):
     redemption_rate: float
     coupon_performance: list[dict]
     driver_stats: dict
+    # 以下字段为前端图表提供真实数据（兼容旧调用，默认空容器）
+    total_drivers: int = 0
+    order_amount_distribution: list[dict] = []
+    coupon_value_distribution: list[dict] = []
+    redemption_status: dict = {}
+    order_trend_14d: list[dict] = []
+    redemption_trend_14d: list[dict] = []
+    driver_activity: list[dict] = []

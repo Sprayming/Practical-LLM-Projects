@@ -845,6 +845,13 @@ pytest tests/test_nl2sql_eval.py
 - **修复**：新增**完全自包含、零外网依赖**的离线文档页 `app/static/apidocs.html`（内嵌 CSS/JS，仅 fetch 同源 `/openapi.json` 渲染），路由 `/apiview` 直接返回；支持按方法着色、参数表、搜索、"试一试"发请求。
 - **教训**：面向演示 / 内网交付的 API 文档，优先用自托管 UI 资源，别依赖公共 CDN——也顺带避免 CDN 故障或网络隔离导致的不可用。
 
+### 8. 前端仪表盘图表依赖外网 CDN 且用硬编码假数据
+
+- **现象**：仪表盘（原 `/` 首页）打开后所有图表区域空白；且即便图表库能加载，展示的也是写死的假数据（如"今日查询趋势" `[5,2,15...]`、"卡券面值分布" `[35,25,25,15]`），与数据库真实数据完全不符。
+- **根因**：① `index.html` 第 7 行用 `<script src="https://cdn.jsdelivr.net/npm/chart.js">` 加载 Chart.js；离线 / 沙箱 / 内网环境拉不到 CDN，图表库缺失 → 全部空白（与第 7 条 Swagger 同一类坑）。② 6 个图表的 `data` 数组都是前端写死的 mock 值，后端 `/api/dashboard/` 当时只返回卡片汇总，没给图表维度数据。
+- **修复**：① 删掉 chart.js CDN，在 `index.html` 内联一个轻量 `Chart` 类（原生 canvas 画 line/bar/doughnut/radar），现有 `new Chart(...)` 调用一行不用改；② 扩展后端 `/api/dashboard/`（`app/api/dashboard.py` + `models.py` 的 `DashboardResponse`）新增 6 个真实数据字段（`order_amount_distribution` / `coupon_value_distribution` / `redemption_status` / `order_trend_14d` / `redemption_trend_14d` / `driver_activity`，均带默认值保持兼容）；前端改为 `fetch` 真实数据渲染；③ 语义纠偏：把"今日查询趋势"改为"订单量趋势（近14天）"、"查询状态分布"改为"卡券核销状态"、"司机活跃度"雷达图改为更贴合真实订单数的柱状图。
+- **教训**：前端图表库别依赖公共 CDN（同第 7 条）；**更关键**——BI/Dashboard 图表的"数据来源"必须是后端接口而非前端写死，否则演示时数字对不上、换数据还要改代码。给前端加图表字段时用"新字段 + 默认值"，避免破坏旧调用方。
+
 ## 贡献指南
 
 1. Fork 项目
