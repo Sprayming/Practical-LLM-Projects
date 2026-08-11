@@ -112,7 +112,7 @@
 
 | 层级 | 技术 | 说明 |
 |------|------|------|
-| **前端** | HTML/CSS/JS + Chart.js | 响应式Web界面，4种图表 |
+| **前端** | HTML/CSS/JS（零外网依赖，原生Canvas图表） | 对话式问答页 `chat.html` + 数据仪表盘 `index.html`，离线可用 |
 | **后端** | FastAPI + Uvicorn | 高性能异步Python Web框架 |
 | **AI引擎** | DeepSeek LLM | 可替换为OpenAI/本地模型 |
 | **Agent框架** | 多Agent协作 | 4个Agent自主决策、消息传递、共享记忆 |
@@ -125,10 +125,10 @@
 ## 系统特性
 
 ### 核心功能
-- **自然语言查询**：用日常语言提问，自动生成SQL并分析数据
+- **对话式问答（NL2SQL）**：在网页聊天框用日常语言提问，自动生成SQL、查询数据库并返回数据表 + 数据解读 + 运营建议（对标 RAG 问答体验）
 - **智能分析**：LLM驱动的数据解读和业务洞察
 - **运营建议**：基于数据的可执行运营策略
-- **可视化仪表盘**：直观的数据展示和图表
+- **可视化仪表盘**：直观的数据展示和图表（作为次级页 /dashboard）
 
 ### 业务功能
 - **真实数据模拟**：模拟网约车运营数据（司机/订单/卡券/核销）
@@ -191,9 +191,10 @@
    python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8001
    
    # 访问应用
-   # - Web界面: http://127.0.0.1:8001
-   # - API文档: http://127.0.0.1:8001/docs
-   # - ReDoc文档: http://127.0.0.1:8001/redoc
+   # - 问答首页(对话式NL2SQL): http://127.0.0.1:8001/
+   # - 数据仪表盘(次级页): http://127.0.0.1:8001/dashboard
+   # - 离线API文档(推荐): http://127.0.0.1:8001/apiview
+   # - Swagger文档(需外网CDN): http://127.0.0.1:8001/docs
    ```
 
 ### 方式二：Docker部署
@@ -356,8 +357,9 @@ ride-hailing-analytics-system/
 │   │   └── background.py        # 后台任务管理
 │   ├── db/                      # 数据库连接
 │   │   └── connection.py        # SQLite连接管理
-│   ├── static/                  # 静态文件
-│   │   ├── index.html           # 前端界面（四Tab布局）
+│   ├── static/                  # 静态文件（均零外网依赖）
+│   │   ├── chat.html            # 对话式问答前端（首页 /，调用 /api/query/）
+│   │   ├── index.html           # 数据仪表盘前端（/dashboard，原生Canvas图表）
 │   │   └── apidocs.html         # 离线自包含 API 文档页（/apiview，不依赖外网CDN）
 │   ├── config.py                # 应用配置
 │   ├── models.py                # Pydantic数据模型
