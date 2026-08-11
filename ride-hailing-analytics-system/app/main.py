@@ -112,19 +112,30 @@ if os.path.exists(static_dir):
 
 @app.get("/", tags=["Root"])
 async def root():
-    """根端点"""
+    """根端点 - 问答聊天首页"""
     from fastapi.responses import FileResponse
-    import os
-    
-    static_file = os.path.join(os.path.dirname(__file__), "static", "index.html")
+
+    static_file = os.path.join(os.path.dirname(__file__), "static", "chat.html")
     if os.path.exists(static_file):
         return FileResponse(static_file)
-    
+
     return {
         "message": "Ride-Hailing Analytics System API",
         "version": "0.1.0",
-        "docs": "/docs"
+        "docs": "/docs",
     }
+
+
+@app.get("/dashboard", tags=["Root"])
+async def dashboard_page():
+    """数据分析仪表盘（次级页）"""
+    from fastapi.responses import FileResponse
+
+    static_file = os.path.join(os.path.dirname(__file__), "static", "index.html")
+    if os.path.exists(static_file):
+        return FileResponse(static_file)
+
+    return {"message": "index.html not found"}
 
 
 @app.get("/apiview", tags=["Root"])

@@ -4,7 +4,119 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>网约车数据分析系统</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+    // 轻量内联图表库（零外网依赖），兼容 new Chart(ctx, config) 调用，替代 chart.js CDN
+    class Chart {
+      constructor(ctx, config) {
+        this.ctx = ctx; this.canvas = ctx.canvas; this.config = config; this.type = config.type;
+        const opt = config.options || {};
+        this.responsive = !!opt.responsive;
+        this.legend = !(opt.plugins && opt.plugins.legend && opt.plugins.legend.display === false);
+        this.render();
+        if (this.responsive) window.addEventListener('resize', () => this.render());
+      }
+      _size() {
+        const c = this.canvas; c.style.width = '100%'; c.style.height = '100%';
+        const w = c.clientWidth || (c.parentElement ? c.parentElement.clientWidth : 300) || 300;
+        const h = c.clientHeight || (c.parentElement ? c.parentElement.clientHeight : 300) || 300;
+        const dpr = window.devicePixelRatio || 1;
+        c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
+        this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        return { w, h };
+      }
+      render() {
+        const ctx = this.ctx; const { w, h } = this._size(); ctx.clearRect(0, 0, w, h);
+        const cfg = this.config, data = cfg.data;
+        const labels = data.labels || [];
+        const ds = (data.datasets && data.datasets[0]) || { data: [] };
+        const vals = ds.data || [];
+        const colors = ds.backgroundColor || (ds.borderColor ? [ds.borderColor] : ['#667eea']);
+        switch (this.type) {
+          case 'line': this._line(ctx, w, h, labels, vals, ds); break;
+          case 'bar': this._bar(ctx, w, h, labels, vals, colors); break;
+          case 'doughnut': case 'pie': this._arc(ctx, w, h, vals, labels, colors, this.type === 'doughnut'); break;
+          case 'radar': this._radar(ctx, w, h, labels, vals, ds); break;
+        }
+      }
+      _line(ctx, w, h, labels, vals, ds) {
+        const pad = 30, cw = w - pad * 2, ch = h - pad * 2, n = vals.length;
+        const max = Math.max.apply(null, vals.concat([1]));
+        const x = i => pad + (n <= 1 ? cw / 2 : cw * i / (n - 1));
+        const y = v => pad + ch - (v / max) * ch;
+        if (ds.fill) {
+          ctx.beginPath(); ctx.moveTo(x(0), y(vals[0]));
+          for (let i = 1; i < n; i++) ctx.lineTo(x(i), y(vals[i]));
+          ctx.lineTo(x(n - 1), pad + ch); ctx.lineTo(x(0), pad + ch); ctx.closePath();
+          ctx.fillStyle = ds.backgroundColor || 'rgba(102,126,234,0.1)'; ctx.fill();
+        }
+        ctx.beginPath(); ctx.moveTo(x(0), y(vals[0]));
+        for (let i = 1; i < n; i++) ctx.lineTo(x(i), y(vals[i]));
+        ctx.strokeStyle = ds.borderColor || '#667eea'; ctx.lineWidth = 2; ctx.stroke();
+        for (let i = 0; i < n; i++) { ctx.beginPath(); ctx.arc(x(i), y(vals[i]), 3, 0, 7); ctx.fillStyle = ds.borderColor || '#667eea'; ctx.fill(); }
+        ctx.fillStyle = '#666'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+        const step = Math.ceil(n / 6);
+        for (let i = 0; i < n; i += step) ctx.fillText(labels[i] || '', x(i), h - 10);
+      }
+      _bar(ctx, w, h, labels, vals, colors) {
+        const pad = 30, cw = w - pad * 2, ch = h - pad * 2, n = vals.length;
+        const max = Math.max.apply(null, vals.concat([1]));
+        const bw = cw / n * 0.6;
+        for (let i = 0; i < n; i++) {
+          const bx = pad + cw * i / n + (cw / n - bw) / 2, bh = vals[i] / max * ch, by = pad + ch - bh;
+          ctx.fillStyle = Array.isArray(colors) ? colors[i % colors.length] : colors; ctx.fillRect(bx, by, bw, bh);
+          ctx.fillStyle = '#666'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(labels[i] || '', bx + bw / 2, h - 10);
+        }
+      }
+      _arc(ctx, w, h, vals, labels, colors, doughnut) {
+        const total = vals.reduce((a, b) => a + b, 0) || 1;
+        const cx = doughnut ? w * 0.32 : w / 2, cy = h / 2, r = Math.min(w * 0.6, h) / 2 - 10;
+        let a0 = -Math.PI / 2;
+        for (let i = 0; i < vals.length; i++) {
+          const a1 = a0 + vals[i] / total * Math.PI * 2;
+          ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, r, a0, a1); ctx.closePath();
+          ctx.fillStyle = Array.isArray(colors) ? colors[i % colors.length] : colors; ctx.fill(); a0 = a1;
+        }
+        if (doughnut) { ctx.beginPath(); ctx.arc(cx, cy, r * 0.55, 0, 7); ctx.fillStyle = '#fff'; ctx.fill(); }
+        if (this.legend) {
+          const lx = doughnut ? w * 0.62 : 10; let ly = cy - vals.length * 8;
+          ctx.font = '11px sans-serif'; ctx.textAlign = 'left';
+          for (let i = 0; i < vals.length; i++) {
+            ctx.fillStyle = Array.isArray(colors) ? colors[i % colors.length] : colors; ctx.fillRect(lx, ly + i * 16, 10, 10);
+            ctx.fillStyle = '#333'; ctx.fillText((labels[i] || '') + ' ' + vals[i], lx + 14, ly + i * 16 + 9);
+          }
+        }
+      }
+      _radar(ctx, w, h, labels, vals, ds) {
+        const cx = w / 2, cy = h / 2, R = Math.min(w, h) / 2 - 30, n = labels.length;
+        const max = Math.max.apply(null, vals.concat([1]));
+        ctx.strokeStyle = '#ddd';
+        for (let g = 1; g <= 4; g++) {
+          ctx.beginPath();
+          for (let i = 0; i <= n; i++) {
+            const ang = -Math.PI / 2 + i * 2 * Math.PI / n, rr = R * g / 4;
+            const x = cx + rr * Math.cos(ang), y = cy + rr * Math.sin(ang);
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+        }
+        ctx.fillStyle = '#666'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+        for (let i = 0; i < n; i++) {
+          const ang = -Math.PI / 2 + i * 2 * Math.PI / n;
+          ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + R * Math.cos(ang), cy + R * Math.sin(ang)); ctx.strokeStyle = '#eee'; ctx.stroke();
+          ctx.fillText(labels[i] || '', cx + (R + 14) * Math.cos(ang), cy + (R + 14) * Math.sin(ang) + 3);
+        }
+        ctx.beginPath();
+        for (let i = 0; i <= n; i++) {
+          const ang = -Math.PI / 2 + i * 2 * Math.PI / n, rr = R * (vals[i % n] / max);
+          const x = cx + rr * Math.cos(ang), y = cy + rr * Math.sin(ang);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fillStyle = ds.backgroundColor || 'rgba(102,126,234,0.2)'; ctx.fill();
+        ctx.strokeStyle = ds.borderColor || '#667eea'; ctx.lineWidth = 2; ctx.stroke();
+      }
+    }
+    </script>
     <style>
         * {
             margin: 0;
