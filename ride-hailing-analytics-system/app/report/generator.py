@@ -34,7 +34,7 @@ class ReportGenerator:
             # 总订单数
             cursor.execute("""
                 SELECT COUNT(*) FROM orders 
-                WHERE DATE(order_date) BETWEEN ? AND ?
+                WHERE DATE(order_time) BETWEEN ? AND ?
             """, (start_date, end_date))
             metrics["total_orders"] = cursor.fetchone()[0]
             
@@ -42,7 +42,7 @@ class ReportGenerator:
             cursor.execute("""
                 SELECT COUNT(*) FROM orders 
                 WHERE status = 'completed' 
-                AND DATE(order_date) BETWEEN ? AND ?
+                AND DATE(order_time) BETWEEN ? AND ?
             """, (start_date, end_date))
             metrics["completed_orders"] = cursor.fetchone()[0]
             
@@ -54,9 +54,9 @@ class ReportGenerator:
             
             # 总订单金额
             cursor.execute("""
-                SELECT SUM(amount) FROM orders 
-                WHERE status = 'completed' 
-                AND DATE(order_date) BETWEEN ? AND ?
+                SELECT SUM(order_amount) FROM orders
+                WHERE status = 'completed'
+                AND DATE(order_time) BETWEEN ? AND ?
             """, (start_date, end_date))
             result = cursor.fetchone()[0]
             metrics["total_amount"] = result if result else 0
@@ -70,14 +70,14 @@ class ReportGenerator:
             # 活跃司机数
             cursor.execute("""
                 SELECT COUNT(DISTINCT driver_id) FROM orders 
-                WHERE DATE(order_date) BETWEEN ? AND ?
+                WHERE DATE(order_time) BETWEEN ? AND ?
             """, (start_date, end_date))
             metrics["active_drivers"] = cursor.fetchone()[0]
             
             # 总卡券发放数
             cursor.execute("""
                 SELECT COUNT(*) FROM coupons 
-                WHERE DATE(issue_date) BETWEEN ? AND ?
+                WHERE DATE(issued_at) BETWEEN ? AND ?
             """, (start_date, end_date))
             metrics["total_coupons"] = cursor.fetchone()[0]
             
@@ -85,7 +85,7 @@ class ReportGenerator:
             cursor.execute("""
                 SELECT COUNT(*) FROM coupons 
                 WHERE status = 'used' 
-                AND DATE(issue_date) BETWEEN ? AND ?
+                AND DATE(issued_at) BETWEEN ? AND ?
             """, (start_date, end_date))
             metrics["used_coupons"] = cursor.fetchone()[0]
             
@@ -113,21 +113,21 @@ class ReportGenerator:
                 # 当日订单数
                 cursor.execute("""
                     SELECT COUNT(*) FROM orders 
-                    WHERE DATE(order_date) = ? AND status = 'completed'
+                    WHERE DATE(order_time) = ? AND status = 'completed'
                 """, (date,))
                 orders = cursor.fetchone()[0]
                 
                 # 当日订单金额
                 cursor.execute("""
-                    SELECT SUM(amount) FROM orders 
-                    WHERE DATE(order_date) = ? AND status = 'completed'
+                    SELECT SUM(order_amount) FROM orders
+                    WHERE DATE(order_time) = ? AND status = 'completed'
                 """, (date,))
                 amount = cursor.fetchone()[0] or 0
                 
                 # 当日活跃司机
                 cursor.execute("""
                     SELECT COUNT(DISTINCT driver_id) FROM orders 
-                    WHERE DATE(order_date) = ?
+                    WHERE DATE(order_time) = ?
                 """, (date,))
                 drivers = cursor.fetchone()[0]
                 
@@ -151,15 +151,15 @@ class ReportGenerator:
             cursor.execute("""
                 SELECT 
                     ct.name as coupon_name,
-                    ct.value as coupon_value,
+                    ct.face_value as coupon_value,
                     COUNT(DISTINCT c.id) as total_issued,
                     COUNT(DISTINCT r.id) as total_redeemed,
                     ROUND(COUNT(DISTINCT r.id) * 100.0 / COUNT(DISTINCT c.id), 2) as redemption_rate
                 FROM coupon_types ct
                 LEFT JOIN coupons c ON c.coupon_type_id = ct.id
                 LEFT JOIN redemptions r ON r.coupon_id = c.id
-                GROUP BY ct.id, ct.name, ct.value
-                ORDER BY ct.value
+                GROUP BY ct.id, ct.name, ct.face_value
+                ORDER BY ct.face_value
             """)
             
             return [dict(row) for row in cursor.fetchall()]
@@ -176,8 +176,8 @@ class ReportGenerator:
                 SELECT 
                     d.name as driver_name,
                     COUNT(o.id) as order_count,
-                    SUM(o.amount) as total_amount,
-                    AVG(o.amount) as avg_amount
+                    SUM(o.order_amount) as total_amount,
+                    AVG(o.order_amount) as avg_amount
                 FROM drivers d
                 JOIN orders o ON o.driver_id = d.id
                 WHERE o.status = 'completed'
@@ -198,9 +198,9 @@ class ReportGenerator:
         try:
             cursor.execute("""
                 SELECT 
-                    CAST(strftime('%H', order_date) AS INTEGER) as hour,
+                    CAST(strftime('%H', order_time) AS INTEGER) as hour,
                     COUNT(*) as order_count,
-                    SUM(amount) as total_amount
+                    SUM(order_amount) as total_amount
                 FROM orders
                 WHERE status = 'completed'
                 GROUP BY hour
@@ -386,8 +386,8 @@ def get_top_drivers(limit: int = 10) -> List[Dict]:
             SELECT 
                 d.name as driver_name,
                 COUNT(o.id) as order_count,
-                SUM(o.amount) as total_amount,
-                AVG(o.amount) as avg_amount
+                SUM(o.order_amount) as total_amount,
+                AVG(o.order_amount) as avg_amount
             FROM drivers d
             JOIN orders o ON o.driver_id = d.id
             WHERE o.status = 'completed'
@@ -411,9 +411,9 @@ def get_hourly_distribution() -> List[Dict]:
         cursor = conn.cursor()
         cursor.execute("""
             SELECT 
-                CAST(strftime('%H', order_date) AS INTEGER) as hour,
+                CAST(strftime('%H', order_time) AS INTEGER) as hour,
                 COUNT(*) as order_count,
-                SUM(amount) as total_amount
+                SUM(order_amount) as total_amount
             FROM orders
             WHERE status = 'completed'
             GROUP BY hour
