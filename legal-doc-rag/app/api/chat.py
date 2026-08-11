@@ -134,6 +134,7 @@ async def call_llm(prompt: str) -> str:
 
 
 def _get_memory(tenant_id, embedder):
+    """获取内存系统"""
     global _memory_cache
     memory_system = _memory_cache.get(tenant_id)
     if memory_system is None:
@@ -148,6 +149,7 @@ def _get_memory(tenant_id, embedder):
 
 # 可以在应用启动时添加一个定时任务
 async def cleanup_cache():
+    """定期清理内存缓存"""
     while True:
         await asyncio.sleep(7200)  # 每2小时清理一次
         if hasattr(_memory_cache, "cleanup"):
