@@ -117,7 +117,10 @@ async def root():
 
     static_file = os.path.join(os.path.dirname(__file__), "static", "chat.html")
     if os.path.exists(static_file):
-        return FileResponse(static_file)
+        return FileResponse(
+            static_file,
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
 
     return {
         "message": "Ride-Hailing Analytics System API",
@@ -133,7 +136,10 @@ async def dashboard_page():
 
     static_file = os.path.join(os.path.dirname(__file__), "static", "index.html")
     if os.path.exists(static_file):
-        return FileResponse(static_file)
+        return FileResponse(
+            static_file,
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
 
     return {"message": "index.html not found"}
 
@@ -144,7 +150,10 @@ async def api_view():
     from fastapi.responses import FileResponse
     f = os.path.join(os.path.dirname(__file__), "static", "apidocs.html")
     if os.path.exists(f):
-        return FileResponse(f)
+        return FileResponse(
+            f,
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
     return {"message": "apidocs.html not found"}
 
 
