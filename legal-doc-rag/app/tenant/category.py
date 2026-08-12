@@ -2,24 +2,24 @@
 category.py —— Legal-DOC-RAG 文档分类管理
 
 【作用与功能】
-本模块提供文档分类（Category）的增删查，以及文档与分类的关联管理。分类
-以 (tenant_id, name) 唯一约束实现租户隔离，文档（documents 表）通过
+本模块提供文档分类(Category)的增删查，以及文档与分类的关联管理。分类
+以 (tenant_id, name) 唯一约束实现租户隔离，文档(documents 表)通过
 category_id 归属到某个分类，从而支撑按分类组织与检索文档。底层使用
 users.db 的 document_categories / documents 两张表。
 
 【主要组成】
-- `_db_path`：users.db 路径
-- `create_category` / `list_categories` / `delete_category`：分类 CRUD
-- `set_document_category`：为文档设置/取消分类（不存在则插入文档记录）
-- `get_document_category` / `list_documents_by_category`：分类与文档的查询
+- `_db_path`:users.db 路径
+- `create_category` / `list_categories` / `delete_category`:分类 CRUD
+- `set_document_category`:为文档设置/取消分类(不存在则插入文档记录)
+- `get_document_category` / `list_documents_by_category`:分类与文档的查询
 
 【适用场景】
-- 场景1：用户在前台创建/管理文档分类体系
-- 场景2：上传或整理文档时归类，便于后续按分类检索
+- 场景1:用户在前台创建/管理文档分类体系
+- 场景2:上传或整理文档时归类，便于后续按分类检索
 
 【依赖关系】
-- 上游调用方：分类管理路由、文档上传/检索接口
-- 下游依赖：sqlite3、users.db（document_categories/documents 表）
+- 上游调用方:分类管理路由、文档上传/检索接口
+- 下游依赖:sqlite3、users.db(document_categories/documents 表)
 """
 import sqlite3
 from pathlib import Path
@@ -28,7 +28,7 @@ from loguru import logger
 
 
 def _db_path() -> str:
-    """返回 users.db 的磁盘路径（位于项目根的 tenant_data 目录）。
+    """返回 users.db 的磁盘路径(位于项目根的 tenant_data 目录)。
 
     参数:
         无
@@ -54,7 +54,7 @@ def create_category(tenant_id: str, name: str, description: str = None) -> Tuple
     document_categories 表并返回成功。
 
     参数:
-        tenant_id (str): 租户标识（隔离分类）
+        tenant_id (str): 租户标识(隔离分类)
         name (str): 分类名称
         description (str, 可选): 分类描述
 
@@ -62,7 +62,7 @@ def create_category(tenant_id: str, name: str, description: str = None) -> Tuple
         Tuple[bool, str]: (是否成功, 消息)
 
     异常:
-        无（数据库错误被捕获并回滚）
+        无(数据库错误被捕获并回滚)
     适用场景:
         - 用户新建文档分类
     """
@@ -127,17 +127,17 @@ def delete_category(tenant_id: str, category_id: int) -> Tuple[bool, str]:
     """删除指定分类。
 
     先确认分类存在且属于该租户；删除前将归属该分类的文档 category_id 置空
-    （解除归类但不删文档），随后删除分类记录。
+    (解除归类但不删文档)，随后删除分类记录。
 
     参数:
-        tenant_id (str): 租户标识（权限校验）
+        tenant_id (str): 租户标识(权限校验)
         category_id (int): 待删除的分类 id
 
     返回:
         Tuple[bool, str]: (是否成功, 消息)
 
     异常:
-        无（数据库错误被捕获并回滚）
+        无(数据库错误被捕获并回滚)
     适用场景:
         - 用户删除不再需要的分类
     """
@@ -172,7 +172,7 @@ def delete_category(tenant_id: str, category_id: int) -> Tuple[bool, str]:
 
 
 def set_document_category(tenant_id: str, filename: str, category_id: int = None) -> Tuple[bool, str]:
-    """为文档设置（或取消）分类。
+    """为文档设置(或取消)分类。
 
     若提供了 category_id 先校验其存在；再查找文档记录——存在则更新其
     category_id，不存在则以 (tenant_id, filename, category_id) 插入一条文档
@@ -187,7 +187,7 @@ def set_document_category(tenant_id: str, filename: str, category_id: int = None
         Tuple[bool, str]: (是否成功, 消息)
 
     异常:
-        无（数据库错误被捕获并回滚）
+        无(数据库错误被捕获并回滚)
     适用场景:
         - 上传/整理文档时归类到分类
     """
@@ -273,7 +273,7 @@ def get_document_category(tenant_id: str, filename: str) -> Optional[Dict]:
 def list_documents_by_category(tenant_id: str, category_id: int = None) -> List[Dict]:
     """列出文档，可按要求按分类过滤。
 
-    返回该租户下（或指定分类下）的文档列表，每条含文件名、分类名称与分类
+    返回该租户下(或指定分类下)的文档列表，每条含文件名、分类名称与分类
     id；未归类的文档其分类名显示为「未分类」。
 
     参数:

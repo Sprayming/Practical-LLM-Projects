@@ -1,16 +1,16 @@
 """
-test_hybrid_retriever_v3.py —— 对 app.retrieval.hybrid_retriever 混合检索器的单元测试（v3）。
+test_hybrid_retriever_v3.py —— 对 app.retrieval.hybrid_retriever 混合检索器的单元测试(v3)。
 
 【测试覆盖范围】
-- Reranker：模型加载成功 / 失败时的 available 与 model 状态；无模型、空文档、
-  有模型时的 rerank 行为（保持顺序 / 返回空 / 按分数排序）。
-- HybridRetriever：初始化参数正确性；中英文分词（小写按词、中文单字+bigram、
-  停用词过滤、中英混合）；稀疏(BM25)检索、稠密检索与分数归一化；RRF 融合；
+- Reranker:模型加载成功 / 失败时的 available 与 model 状态；无模型、空文档、
+  有模型时的 rerank 行为(保持顺序 / 返回空 / 按分数排序)。
+- HybridRetriever:初始化参数正确性；中英文分词(小写按词、中文单字+bigram、
+  停用词过滤、中英混合)；稀疏(BM25)检索、稠密检索与分数归一化；RRF 融合；
   retrieve 与 LangChain invoke 接口的一致性。
 
 【适用场景】
-- 用 pytest 运行，覆盖混合检索与重排序的功能、边界（空文档列表）与异常
-  （CrossEncoder 加载失败）场景。
+- 用 pytest 运行，覆盖混合检索与重排序的功能、边界(空文档列表)与异常
+  (CrossEncoder 加载失败)场景。
 
 【依赖】
 - 依赖 app.retrieval.hybrid_retriever，使用 unittest.mock 桩化 BM25Okapi 与
@@ -22,14 +22,14 @@ from langchain_core.documents import Document
 
 
 class TestReranker:
-    """重排序器（Reranker）类的测试"""
+    """重排序器(Reranker)类的测试"""
 
     @patch("sentence_transformers.CrossEncoder")
     def test_reranker_init_success(self, mock_ce):
         """
         测试重排序器初始化成功
         
-        验证：
+        验证:
         1. CrossEncoder 模型正确加载
         2. available 标志设置为 True
         3. model 属性正确设置
@@ -48,7 +48,7 @@ class TestReranker:
         """
         测试重排序器初始化失败时的处理
         
-        验证：
+        验证:
         1. 异常被正确捕获
         2. available 标志设置为 False
         3. model 属性设置为 None
@@ -63,8 +63,8 @@ class TestReranker:
         """
         测试没有可用模型时的重排序
         
-        验证：
-        1. 返回原始文档（不排序）
+        验证:
+        1. 返回原始文档(不排序)
         2. 保持文档顺序
         """
         from app.retrieval.hybrid_retriever import Reranker
@@ -83,7 +83,7 @@ class TestReranker:
         """
         测试空文档列表的重排序
         
-        验证：
+        验证:
         1. 返回空列表
         """
         from app.retrieval.hybrid_retriever import Reranker
@@ -100,7 +100,7 @@ class TestReranker:
         """
         测试有可用模型时的重排序
         
-        验证：
+        验证:
         1. 模型被正确调用
         2. 结果按分数排序
         3. 返回指定数量的结果
@@ -125,14 +125,14 @@ class TestReranker:
 
 
 class TestHybridRetriever:
-    """混合检索器（HybridRetriever）类的测试"""
+    """混合检索器(HybridRetriever)类的测试"""
 
     @patch("app.retrieval.hybrid_retriever.BM25Okapi")
     def test_init(self, mock_bm25):
         """
         测试混合检索器初始化
         
-        验证：
+        验证:
         1. 所有参数正确设置
         2. BM25 初始化被调用
         """
@@ -159,7 +159,7 @@ class TestHybridRetriever:
         """
         测试分词功能
         
-        验证：
+        验证:
         1. 英文按词切分
         2. 中文按单字和bigram切分
         3. 停用词过滤
@@ -169,12 +169,12 @@ class TestHybridRetriever:
 
         retriever = HybridRetriever.__new__(HybridRetriever)
 
-        # 英文：小写 + 按词拆分
+        # 英文:小写 + 按词拆分
         tokens = retriever._tokenize("Hello World")
         assert "hello" in tokens
         assert "world" in tokens
 
-        # 中文：单字切分 + bigram
+        # 中文:单字切分 + bigram
         tokens = retriever._tokenize("违约责任条款")
         for ch in ("违", "约", "责", "任", "条", "款"):
             assert ch in tokens
@@ -199,7 +199,7 @@ class TestHybridRetriever:
         """
         测试稀疏检索
         
-        验证：
+        验证:
         1. BM25 模型正确调用
         2. 结果按分数排序
         """
@@ -224,7 +224,7 @@ class TestHybridRetriever:
         """
         测试稠密检索
         
-        验证：
+        验证:
         1. 向量存储正确调用
         2. 分数正确归一化
         """
@@ -244,7 +244,7 @@ class TestHybridRetriever:
         results = retriever._dense_search("query")
 
         assert len(results) == 3
-        # 分数归一化：1 - distance / k（此处 k=2，distance=0.1）
+        # 分数归一化:1 - distance / k(此处 k=2，distance=0.1)
         assert results[0][1] == 1.0 - 0.1 / 2.0
 
     @patch("app.retrieval.hybrid_retriever.BM25Okapi")
@@ -252,7 +252,7 @@ class TestHybridRetriever:
         """
         测试 RRF 融合
         
-        验证：
+        验证:
         1. 稠密和稀疏结果正确融合
         2. 每个文档包含 RRF 分数
         """
@@ -284,7 +284,7 @@ class TestHybridRetriever:
         """
         测试检索功能
         
-        验证：
+        验证:
         1. 正确调用稠密和稀疏检索
         2. 结果正确融合
         """
@@ -314,9 +314,9 @@ class TestHybridRetriever:
     @patch("app.retrieval.hybrid_retriever.BM25Okapi")
     def test_invoke(self, mock_bm25):
         """
-        测试 LangChain 接口（invoke 方法）
+        测试 LangChain 接口(invoke 方法)
         
-        验证：
+        验证:
         1. 与 retrieve 方法行为一致
         2. 返回正确格式的结果
         """

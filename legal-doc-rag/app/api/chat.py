@@ -1,28 +1,28 @@
 """
-chat.py —— 对话（RAG 检索增强生成）API 模块
+chat.py —— 对话(RAG 检索增强生成)API 模块
 
 【作用与功能】
-本模块实现 legal-doc-rag 的核心问答接口，串联完整的 RAG 流程：按租户构建检索管道 ->
-查询重写 -> 缓存命中检查 -> 混合检索（稠密+稀疏）与重排序 -> 引用追踪 -> 构建提示词 ->
+本模块实现 legal-doc-rag 的核心问答接口，串联完整的 RAG 流程:按租户构建检索管道 ->
+查询重写 -> 缓存命中检查 -> 混合检索(稠密+稀疏)与重排序 -> 引用追踪 -> 构建提示词 ->
 调用大模型生成回答，并以 SSE 流式或非流式方式返回，同时维护缓存与长期记忆。
 
 【主要组成】
-- `chat` / `chat_stream`：问答主入口，支持流式与非流式两种响应模式。
-- `_build_pipeline`：按租户组装嵌入器、向量库、重写器、缓存、引用追踪、记忆等组件。
-- `_get_context`：执行混合检索、重排序并拼接记忆与历史构建最终提示词。
-- `_handle_streaming_response` / `_handle_non_streaming_response`：分别处理两种响应模式。
-- `_handle_post_processing`：回答后写缓存、更新记忆并触发后台任务。
-- `call_llm`：异步调用大模型（用于记忆总结等非流式场景）。
-- `_get_memory` / `_get_reranker`：记忆系统与重排序器的缓存/单例获取。
+- `chat` / `chat_stream`:问答主入口，支持流式与非流式两种响应模式。
+- `_build_pipeline`:按租户组装嵌入器、向量库、重写器、缓存、引用追踪、记忆等组件。
+- `_get_context`:执行混合检索、重排序并拼接记忆与历史构建最终提示词。
+- `_handle_streaming_response` / `_handle_non_streaming_response`:分别处理两种响应模式。
+- `_handle_post_processing`:回答后写缓存、更新记忆并触发后台任务。
+- `call_llm`:异步调用大模型(用于记忆总结等非流式场景)。
+- `_get_memory` / `_get_reranker`:记忆系统与重排序器的缓存/单例获取。
 
 【适用场景】
 - 前端用户向系统提问，系统基于已上传法律文档检索并生成带引用的回答。
-- 长文档问答、多轮对话记忆、基于分类实验的回答质量对比（A/B 测试）。
+- 长文档问答、多轮对话记忆、基于分类实验的回答质量对比(A/B 测试)。
 
 【依赖关系】
-- 上游调用方：前端对话页。
-- 下游依赖：app.retrieval（嵌入/检索/重写/引用/缓存）、app.memory、app.worker.shadow_worker、
-  app.observability（日志/追踪/监控）、app.tasks.task_store、Chroma 向量库、langchain_community。
+- 上游调用方:前端对话页。
+- 下游依赖:app.retrieval(嵌入/检索/重写/引用/缓存)、app.memory、app.worker.shadow_worker、
+  app.observability(日志/追踪/监控)、app.tasks.task_store、Chroma 向量库、langchain_community。
 """
 
 import os, sys, json, requests, time
@@ -63,13 +63,13 @@ def _validate_config():
     """
     验证必要的配置项是否存在。
     
-    该函数会检查全局配置对象 cfg 中是否包含运行系统所必需的关键配置项（如大模型URL、密钥等）。
+    该函数会检查全局配置对象 cfg 中是否包含运行系统所必需的关键配置项(如大模型URL、密钥等)。
     如果发现缺失项，会记录错误日志并抛出 ValueError 异常。
     
-    异常：
+    异常:
         ValueError: 当缺少必要的配置项时抛出，错误信息中包含所有缺失的配置项名称及描述。
     """
-    # 定义必需的配置项字典：键为配置属性名，值为该配置的中文描述
+    # 定义必需的配置项字典:键为配置属性名，值为该配置的中文描述
     required_configs = {
         'LLM_BASE_URL': '大语言模型API基础URL',
         'LLM_API_KEY': '大语言模型API密钥',
@@ -108,7 +108,7 @@ class ChatRequest(BaseModel):
     
     用于验证和解析前端发送过来的聊天请求数据。
     
-    属性：
+    属性:
         message (str): 用户当前输入的提问消息。
         history (Optional[List[dict]]): 历史对话记录列表，默认为空列表。
         stream (Optional[bool]): 是否开启 SSE (Server-Sent Events) 流式输出，默认为 True。
@@ -128,13 +128,13 @@ async def call_llm(prompt: str) -> str:
     """
     异步调用大语言模型 API。
     
-    向配置好的大模型服务发送单次提示词，并返回生成的文本结果。该函数主要用于后台任务（如记忆总结）的非流式调用。
+    向配置好的大模型服务发送单次提示词，并返回生成的文本结果。该函数主要用于后台任务(如记忆总结)的非流式调用。
     
-    参数：
+    参数:
         prompt (str): 发送给大模型的提示词。
         
-    返回：
-        str: 大模型生成的文本响应；如果调用失败（网络错误、API鉴权失败等），则返回空字符串 ""。
+    返回:
+        str: 大模型生成的文本响应；如果调用失败(网络错误、API鉴权失败等)，则返回空字符串 ""。
     """
     try:
         # 创建异步 HTTP 客户端，设置超时时间为 30 秒，并开启 SSL 证书验证
@@ -152,7 +152,7 @@ async def call_llm(prompt: str) -> str:
                     "max_tokens": 512
                 }
             )
-            r.raise_for_status() # 检查HTTP状态码，如果请求失败（非2xx），将抛出 HTTPStatusError 异常
+            r.raise_for_status() # 检查HTTP状态码，如果请求失败(非2xx)，将抛出 HTTPStatusError 异常
             return r.json()["choices"][0]["message"]["content"]
     except httpx.HTTPStatusError as e:
         _log.error(f"LLM API 返回错误状态码: {e.response.status_code}")
@@ -172,11 +172,11 @@ def _get_memory(tenant_id, embedder):
     使用缓存机制，如果该租户的 MemorySystem 已初始化则直接从内存中返回，
     否则创建新的实例并存入缓存。使用线程锁保证多线程下的安全创建。
     
-    参数：
+    参数:
         tenant_id (str): 租户唯一标识符。
         embedder: 嵌入模型实例，用于记忆系统的向量化处理。
         
-    返回：
+    返回:
         MemorySystem: 该租户对应的记忆系统实例。
     """
     global _memory_cache
@@ -222,7 +222,7 @@ def _get_reranker():
     
     使用双重检查锁机制确保在多线程环境下只创建一次 Reranker 实例。
     
-    返回：
+    返回:
         Reranker: 重排序器实例。
     """
     global _reranker
@@ -235,12 +235,12 @@ def _build_pipeline(tenant_id: str):
     """
     构建当前请求的 RAG (检索增强生成) 处理管道。
     
-    根据租户ID初始化并组装所需的各个组件：嵌入器、向量库、查询重写器、缓存、引用追踪器和记忆系统。
+    根据租户ID初始化并组装所需的各个组件:嵌入器、向量库、查询重写器、缓存、引用追踪器和记忆系统。
     
-    参数：
+    参数:
         tenant_id (str): 租户唯一标识符，用于隔离不同租户的数据。
         
-    返回：
+    返回:
         SimpleNamespace: 包含所有管道组件对象的命名空间；如果构建过程中发生异常或向量库目录不存在，则返回 None。
     """
     try:
@@ -278,15 +278,15 @@ async def chat(request: Request, req: ChatRequest, user: dict = Depends(require_
     """
     处理聊天请求的入口 API 端点 (POST: /api/chat)。
     
-    执行完整的 RAG 流程：验证向量库 -> 查询重写 -> 缓存检查 -> 检索上下文 -> 调用大模型生成回答。
-    支持流式和非流式两种响应模式。带有速率限制（100次/分钟）。
+    执行完整的 RAG 流程:验证向量库 -> 查询重写 -> 缓存检查 -> 检索上下文 -> 调用大模型生成回答。
+    支持流式和非流式两种响应模式。带有速率限制(100次/分钟)。
     
-    参数：
+    参数:
         request (Request): FastAPI 原生 Request 对象，用于速率限制。
         req (ChatRequest): 包含用户消息和历史记录的请求体。
         user (dict): 依赖注入获取的当前用户信息字典，包含 tenant_id 等。
         
-    返回：
+    返回:
         StreamingResponse | JSONResponse: 流式响应对象或包含完整答案的 JSON 响应。
     """
     # 初始化管道和链路追踪
@@ -299,7 +299,7 @@ async def chat(request: Request, req: ChatRequest, user: dict = Depends(require_
     if not pipeline or not pipeline.vector_store:
         return _handle_vector_store_error(user["tenant_id"])
 
-    # 向量库存在但为空（已上传但未完成索引或数据损坏）
+    # 向量库存在但为空(已上传但未完成索引或数据损坏)
     try:
         docs_count = len(_get_all_texts(pipeline.vector_store))
     except Exception:
@@ -315,7 +315,7 @@ async def chat(request: Request, req: ChatRequest, user: dict = Depends(require_
     if cached_result:
         return cached_result
 
-    # 获取 RAG 上下文（检索 + 重排 + 构建Prompt）
+    # 获取 RAG 上下文(检索 + 重排 + 构建Prompt)
     context = _get_context(query, pipeline, req.message, req.history, user["tenant_id"])
     
     # 根据前端请求选择流式或非流式响应处理
@@ -329,16 +329,16 @@ async def chat(request: Request, req: ChatRequest, user: dict = Depends(require_
 @limiter.limit("100/minute")
 async def chat_stream(request: Request, req: ChatRequest, user: dict = Depends(require_user)):
     """
-    流式聊天接口（兼容前端 /api/chat/stream）。
+    流式聊天接口(兼容前端 /api/chat/stream)。
     
     本质上是强制开启流式模式，然后调用核心的 chat 方法进行处理。
     
-    参数：
+    参数:
         request (Request): FastAPI 原生 Request 对象。
         req (ChatRequest): 包含用户消息和历史记录的请求体。
         user (dict): 依赖注入获取的当前用户信息字典。
         
-    返回：
+    返回:
         StreamingResponse: 流式响应对象。
     """
     req.stream = True
@@ -349,12 +349,12 @@ def _handle_vector_store_error(tenant_id: str):
     """
     处理向量库不可用的情况，根据系统当前状态返回不同的提示信息。
     
-    依次检查：是否有正在进行的后台索引任务 -> 是否有最近失败的任务 -> 是否有上传但未索引的文件 -> 确实没有上传文件。
+    依次检查:是否有正在进行的后台索引任务 -> 是否有最近失败的任务 -> 是否有上传但未索引的文件 -> 确实没有上传文件。
     
-    参数：
+    参数:
         tenant_id (str): 租户唯一标识符。
         
-    返回：
+    返回:
         JSONResponse: 包含针对性提示信息的 JSON 响应。
     """
     # 1. 有正在后台索引的任务
@@ -363,7 +363,7 @@ def _handle_vector_store_error(tenant_id: str):
         return JSONResponse(content={
             "answer": (
                 f"文档「{active['filename']}」正在后台索引中"
-                f"（{active['stage']}，进度 {active['progress']}%），请稍候再问。"
+                f"({active['stage']}，进度 {active['progress']}%)，请稍候再问。"
             ),
             "citations": [],
             "token_usage": 0,
@@ -375,14 +375,14 @@ def _handle_vector_store_error(tenant_id: str):
     if failed:
         return JSONResponse(content={
             "answer": (
-                f"文档「{failed['filename']}」索引失败（{failed.get('error', '未知错误')}），"
+                f"文档「{failed['filename']}」索引失败({failed.get('error', '未知错误')})，"
                 "请删除后重新上传。"
             ),
             "citations": [],
             "token_usage": 0,
         })
 
-    # 3. 已上传文件但向量库尚未建立（服务重启/索引中断）
+    # 3. 已上传文件但向量库尚未建立(服务重启/索引中断)
     upload_dir = os.path.join(cfg.UPLOAD_DIR, tenant_id)
     has_uploads = os.path.exists(upload_dir) and any(
         f.lower().endswith(".pdf") for f in os.listdir(upload_dir)
@@ -406,11 +406,11 @@ def _process_query(message, qr):
     
     使用查询重写器将用户的原始提问转换为更适合检索的表达方式。如果重写器不可用，则使用原始消息。
     
-    参数：
+    参数:
         message (str): 用户原始输入的消息。
         qr (QueryRewriter): 查询重写器实例。
         
-    返回：
+    返回:
         str: 重写后的查询语句；如果重写失败或无结果，则返回原始消息。
     """
     queries = qr.rewrite(message, num_variants=1) if qr else [message]
@@ -422,12 +422,12 @@ def _check_cache(query, cache, is_stream):
     
     如果命中缓存，根据请求是否需要流式输出，返回对应格式的响应。
     
-    参数：
+    参数:
         query (str): 重写后的查询语句。
         cache (QueryCache): 缓存实例。
         is_stream (bool): 是否为流式请求。
         
-    返回：
+    返回:
         StreamingResponse | JSONResponse | None: 如果命中缓存则返回响应对象，否则返回 None。
     """
     if not cache:
@@ -449,10 +449,10 @@ def _create_streaming_response(content):
     
     主要用于缓存命中时，将非流式的缓存数据转换为前端期望的流式事件格式。
     
-    参数：
+    参数:
         content (str): 需要发送的完整文本内容。
         
-    返回：
+    返回:
         StreamingResponse: 模拟的流式响应对象。
     """
     async def stream_generator():
@@ -466,25 +466,25 @@ def _get_context(query, pipeline, message, history, tenant_id=None):
     """
     获取 RAG 检索上下文和记忆上下文，并构建最终的提示词。
     
-    流程：获取记忆上下文 -> 混合检索 (稠密+稀疏) -> 重排序 -> 格式化引用 -> 构建 Prompt。
+    流程:获取记忆上下文 -> 混合检索 (稠密+稀疏) -> 重排序 -> 格式化引用 -> 构建 Prompt。
     
-    参数：
+    参数:
         query (str): 重写后的查询语句。
         pipeline (SimpleNamespace): 当前请求的处理管道组件集合。
-        message (str): 用户原始输入消息（用于记忆系统）。
+        message (str): 用户原始输入消息(用于记忆系统)。
         history (list): 对话历史。
         tenant_id (str, optional): 租户ID，用于加载稀疏向量库。
         
-    返回：
+    返回:
         str: 构建好的包含上下文、记忆、历史和问题的完整提示词。
     """
     # 获取记忆上下文
     mem_ctx = pipeline.mem.get_context(query) if pipeline.mem else ""
     
-    # RAG 检索：获取向量库中的所有文本，用于 BM25 等稀疏检索
+    # RAG 检索:获取向量库中的所有文本，用于 BM25 等稀疏检索
     all_texts = _get_all_texts(pipeline.vector_store)
     
-    # 加载 BGE-M3 稀疏向量库（按租户），检索时与 BM25 + 稠密做 RRF 融合
+    # 加载 BGE-M3 稀疏向量库(按租户)，检索时与 BM25 + 稠密做 RRF 融合
     sparse_store = None
     if tenant_id:
         try:
@@ -513,12 +513,12 @@ def _get_all_texts(vector_store):
     """
     从 Chroma 向量数据库中提取所有的原始文本内容。
     
-    主要用于为稀疏检索（如 BM25）提供语料库。
+    主要用于为稀疏检索(如 BM25)提供语料库。
     
-    参数：
+    参数:
         vector_store (Chroma): Chroma 向量库实例。
         
-    返回：
+    返回:
         list: 包含所有文档文本的列表；如果发生异常则返回空列表。
     """
     try:
@@ -534,13 +534,13 @@ def _build_prompt(context, mem_ctx, history, query):
     
     将检索到的参考文本、记忆上下文、对话历史和当前问题组合成结构化的 Prompt。
     
-    参数：
+    参数:
         context (str): RAG 检索并格式化后的参考文本。
         mem_ctx (str): 长期记忆提取的上下文。
         history (list): 对话历史列表。
         query (str): 当前用户提问。
         
-    返回：
+    返回:
         str: 填充完毕的完整提示词字符串。
     """
     # 截取最近 4 轮对话历史，并限制单条内容长度以防止 Token 溢出
@@ -579,13 +579,13 @@ async def _handle_streaming_response(context, req, pipeline, trace):
     向大模型发起流式请求，并将返回的 SSE 数据流实时转发给前端。
     包含错误处理、心跳保活、以及响应结束后的缓存和记忆更新逻辑。
     
-    参数：
+    参数:
         context (str): 构建好的提示词。
         req (ChatRequest): 原始请求对象。
         pipeline (SimpleNamespace): 管道组件集合。
         trace (TraceContext): 链路追踪上下文。
         
-    返回：
+    返回:
         StreamingResponse: SSE 流式响应对象。
     """
     async def generate():
@@ -601,9 +601,9 @@ async def _handle_streaming_response(context, req, pipeline, trace):
                     headers={"Authorization": f"Bearer {cfg.LLM_API_KEY}", "Content-Type": "application/json"},
                     json={"model": cfg.LLM_MODEL, "messages": [{"role": "user", "content": context}], "stream": True, "temperature": 0.1, "max_tokens": 1024}
                 ) as resp:
-                    # 必须先检查状态码：出错时响应体是普通 JSON 而非 SSE，
+                    # 必须先检查状态码:出错时响应体是普通 JSON 而非 SSE，
                     # 下面的 `data: ` 循环会一个 token 都取不到，导致前端「提问后毫无反应」
-                    # 的静默失败（日志里也看不到任何报错）。
+                    # 的静默失败(日志里也看不到任何报错)。
                     if resp.status_code != 200:
                         raw = (await resp.aread()).decode("utf-8", "replace")
                         _log.error(f"LLM 流式调用失败 status={resp.status_code} body={raw[:500]}")
@@ -615,7 +615,7 @@ async def _handle_streaming_response(context, req, pipeline, trace):
                         elif not cfg.LLM_API_KEY:
                             hint = "未配置 LLM_API_KEY，请在 .env 中填写后重启服务。"
                         else:
-                            hint = f"LLM 服务返回错误（HTTP {resp.status_code}）：{raw[:200]}"
+                            hint = f"LLM 服务返回错误(HTTP {resp.status_code}):{raw[:200]}"
                         # 发送错误事件给前端
                         yield f"data: {json.dumps({'type': 'token', 'content': '[系统] ' + hint})}\n\n"
                         yield f"data: {json.dumps({'type': 'error', 'content': hint})}\n\n"
@@ -639,7 +639,7 @@ async def _handle_streaming_response(context, req, pipeline, trace):
                             except json.JSONDecodeError:
                                 continue
                             
-                            # 心跳检测：如果超过 30 秒没有新内容产生，发送空心跳保持连接
+                            # 心跳检测:如果超过 30 秒没有新内容产生，发送空心跳保持连接
                             if time.time() - last_yield_time > 30:
                                 yield f"data: {json.dumps({'type': 'token', 'content': ''})}\n\n"
                                 last_yield_time = time.time()
@@ -647,7 +647,7 @@ async def _handle_streaming_response(context, req, pipeline, trace):
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
             return
         
-        # 流结束后的后处理：更新缓存和记忆系统
+        # 流结束后的后处理:更新缓存和记忆系统
         await _handle_post_processing(req.message, full_answer, pipeline)
         
         # 获取引用列表并发送结束信号
@@ -670,13 +670,13 @@ async def _handle_non_streaming_response(context, req, pipeline, trace):
     
     向大模型发起普通请求，等待完整结果返回后，一次性以 JSON 格式返回给前端。
     
-    参数：
+    参数:
         context (str): 构建好的提示词。
         req (ChatRequest): 原始请求对象。
         pipeline (SimpleNamespace): 管道组件集合。
         trace (TraceContext): 链路追踪上下文。
         
-    返回：
+    返回:
         JSONResponse: 包含完整答案、引用和 token 使用情况的 JSON 响应。
     """
     trace.begin_span("llm")
@@ -696,7 +696,7 @@ async def _handle_non_streaming_response(context, req, pipeline, trace):
     except Exception as e:
         return JSONResponse(content={"answer": f"LLM调用异常: {str(e)}", "citations": [], "token_usage": 0})
     
-    # 后处理：更新缓存和记忆
+    # 后处理:更新缓存和记忆
     await _handle_post_processing(req.message, answer, pipeline)
     
     # 记录追踪和日志信息
@@ -718,9 +718,9 @@ async def _handle_non_streaming_response(context, req, pipeline, trace):
 
 async def _handle_post_processing(message, answer, pipeline):
     """
-    请求结束后的统一后处理逻辑：更新缓存和记忆系统。
+    请求结束后的统一后处理逻辑:更新缓存和记忆系统。
     
-    参数：
+    参数:
         message (str): 用户原始提问。
         answer (str): 大模型生成的回答。
         pipeline (SimpleNamespace): 管道组件集合。
@@ -732,7 +732,7 @@ async def _handle_post_processing(message, answer, pipeline):
         except Exception as e:
             _log.error(f"缓存写入失败: {str(e)}")
     
-    # 2. 将问答对写入记忆系统，并触发后台任务（如记忆总结）
+    # 2. 将问答对写入记忆系统，并触发后台任务(如记忆总结)
     if pipeline.mem:
         try:
             pipeline.mem.add("user", message)
@@ -745,10 +745,10 @@ def _get_citations(context_tracker):
     """
     从引用追踪器中提取格式化的引用列表。
     
-    参数：
+    参数:
         context_tracker (CitationTracker): 引用追踪器实例。
         
-    返回：
+    返回:
         list: 格式化后的引用列表，每个元素包含 source (来源) 和 content (内容片段)。
     """
     sources = context_tracker.get_sources()

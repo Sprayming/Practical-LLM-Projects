@@ -2,21 +2,21 @@
 app/memory/profile_store.py —— 多租户用户画像实体存储
 
 【作用与功能】
-管理结构化的用户画像信息（如姓名、偏好、关键属性等），与 ChromaDB 的非结构化
+管理结构化的用户画像信息(如姓名、偏好、关键属性等)，与 ChromaDB 的非结构化
 长期记忆相分离。数据以 JSON 文件持久化，支持多租户隔离、线程安全读写、基于置信度
 的实体合并，并可将画像序列化为提示词文本注入 LLM 上下文。
 
 【主要组成】
-- `ProfileStore`：用户画像存储类，提供 get_profile / to_prompt_text /
+- `ProfileStore`:用户画像存储类，提供 get_profile / to_prompt_text /
   merge_entities / clear 等方法
 
 【适用场景】
-- 场景1：在 MemorySystem 后台实体提取后，将抽取到的实体合并入画像
-- 场景2：组装上下文时调用 to_prompt_text 把用户画像注入 LLM 提示词
+- 场景1:在 MemorySystem 后台实体提取后，将抽取到的实体合并入画像
+- 场景2:组装上下文时调用 to_prompt_text 把用户画像注入 LLM 提示词
 
 【依赖关系】
-- 上游调用方：app.memory.memory_manager（实体提取、上下文组装）
-- 下游依赖：仅依赖标准库（json / os / threading）与 loguru
+- 上游调用方:app.memory.memory_manager(实体提取、上下文组装)
+- 下游依赖:仅依赖标准库(json / os / threading)与 loguru
 """
 
 import json, os, threading
@@ -27,16 +27,16 @@ class ProfileStore:
     """
     用户画像实体存储类。
     
-    与 ChromaDB 的长期记忆分离，专门用于存储结构化的用户实体信息（如姓名、偏好、关键属性等）。
+    与 ChromaDB 的长期记忆分离，专门用于存储结构化的用户实体信息(如姓名、偏好、关键属性等)。
     
-    特点：
+    特点:
     1. 使用 JSON 文件持久化存储
     2. 支持多租户数据隔离
-    3. 线程安全（使用 threading.Lock）
-    4. 支持实体合并（基于置信度）
+    3. 线程安全(使用 threading.Lock)
+    4. 支持实体合并(基于置信度)
     5. 记录访问次数和时间戳
     
-    数据结构：
+    数据结构:
     {
         "tenant_id_1": {
             "实体名1": {"value": "值1", "confidence": 0.9, "source": "llm", "timestamp": "...", "access_count": 1},
@@ -50,7 +50,7 @@ class ProfileStore:
         """
         初始化用户画像存储。
         
-        参数：
+        参数:
             path (str): 用户画像 JSON 文件的存储路径，默认为 "./user_profiles.json"。
         """
         self.path = path
@@ -88,10 +88,10 @@ class ProfileStore:
         """
         获取指定租户的完整用户画像。
         
-        参数：
+        参数:
             tenant_id (str): 租户 ID。
             
-        返回：
+        返回:
             dict: 该租户的用户画像字典。如果不存在则返回空字典。
         """
         with self._lock:
@@ -103,10 +103,10 @@ class ProfileStore:
         
         将用户画像中的实体信息格式化为文本，便于注入到 LLM 的上下文中。
         
-        参数：
+        参数:
             tenant_id (str): 租户 ID。
             
-        返回：
+        返回:
             str: 格式化后的用户画像文本。如果画像为空则返回空字符串。
         """
         profile = self.get_profile(tenant_id)
@@ -122,12 +122,12 @@ class ProfileStore:
         """
         合并实体信息到用户画像中。
         
-        合并策略：
+        合并策略:
         1. 如果实体已存在，仅当新置信度更高时才更新值
         2. 无论是否更新，都会增加访问计数
         3. 新实体会直接添加到画像中
         
-        参数：
+        参数:
             tenant_id (str): 租户 ID。
             entities (list): 待合并的实体列表，每个元素是包含 key, value, confidence 的字典。
         """
@@ -185,7 +185,7 @@ class ProfileStore:
         """
         清除指定租户的用户画像。
         
-        参数：
+        参数:
             tenant_id (str): 租户 ID。
         """
         with self._lock:

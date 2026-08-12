@@ -8,37 +8,37 @@ backup.py —— Legal-DOC-RAG 数据备份与恢复命令行工具。
 带时间戳的备份目录中，并生成 manifest.json 清单记录本次备份的来源路径、
 校验值与成功状态；恢复时按清单反向拷回原位置。
 
-需要保护的四类数据：
-- chroma_db    ：ChromaDB 向量库（文档切片的向量索引，重建代价高、要重新跑 embedding）
-- uploads      ：用户上传的原始法律文档
-- memory_db    ：对话记忆数据库
-- tenant_data  ：多租户用户库 users.db（账号、密码哈希等）
+需要保护的四类数据:
+- chroma_db    :ChromaDB 向量库(文档切片的向量索引，重建代价高、要重新跑 embedding)
+- uploads      :用户上传的原始法律文档
+- memory_db    :对话记忆数据库
+- tenant_data  :多租户用户库 users.db(账号、密码哈希等)
 
 【主要组成】
-- `calculate_checksum`：快速计算目录指纹（文件数 + 总字节数），用于粗粒度完整性比对
-- `create_backup`：创建一次全量备份，逐目录拷贝并写出 manifest.json
-- `restore_backup`：从指定备份目录恢复数据（tenant_data 只恢复 users.db 单文件）
-- `list_backups`：列出备份根目录下所有 `backup_*` 备份及其创建时间
-- `cleanup_backups`：按"保留最近 N 份"的策略删除过期备份，防止磁盘被占满
-- `main`：argparse 子命令入口，提供 backup / restore / list / cleanup 四个命令
+- `calculate_checksum`:快速计算目录指纹(文件数 + 总字节数)，用于粗粒度完整性比对
+- `create_backup`:创建一次全量备份，逐目录拷贝并写出 manifest.json
+- `restore_backup`:从指定备份目录恢复数据(tenant_data 只恢复 users.db 单文件)
+- `list_backups`:列出备份根目录下所有 `backup_*` 备份及其创建时间
+- `cleanup_backups`:按"保留最近 N 份"的策略删除过期备份，防止磁盘被占满
+- `main`:argparse 子命令入口，提供 backup / restore / list / cleanup 四个命令
 
 【适用场景】
-- 场景1：上线或重大变更前做全量快照 —— `python scripts/backup.py backup`
-- 场景2：备份到指定盘位/挂载目录 —— `python scripts/backup.py backup --target /mnt/nas/ldr`
-- 场景3：数据损坏或误删后回滚 —— `python scripts/backup.py restore backups/backup_20260812_101500`
-- 场景4：查看现有备份 —— `python scripts/backup.py list`
-- 场景5：定时任务（cron / 计划任务）中做滚动清理 —— `python scripts/backup.py cleanup --keep 5`
+- 场景1:上线或重大变更前做全量快照 —— `python scripts/backup.py backup`
+- 场景2:备份到指定盘位/挂载目录 —— `python scripts/backup.py backup --target /mnt/nas/ldr`
+- 场景3:数据损坏或误删后回滚 —— `python scripts/backup.py restore backups/backup_20260812_101500`
+- 场景4:查看现有备份 —— `python scripts/backup.py list`
+- 场景5:定时任务(cron / 计划任务)中做滚动清理 —— `python scripts/backup.py cleanup --keep 5`
 
 【依赖关系】
-- 标准库：os / sys / shutil / json / hashlib / argparse / pathlib / datetime
-- 第三方库：loguru（日志输出）、python-dotenv（读取项目根目录 .env）
-- 环境变量：BACKUP_DIR、CHROMA_PERSIST_DIR、UPLOAD_DIR、MEMORY_DB_DIR、TENANT_DB
-  （均有默认值，未配置时回落到项目根目录下的同名子目录）
-- 前置要求：执行账号需对源目录有读权限、对备份目录有写权限；
+- 标准库:os / sys / shutil / json / hashlib / argparse / pathlib / datetime
+- 第三方库:loguru(日志输出)、python-dotenv(读取项目根目录 .env)
+- 环境变量:BACKUP_DIR、CHROMA_PERSIST_DIR、UPLOAD_DIR、MEMORY_DB_DIR、TENANT_DB
+  (均有默认值，未配置时回落到项目根目录下的同名子目录)
+- 前置要求:执行账号需对源目录有读权限、对备份目录有写权限；
   恢复操作会覆盖现有数据，建议在服务停止状态下执行
 
 --------------------------------------------------------------------
-以下为原有英文用法说明（保留）：
+以下为原有英文用法说明(保留):
 
 Legal-DOC-RAG Backup & Recovery Script
 
@@ -67,7 +67,7 @@ from datetime import datetime
 from loguru import logger
 
 # Add project root to path
-# 计算项目根目录（scripts/ 的上一级），并插入 sys.path 首位，
+# 计算项目根目录(scripts/ 的上一级)，并插入 sys.path 首位，
 # 保证脚本以 `python scripts/backup.py` 方式直接运行时也能 import 到 app 包。
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -93,8 +93,8 @@ MEMORY_DB_DIR = os.getenv("MEMORY_DB_DIR", str(PROJECT_ROOT / "memory_db"))    #
 TENANT_DB = os.getenv("TENANT_DB", str(PROJECT_ROOT / "tenant_data" / "users.db"))  # 租户/用户 DB 文件
 
 # Directories/files to backup
-# 备份清单：键为备份目录内的子目录名（也是恢复时的定位标识），值为源目录绝对路径。
-# 注意 tenant_data 配置的是 DB 文件路径，故这里取其所在目录（dirname）整体备份。
+# 备份清单:键为备份目录内的子目录名(也是恢复时的定位标识)，值为源目录绝对路径。
+# 注意 tenant_data 配置的是 DB 文件路径，故这里取其所在目录(dirname)整体备份。
 BACKUP_TARGETS = {
     "chroma_db": CHROMA_DIR,
     "uploads": UPLOAD_DIR,
@@ -108,7 +108,7 @@ BACKUP_TARGETS = {
 # ============================================================
 
 def calculate_checksum(directory: str) -> str:
-    """快速计算一个目录的轻量级校验指纹（文件总数 + 字节总大小）。
+    """快速计算一个目录的轻量级校验指纹(文件总数 + 字节总大小)。
 
     Calculate a quick checksum of a directory (file count + total size).
 
@@ -120,7 +120,7 @@ def calculate_checksum(directory: str) -> str:
         - 备份时写入 manifest.json，事后可再次计算源目录指纹做粗粒度比对，
           快速判断数据规模是否发生明显变化
     说明:
-        - 有意不做逐文件哈希：向量库动辄上 GB，全量哈希耗时过长；
+        - 有意不做逐文件哈希:向量库动辄上 GB，全量哈希耗时过长；
           这里只需要"低成本、可比较"的指纹，而非密码学意义上的完整性校验
     """
     total_size = 0
@@ -147,15 +147,15 @@ def create_backup(target_dir: str = None) -> str:
     参数:
         target_dir (str | None): 备份归档的父目录；传 None 时使用全局 BACKUP_DIR
     返回:
-        str: 本次创建的备份目录绝对路径（形如 `<base>/backup_20260812_101500`）
+        str: 本次创建的备份目录绝对路径(形如 `<base>/backup_20260812_101500`)
     适用场景:
         - 上线、升级、批量导入文档等高风险操作前做快照
         - 由定时任务周期性调用，配合 `cleanup_backups` 实现滚动备份
     说明:
         - 单个目录备份失败不会中断整体流程，失败信息会记入 manifest["sources"]，
-          便于事后判断该备份是否可用（"部分成功"也会留下痕迹而非静默丢失）
+          便于事后判断该备份是否可用("部分成功"也会留下痕迹而非静默丢失)
 
-    返回：
+    返回:
         Path to the created backup directory.
     """
     # 用秒级时间戳命名备份目录，保证多次备份互不覆盖且天然按时间排序
@@ -164,7 +164,7 @@ def create_backup(target_dir: str = None) -> str:
     backup_path = os.path.join(backup_base, f"backup_{timestamp}")
     os.makedirs(backup_path, exist_ok=True)
 
-    # 备份清单：记录本次备份的时间与每个数据源的来源路径、指纹、成功标志
+    # 备份清单:记录本次备份的时间与每个数据源的来源路径、指纹、成功标志
     manifest = {
         "timestamp": timestamp,
         "created_at": datetime.now().isoformat(),
@@ -172,7 +172,7 @@ def create_backup(target_dir: str = None) -> str:
     }
 
     for name, source_dir in BACKUP_TARGETS.items():
-        # 源目录不存在通常意味着该功能尚未使用过（如还没有人上传文档），属正常情况，
+        # 源目录不存在通常意味着该功能尚未使用过(如还没有人上传文档)，属正常情况，
         # 记一条 warning 后跳过，不视为备份失败
         if not os.path.exists(source_dir):
             logger.warning("Source not found, skipping: {} ({})", name, source_dir)
@@ -182,7 +182,7 @@ def create_backup(target_dir: str = None) -> str:
         logger.info("Backing up {} from {} ...", name, source_dir)
 
         try:
-            # dirs_exist_ok=True：目标已存在时允许合并写入（Python 3.8+ 支持），
+            # dirs_exist_ok=True:目标已存在时允许合并写入(Python 3.8+ 支持)，
             # 使同一备份目录可被重复写入而不抛 FileExistsError
             shutil.copytree(source_dir, dest, dirs_exist_ok=True)
             checksum = calculate_checksum(source_dir)
@@ -193,7 +193,7 @@ def create_backup(target_dir: str = None) -> str:
             }
             logger.info("  ✓ {} backed up successfully", name)
         except Exception as e:
-            # 捕获全部异常（磁盘满、权限不足、文件被占用等），
+            # 捕获全部异常(磁盘满、权限不足、文件被占用等)，
             # 把错误写进清单并继续备份剩余目录，避免"一个失败全部白做"
             logger.error("  ✗ {} backup failed: {}", name, e)
             manifest["sources"][name] = {
@@ -232,32 +232,32 @@ def restore_backup(backup_dir: str) -> bool:
         - 返回 True 仅代表流程跑完，个别子目录恢复失败只会记 error 日志，
           需结合控制台输出确认每一项是否都打了 "✓"
 
-    参数：
+    参数:
         backup_dir: Path to the backup directory.
 
-    返回：
+    返回:
         True if successful.
     """
     backup_path = Path(backup_dir)
-    # 前置校验：备份目录不存在直接返回 False，避免后续无意义的空操作
+    # 前置校验:备份目录不存在直接返回 False，避免后续无意义的空操作
     if not backup_path.exists():
         logger.error("Backup directory not found: {}", backup_dir)
         return False
 
     manifest_path = backup_path / "manifest.json"
     if manifest_path.exists():
-        # 有清单：读出来只为打印备份创建时间，让操作者确认恢复的是哪一份快照
+        # 有清单:读出来只为打印备份创建时间，让操作者确认恢复的是哪一份快照
         with open(manifest_path, "r", encoding="utf-8") as f:
             manifest = json.load(f)
         logger.info("Restoring backup from {}", manifest.get("created_at", "unknown"))
     else:
-        # 无清单（如手工拷贝的备份）：降级为"盲恢复"，仅按固定子目录名尝试匹配
+        # 无清单(如手工拷贝的备份):降级为"盲恢复"，仅按固定子目录名尝试匹配
         logger.warning("No manifest found, attempting blind restore")
 
-    # 以 BACKUP_TARGETS 为准反向遍历：备份目录内的子目录名 -> 恢复到对应的源路径
+    # 以 BACKUP_TARGETS 为准反向遍历:备份目录内的子目录名 -> 恢复到对应的源路径
     for name, source_dir in BACKUP_TARGETS.items():
         src = backup_path / name
-        # 该项在备份中不存在（备份时就跳过了），恢复时同样跳过
+        # 该项在备份中不存在(备份时就跳过了)，恢复时同样跳过
         if not src.exists():
             logger.warning("Backup source not found, skipping: {}", name)
             continue
@@ -269,7 +269,7 @@ def restore_backup(backup_dir: str) -> bool:
         logger.info("Restoring {} to {} ...", name, source_dir)
         try:
             # For tenant_data, we only restore the DB file
-            # 租户数据特殊处理：该目录里可能含运行期临时文件，只精确恢复 users.db 一个文件，
+            # 租户数据特殊处理:该目录里可能含运行期临时文件，只精确恢复 users.db 一个文件，
             # 避免把无关文件一并覆盖回去
             if name == "tenant_data":
                 db_file = src / "users.db"
@@ -280,7 +280,7 @@ def restore_backup(backup_dir: str) -> bool:
                 else:
                     logger.warning("  ✗ users.db not found in backup")
             else:
-                # 其余目录整体覆盖式回拷（同名文件被备份内容替换，多余的新文件保留）
+                # 其余目录整体覆盖式回拷(同名文件被备份内容替换，多余的新文件保留)
                 shutil.copytree(str(src), source_dir, dirs_exist_ok=True)
                 logger.info("  ✓ {} restored successfully", name)
         except Exception as e:
@@ -301,7 +301,7 @@ def list_backups() -> list:
     List all available backups.
 
     参数:
-        无（读取全局 BACKUP_DIR）
+        无(读取全局 BACKUP_DIR)
     返回:
         list[dict]: 每个元素形如
             {"name": "backup_20260812_101500", "path": "<绝对路径>",
@@ -311,7 +311,7 @@ def list_backups() -> list:
         - `list` 子命令展示备份清单，供人工挑选恢复目标
         - 被 `cleanup_backups` 复用，作为"哪些备份该删"的判断依据
     """
-    # 备份根目录还没建立（从未备份过）时直接返回空列表，交由调用方提示
+    # 备份根目录还没建立(从未备份过)时直接返回空列表，交由调用方提示
     if not os.path.exists(BACKUP_DIR):
         return []
 
@@ -326,13 +326,13 @@ def list_backups() -> list:
             info = {"name": name, "path": bp}
 
             if os.path.exists(manifest_path):
-                # 有清单：补充精确创建时间和数据源数量
+                # 有清单:补充精确创建时间和数据源数量
                 with open(manifest_path, "r", encoding="utf-8") as f:
                     manifest = json.load(f)
                 info["created_at"] = manifest.get("created_at", "unknown")
                 info["sources"] = len(manifest.get("sources", {}))
             else:
-                # 无清单：仍然纳入列表（目录名本身含时间戳），时间标记为 unknown
+                # 无清单:仍然纳入列表(目录名本身含时间戳)，时间标记为 unknown
                 info["created_at"] = "unknown"
 
             backups.append(info)
@@ -364,7 +364,7 @@ def cleanup_backups(keep: int = 5):
     to_remove = backups[keep:]
     for b in to_remove:
         logger.info("Removing old backup: {}", b["name"])
-        # ignore_errors=True：个别文件被占用/权限不足时不抛异常，继续清理其余备份
+        # ignore_errors=True:个别文件被占用/权限不足时不抛异常，继续清理其余备份
         shutil.rmtree(b["path"], ignore_errors=True)
 
     logger.info("Cleanup done. Removed {} backups, kept {}", len(to_remove), keep)
@@ -375,17 +375,17 @@ def cleanup_backups(keep: int = 5):
 # ============================================================
 
 def main():
-    """命令行入口：解析子命令并分派到对应的备份/恢复/查询/清理函数。
+    """命令行入口:解析子命令并分派到对应的备份/恢复/查询/清理函数。
 
     参数:
-        无（从 sys.argv 读取命令行参数）
+        无(从 sys.argv 读取命令行参数)
     返回:
         None
     适用场景:
-        - `python scripts/backup.py backup [--target DIR]`：创建全量备份
-        - `python scripts/backup.py restore <backup_dir>`：从指定备份恢复
-        - `python scripts/backup.py list`：表格化列出所有备份
-        - `python scripts/backup.py cleanup [--keep N]`：仅保留最近 N 份备份
+        - `python scripts/backup.py backup [--target DIR]`:创建全量备份
+        - `python scripts/backup.py restore <backup_dir>`:从指定备份恢复
+        - `python scripts/backup.py list`:表格化列出所有备份
+        - `python scripts/backup.py cleanup [--keep N]`:仅保留最近 N 份备份
         - 不带任何子命令时打印帮助信息
     """
     parser = argparse.ArgumentParser(description="Legal-DOC-RAG Backup & Recovery")
@@ -403,7 +403,7 @@ def main():
     # list —— 无额外参数，直接列出全部备份
     subparsers.add_parser("list", help="List available backups")
 
-    # cleanup —— 清理旧备份，--keep 指定保留份数（默认 5）
+    # cleanup —— 清理旧备份，--keep 指定保留份数(默认 5)
     cleanup_parser = subparsers.add_parser("cleanup", help="Clean up old backups")
     cleanup_parser.add_argument("--keep", type=int, default=5, help="Number of backups to keep (default: 5)")
 
@@ -428,7 +428,7 @@ def main():
     elif args.command == "cleanup":
         cleanup_backups(keep=args.keep)
     else:
-        # 未提供子命令（args.command 为 None）时输出帮助，而不是静默退出
+        # 未提供子命令(args.command 为 None)时输出帮助，而不是静默退出
         parser.print_help()
 
 

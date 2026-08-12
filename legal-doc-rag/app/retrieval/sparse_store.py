@@ -1,24 +1,24 @@
 """
-sparse_store.py —— BGE-M3 稀疏向量持久化（按租户 + 文档）
+sparse_store.py —— BGE-M3 稀疏向量持久化(按租户 + 文档)
 
 【作用与功能】
 该模块负责 BGE-M3 稀疏权重的落盘与加载，将每个 chunk 的稀疏字典按租户隔离
 存储于 JSON 文件中。检索时按 chunk 文本前 200 字符为 key 重建 lookup，
-与 HybridRetriever 的 RRF keying（page_content[:200]）保持一致，支撑稀疏召回。
+与 HybridRetriever 的 RRF keying(page_content[:200])保持一致，支撑稀疏召回。
 
 【主要组成】
-- `_tenant_dir`：获取（并创建）某租户的稀疏存储目录
-- `save_sparse`：保存某文档的稀疏权重字典列表（全局锁防并发写）
-- `delete_sparse`：删除指定租户下某文件的稀疏向量
-- `load_sparse_lookup`：合并租户全部文档，返回 {key: sparse_dict} 的查询表
+- `_tenant_dir`:获取(并创建)某租户的稀疏存储目录
+- `save_sparse`:保存某文档的稀疏权重字典列表(全局锁防并发写)
+- `delete_sparse`:删除指定租户下某文件的稀疏向量
+- `load_sparse_lookup`:合并租户全部文档，返回 {key: sparse_dict} 的查询表
 
 【适用场景】
-- 场景1：文档上传入库时持久化其 BGE-M3 稀疏向量
-- 场景2：HybridRetriever 检索时加载稀疏 lookup 进行 RRF 融合
+- 场景1:文档上传入库时持久化其 BGE-M3 稀疏向量
+- 场景2:HybridRetriever 检索时加载稀疏 lookup 进行 RRF 融合
 
 【依赖关系】
-- 上游调用方：入库流程、HybridRetriever（检索稀疏召回）
-- 下游依赖：本地文件系统（./sparse_db/{tenant_id}/{filename}.json）
+- 上游调用方:入库流程、HybridRetriever(检索稀疏召回)
+- 下游依赖:本地文件系统(./sparse_db/{tenant_id}/{filename}.json)
 """
 import json
 import os
@@ -30,7 +30,7 @@ _lock = threading.Lock()
 
 
 def _tenant_dir(tenant_id: str) -> str:
-    """返回（并创建）某租户的稀疏向量存储目录。"""
+    """返回(并创建)某租户的稀疏向量存储目录。"""
     d = os.path.join(SPARSE_DB_DIR, tenant_id)
     os.makedirs(d, exist_ok=True)
     return d
@@ -45,7 +45,7 @@ def save_sparse(tenant_id: str, filename: str, items: List[dict]) -> None:
 
 
 def delete_sparse(tenant_id: str, filename: str) -> None:
-    """删除某租户下指定文件名对应的稀疏向量文件（忽略异常）。"""
+    """删除某租户下指定文件名对应的稀疏向量文件(忽略异常)。"""
     path = os.path.join(_tenant_dir(tenant_id), f"{filename}.json")
     try:
         if os.path.exists(path):

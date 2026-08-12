@@ -2,14 +2,14 @@
 conftest.py —— legal-doc-rag 项目的 pytest 全局配置与共享固定装置 (fixtures)。
 
 【测试覆盖范围】
-- 重型/可选依赖惰性桩：注册 MetaPathFinder，对当前环境「未安装」的 chromadb、
+- 重型/可选依赖惰性桩:注册 MetaPathFinder，对当前环境「未安装」的 chromadb、
   paddleocr、bs4、sentence_transformers 等重型/可选包动态返回 MagicMock 桩，
-  保证单元测试在干净环境（CI / 未安装重型依赖）下也能秒级通过；已真实安装的
-  包不受影响（真实环境优先）。
-- 共享 fixture：project_root（项目根目录）、temp_dir（临时目录）、mock_config
-  （模拟配置模块）、mock_redis（模拟 Redis）、mock_chroma（模拟 ChromaDB）、
-  mock_llm（模拟 LLM HTTP 调用）、sample_document / sample_query / sample_user
-  （示例数据）、authenticated_headers（带 JWT 的认证头），供各 unit 测试复用。
+  保证单元测试在干净环境(CI / 未安装重型依赖)下也能秒级通过；已真实安装的
+  包不受影响(真实环境优先)。
+- 共享 fixture:project_root(项目根目录)、temp_dir(临时目录)、mock_config
+  (模拟配置模块)、mock_redis(模拟 Redis)、mock_chroma(模拟 ChromaDB)、
+  mock_llm(模拟 LLM HTTP 调用)、sample_document / sample_query / sample_user
+  (示例数据)、authenticated_headers(带 JWT 的认证头)，供各 unit 测试复用。
 
 【适用场景】
 - 由 pytest 自动加载，为 app.* 各模块的单元/接口测试提供运行环境与依赖模拟。
@@ -25,12 +25,12 @@ import importlib.machinery
 from unittest.mock import MagicMock
 
 # ---------------------------------------------------------------------------
-# 重型 / 可选依赖的「惰性桩」：
+# 重型 / 可选依赖的「惰性桩」:
 #   项目在导入阶段就会拉起 chromadb / paddleocr / bs4 等重型或可选依赖。
-#   为了让单元测试在「未安装这些重型依赖」的干净环境（CI / 面试官 clone）下
-#   也能秒级通过，这里注册一个 MetaPathFinder：对当前环境中「未安装」的包
+#   为了让单元测试在「未安装这些重型依赖」的干净环境(CI / 面试官 clone)下
+#   也能秒级通过，这里注册一个 MetaPathFinder:对当前环境中「未安装」的包
 #   及其任意子模块，动态返回一个 MagicMock 桩。
-#   已真实安装的包（如 langchain_chroma）不受影响——真实环境优先。
+#   已真实安装的包(如 langchain_chroma)不受影响——真实环境优先。
 # ---------------------------------------------------------------------------
 _HEAVY_OPTIONAL = (
     "sentence_transformers", "paddleocr", "pandas", "prometheus_client",
@@ -43,9 +43,9 @@ class _LazyStubLoader(importlib.abc.Loader):
     """
     为桩包返回一个 MagicMock 模块；子模块按需递归创建。
     
-    这个加载器的作用是：
+    这个加载器的作用是:
     1. 当导入未安装的包时，返回一个 MagicMock
-    2. 支持 多级导入（from X.sub import Y）
+    2. 支持 多级导入(from X.sub import Y)
     3. 保持模块的包特性
     """
 
@@ -60,7 +60,7 @@ class _LazyStubLoader(importlib.abc.Loader):
         return mod
 
     def exec_module(self, module):
-        """执行模块（空实现）"""
+        """执行模块(空实现)"""
         return None
 
 
@@ -68,7 +68,7 @@ class _LazyStubFinder(importlib.abc.MetaPathFinder):
     """
     惰性桩查找器
     
-    作用：
+    作用:
     1. 拦截未安装包的导入
     2. 返回桩加载器
     3. 不影响已安装的包
@@ -81,7 +81,7 @@ class _LazyStubFinder(importlib.abc.MetaPathFinder):
         # 检查是否是我们要桩化的包
         if fullname.split(".")[0] not in self.names:
             return None
-        # 如果模块已存在（真实模块或已桩），交给默认机制
+        # 如果模块已存在(真实模块或已桩)，交给默认机制
         if fullname in sys.modules:
             return None
         # 返回桩加载器的规范
@@ -117,7 +117,7 @@ def project_root():
     """
     返回项目根目录
     
-    返回：
+    返回:
         Path: 项目根目录的 Path 对象
     """
     return Path(__file__).parent.parent
@@ -128,7 +128,7 @@ def temp_dir():
     """
     创建临时目录用于测试文件
     
-    返回：
+    返回:
         str: 临时目录路径
     """
     temp_dir = tempfile.mkdtemp()
@@ -141,7 +141,7 @@ def mock_config():
     """
     模拟配置模块
     
-    返回：
+    返回:
         Mock: 模拟的配置模块
     """
     with patch("app.core.config") as mock:
@@ -166,7 +166,7 @@ def mock_redis():
     """
     模拟 Redis 客户端
     
-    返回：
+    返回:
         Mock: 模拟的 Redis 客户端
     """
     with patch("app.memory.redis_client.Redis") as mock:
@@ -183,7 +183,7 @@ def mock_chroma():
     """
     模拟 ChromaDB 客户端
     
-    返回：
+    返回:
         Mock: 模拟的 ChromaDB 客户端
     """
     with patch("app.retrieval.hybrid_retriever.chromadb") as mock:
@@ -204,7 +204,7 @@ def mock_llm():
     """
     模拟 LLM API 调用
     
-    返回：
+    返回:
         Mock: 模拟的 LLM 客户端
     """
     with patch("httpx.AsyncClient") as mock:
@@ -225,7 +225,7 @@ def sample_document():
     """
     测试用示例文档
     
-    返回：
+    返回:
         dict: 示例文档数据
     """
     return {
@@ -243,7 +243,7 @@ def sample_query():
     """
     测试用示例查询
     
-    返回：
+    返回:
         dict: 示例查询数据
     """
     return {
@@ -258,7 +258,7 @@ def sample_user():
     """
     测试用示例用户
     
-    返回：
+    返回:
         dict: 示例用户数据
     """
     return {
@@ -273,7 +273,7 @@ def authenticated_headers():
     """
     带认证头的请求头
     
-    返回：
+    返回:
         dict: 包含 JWT token 的请求头
     """
     return {

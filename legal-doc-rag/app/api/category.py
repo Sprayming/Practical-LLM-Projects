@@ -7,18 +7,18 @@ category.py —— 文档分类管理 API 模块
 基础管理能力。
 
 【主要组成】
-- `create` / `list_all` / `delete`：分类的创建、列举与删除。
-- `assign_document`：为指定文档设置/取消分类。
-- `get_document_category_info`：查询某文档所属分类。
-- `list_documents`：按分类（可选）列出文档。
-- `CreateCategoryRequest` / `SetDocumentCategoryRequest`：请求数据模型。
+- `create` / `list_all` / `delete`:分类的创建、列举与删除。
+- `assign_document`:为指定文档设置/取消分类。
+- `get_document_category_info`:查询某文档所属分类。
+- `list_documents`:按分类(可选)列出文档。
+- `CreateCategoryRequest` / `SetDocumentCategoryRequest`:请求数据模型。
 
 【适用场景】
 - 用户在知识库管理页创建分类并对文档做归类，便于后续按分类浏览与检索。
 
 【依赖关系】
-- 上游调用方：知识库/文档管理前端。
-- 下游依赖：app.tenant.category、app.api.auth。
+- 上游调用方:知识库/文档管理前端。
+- 下游依赖:app.tenant.category、app.api.auth。
 """
 import os
 import sys
@@ -48,7 +48,7 @@ class CreateCategoryRequest(BaseModel):
     """
     创建分类请求的数据模型。
     
-    属性：
+    属性:
         name (str): 分类名称。
         description (Optional[str]): 分类描述信息，可选。
     """
@@ -60,7 +60,7 @@ class SetDocumentCategoryRequest(BaseModel):
     """
     设置文档分类请求的数据模型。
     
-    属性：
+    属性:
         filename (str): 目标文档的文件名。
         category_id (Optional[int]): 要分配到的分类 ID。如果为 None，表示取消该文档的分类关联。
     """
@@ -79,14 +79,14 @@ def create(req: CreateCategoryRequest, user: dict = Depends(require_user)):
     
     需要用户登录。在同一租户下创建新的分类。
     
-    参数：
+    参数:
         req (CreateCategoryRequest): 包含分类名称和描述的请求体。
         user (dict): 依赖注入获取的当前登录用户信息，用于提取 tenant_id。
         
-    异常：
-        HTTPException: 如果创建失败（如分类名称重复），抛出 400 异常。
+    异常:
+        HTTPException: 如果创建失败(如分类名称重复)，抛出 400 异常。
         
-    返回：
+    返回:
         dict: 包含成功标志和操作消息。
     """
     tenant_id = user["tenant_id"]
@@ -103,10 +103,10 @@ def list_all(user: dict = Depends(require_user)):
     
     需要用户登录。返回该租户拥有的所有分类信息。
     
-    参数：
+    参数:
         user (dict): 依赖注入获取的当前登录用户信息，用于提取 tenant_id。
         
-    返回：
+    返回:
         dict: 包含分类列表 categories 和总数 total。
     """
     tenant_id = user["tenant_id"]
@@ -121,14 +121,14 @@ def delete(category_id: int, user: dict = Depends(require_user)):
     
     需要用户登录。根据分类 ID 删除指定分类。
     
-    参数：
+    参数:
         category_id (int): 路径参数，待删除的分类 ID。
         user (dict): 依赖注入获取的当前登录用户信息，用于提取 tenant_id。
         
-    异常：
-        HTTPException: 如果删除失败（如分类不存在或存在关联文档），抛出 400 异常。
+    异常:
+        HTTPException: 如果删除失败(如分类不存在或存在关联文档)，抛出 400 异常。
         
-    返回：
+    返回:
         dict: 包含成功标志和操作消息。
     """
     tenant_id = user["tenant_id"]
@@ -149,14 +149,14 @@ def assign_document(req: SetDocumentCategoryRequest, user: dict = Depends(requir
     
     需要用户登录。将指定的文档分配到某个分类下，如果 category_id 为空则取消其分类。
     
-    参数：
+    参数:
         req (SetDocumentCategoryRequest): 包含文档名和目标分类 ID 的请求体。
         user (dict): 依赖注入获取的当前登录用户信息，用于提取 tenant_id。
         
-    异常：
-        HTTPException: 如果分配失败（如文档或分类不存在），抛出 400 异常。
+    异常:
+        HTTPException: 如果分配失败(如文档或分类不存在)，抛出 400 异常。
         
-    返回：
+    返回:
         dict: 包含成功标志和操作消息。
     """
     tenant_id = user["tenant_id"]
@@ -173,11 +173,11 @@ def get_document_category_info(filename: str, user: dict = Depends(require_user)
     
     需要用户登录。根据文档名查询其当前关联的分类详情。
     
-    参数：
+    参数:
         filename (str): 路径参数，目标文档的文件名。
         user (dict): 依赖注入获取的当前登录用户信息，用于提取 tenant_id。
         
-    返回：
+    返回:
         dict: 包含该文档的分类信息 category。如果未分类，则可能返回 None。
     """
     tenant_id = user["tenant_id"]
@@ -192,11 +192,11 @@ def list_documents(category_id: Optional[int] = None, user: dict = Depends(requi
     
     需要用户登录。如果不传 category_id，则返回该租户下的所有文档；如果传入，则只返回指定分类下的文档。
     
-    参数：
+    参数:
         category_id (Optional[int]): 查询参数，可选的分类 ID，用于过滤文档。
         user (dict): 依赖注入获取的当前登录用户信息，用于提取 tenant_id。
         
-    返回：
+    返回:
         dict: 包含文档列表 documents 和总数 total。
     """
     tenant_id = user["tenant_id"]

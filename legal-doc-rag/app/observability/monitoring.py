@@ -1,27 +1,27 @@
 """
-app/observability/monitoring.py —— 指标监控、健康检查与运行统计（FastAPI 路由）
+app/observability/monitoring.py —— 指标监控、健康检查与运行统计(FastAPI 路由)
 
 【作用与功能】
-提供与 Prometheus 兼容的监控能力：暴露 /metrics（Prometheus 文本格式指标）、
-/health（含 Redis/磁盘/内存子系统检查的综合健康端点）、/stats（运行统计与追踪摘要）。
-内置一个线程安全的轻量级指标收集器（MetricsCollector），无需引入外部依赖即可在
+提供与 Prometheus 兼容的监控能力:暴露 /metrics(Prometheus 文本格式指标)、
+/health(含 Redis/磁盘/内存子系统检查的综合健康端点)、/stats(运行统计与追踪摘要)。
+内置一个线程安全的轻量级指标收集器(MetricsCollector)，无需引入外部依赖即可在
 进程内累计计数器、仪表盘与直方图，并支持导出为 Prometheus 文本或字典。
 
 【主要组成】
-- `MetricsCollector`：线程安全的进程内指标收集器（counter/gauge/histogram）
-- `get_metrics_collector`：返回全局单例收集器
-- `record_query` / `record_upload`：预置的指标上报辅助函数
-- `_check_redis` / `_check_disk` / `_check_memory`：子系统健康检查
-- `metrics` / `health` / `stats`：FastAPI 路由端点
+- `MetricsCollector`:线程安全的进程内指标收集器(counter/gauge/histogram)
+- `get_metrics_collector`:返回全局单例收集器
+- `record_query` / `record_upload`:预置的指标上报辅助函数
+- `_check_redis` / `_check_disk` / `_check_memory`:子系统健康检查
+- `metrics` / `health` / `stats`:FastAPI 路由端点
 
 【适用场景】
-- 场景1：被 FastAPI 应用挂载为 /metrics、/health、/stats 监控端点
-- 场景2：在查询/上传路径中调用 record_query / record_upload 上报指标
-- 场景3：运维通过 Prometheus + Grafana 拉取 /metrics 做可视化告警
+- 场景1:被 FastAPI 应用挂载为 /metrics、/health、/stats 监控端点
+- 场景2:在查询/上传路径中调用 record_query / record_upload 上报指标
+- 场景3:运维通过 Prometheus + Grafana 拉取 /metrics 做可视化告警
 
 【依赖关系】
-- 上游调用方：app 主服务（API 路由注册）
-- 下游依赖：fastapi、psutil、loguru、app.core.config、app.observability.tracker
+- 上游调用方:app 主服务(API 路由注册)
+- 下游依赖:fastapi、psutil、loguru、app.core.config、app.observability.tracker
 """
 
 """
@@ -53,9 +53,9 @@ router = APIRouter(tags=["monitoring"])
 class MetricsCollector:
     """线程安全的进程内指标收集器。
 
-    以 Counter（只增计数）、Gauge（可设值仪表）、Histogram（采样分布）三类指标
+    以 Counter(只增计数)、Gauge(可设值仪表)、Histogram(采样分布)三类指标
     在内存中累计运行数据，并通过 threading.Lock 保证并发安全。所有导出方法均加锁
-    读取，避免统计过程中数据不一致。实例通常作为全局单例使用（见 get_metrics_collector）。
+    读取，避免统计过程中数据不一致。实例通常作为全局单例使用(见 get_metrics_collector)。
     """
 
     def __init__(self):

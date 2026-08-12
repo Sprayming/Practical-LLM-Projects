@@ -1,27 +1,27 @@
 """
-app/memory/redis_client.py —— 短期/中期记忆的 Redis 客户端（含内存回退）
+app/memory/redis_client.py —— 短期/中期记忆的 Redis 客户端(含内存回退)
 
 【作用与功能】
-为 MemorySystem 提供短期记忆（最近对话，Redis 列表，TTL 2h）与中期记忆（会话摘要，
-Redis 字符串，TTL 24h）的存储能力。Redis 不可用时自动降级为内存回退（由调用方
-处理），从而保证服务在缓存缺失场景仍可运行。所有键以 `memory:{session_id}:*`
+为 MemorySystem 提供短期记忆(最近对话，Redis 列表，TTL 2h)与中期记忆(会话摘要，
+Redis 字符串，TTL 24h)的存储能力。Redis 不可用时自动降级为内存回退(由调用方
+处理)，从而保证服务在缓存缺失场景仍可运行。所有键以 `memory:{session_id}:*`
 前缀命名，按会话隔离。
 
 【主要组成】
-- `RedisClient`：Redis 封装类，提供 is_available / add_short_term /
+- `RedisClient`:Redis 封装类，提供 is_available / add_short_term /
   get_short_term / set_mid_term / get_mid_term / clear_session
 
 【适用场景】
-- 场景1：MemorySystem 同步写入/读取短期与中期记忆时调用
-- 场景2：会话重置时调用 clear_session 批量清理该会话所有键
+- 场景1:MemorySystem 同步写入/读取短期与中期记忆时调用
+- 场景2:会话重置时调用 clear_session 批量清理该会话所有键
 
 【依赖关系】
-- 上游调用方：app.memory.memory_manager（MemorySystem）
-- 下游依赖：redis 库（可选，缺失则退化）；TTL 来源于环境变量
+- 上游调用方:app.memory.memory_manager(MemorySystem)
+- 下游依赖:redis 库(可选，缺失则退化)；TTL 来源于环境变量
 """
 
 """
-Redis 客户端 - 短期/中期记忆存储（自动 TTL 过期 + 内存回退）
+Redis 客户端 - 短期/中期记忆存储(自动 TTL 过期 + 内存回退)
 """
 import json, os
 import logging
@@ -32,13 +32,13 @@ logger = logging.getLogger(__name__)
 
 class RedisClient:
     """
-    Redis 客户端封装：负责短期/中期记忆的读写与自动过期。
+    Redis 客户端封装:负责短期/中期记忆的读写与自动过期。
 
-    设计要点：
-    - 通过 `redis.from_url` 建立连接，连接失败（含 ping 超时）时 `_client` 置为
+    设计要点:
+    - 通过 `redis.from_url` 建立连接，连接失败(含 ping 超时)时 `_client` 置为
       None，表示进入内存回退模式；所有公开方法在 `_client` 为 None 时安全降级。
-    - 短期记忆使用 Redis List（LPUSH + LTRIM）保留最近 N 条，并设 TTL。
-    - 中期记忆使用 Redis String（SET + EX）保存会话摘要，并设 TTL。
+    - 短期记忆使用 Redis List(LPUSH + LTRIM)保留最近 N 条，并设 TTL。
+    - 中期记忆使用 Redis String(SET + EX)保存会话摘要，并设 TTL。
     - 键命名统一为 `memory:{session_id}:short` / `memory:{session_id}:mid`。
     """
 
@@ -73,11 +73,11 @@ class RedisClient:
 
     def add_short_term(self, session_id: str, role: str, content: str) -> bool:
         """
-        添加短期记忆（TTL 自动过期）
+        添加短期记忆(TTL 自动过期)
         
         参数:
             session_id (str): 会话ID，用于区分不同用户的记忆
-            role (str): 消息角色（如 "user"、"assistant" 等）
+            role (str): 消息角色(如 "user"、"assistant" 等)
             content (str): 消息内容
             
         返回:
@@ -87,7 +87,7 @@ class RedisClient:
             - 使用列表结构存储消息
             - 使用 LPUSH 将最新消息添加到列表头部
             - 使用 LTRIM 只保留最新的 20 条消息
-            - 设置过期时间（默认 7200 秒/2小时）
+            - 设置过期时间(默认 7200 秒/2小时)
         """
         if not self._client:
             return False
@@ -132,7 +132,7 @@ class RedisClient:
             
         实现细节:
             - 使用字符串结构存储摘要
-            - 设置过期时间（默认 86400 秒/24小时）
+            - 设置过期时间(默认 86400 秒/24小时)
         """
         if not self._client:
             return False

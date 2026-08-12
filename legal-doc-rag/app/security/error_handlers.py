@@ -3,24 +3,24 @@ error_handlers.py —— Legal-DOC-RAG 全局异常处理器
 
 【作用与功能】
 本模块为 FastAPI 应用提供全局异常捕获与统一的错误响应格式，将各类
-异常（HTTP 异常、值错误、文件未找到、权限错误及未捕获异常）转换为
+异常(HTTP 异常、值错误、文件未找到、权限错误及未捕获异常)转换为
 结构一致的 JSON 错误体，并借助 `ERROR_MESSAGES` 映射返回对用户友好的
 中文提示，避免向客户端泄露敏感内部细节。
 
 【主要组成】
-- `error_response`：构造标准化错误 JSON 响应
-- `ErrorCodes`：应用级错误码常量（鉴权/文档/对话/系统）
-- `ERROR_MESSAGES`：错误码到中文提示语的映射
-- `get_error_message`：按错误码取友好提示
-- `setup_error_handlers`：向 FastAPI 注册各类全局异常处理器
+- `error_response`:构造标准化错误 JSON 响应
+- `ErrorCodes`:应用级错误码常量(鉴权/文档/对话/系统)
+- `ERROR_MESSAGES`:错误码到中文提示语的映射
+- `get_error_message`:按错误码取友好提示
+- `setup_error_handlers`:向 FastAPI 注册各类全局异常处理器
 
 【适用场景】
-- 场景1：应用启动时调用 `setup_error_handlers(app)` 完成注册
-- 场景2：业务代码主动返回 `error_response(...)` 统一错误格式
+- 场景1:应用启动时调用 `setup_error_handlers(app)` 完成注册
+- 场景2:业务代码主动返回 `error_response(...)` 统一错误格式
 
 【依赖关系】
-- 上游调用方：app 启动装配流程
-- 下游依赖：FastAPI、loguru
+- 上游调用方:app 启动装配流程
+- 下游依赖:FastAPI、loguru
 """
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
@@ -41,16 +41,16 @@ def error_response(status_code: int, message: str, detail: str = None, error_cod
     供所有异常处理器与主动出错分支复用，保证前端拿到的错误结构一致。
 
     参数:
-        status_code (int): HTTP 状态码（如 400/401/404/500）
+        status_code (int): HTTP 状态码(如 400/401/404/500)
         message (str): 对用户友好的错误提示信息
         detail (str, 可选): 技术细节，通常仅用于非生产环境便于排查
-        error_code (str, 可选): 应用级错误码（见 `ErrorCodes`），便于前端按码处理
+        error_code (str, 可选): 应用级错误码(见 `ErrorCodes`)，便于前端按码处理
 
     返回:
         JSONResponse: 携带标准化错误体的响应对象
 
     异常:
-        无（该函数自身不抛出业务异常）
+        无(该函数自身不抛出业务异常)
     适用场景:
         - 全局异常处理器内部统一返回
         - 业务逻辑中需要主动返回标准化错误时
@@ -77,8 +77,8 @@ def error_response(status_code: int, message: str, detail: str = None, error_cod
 class ErrorCodes:
     """应用级错误码常量集合。
 
-    使用带前缀的字符串编码区分错误域：`AUTH_*`（鉴权）、`DOC_*`（文档）、
-    `CHAT_*`（对话）、`SYS_*`（系统）。业务与异常处理器通过返回这些码，
+    使用带前缀的字符串编码区分错误域:`AUTH_*`(鉴权)、`DOC_*`(文档)、
+    `CHAT_*`(对话)、`SYS_*`(系统)。业务与异常处理器通过返回这些码，
     配合 `ERROR_MESSAGES` 向用户呈现统一的中文提示。
     """
     # Authentication
@@ -148,7 +148,7 @@ def get_error_message(error_code: str, default: str = None) -> str:
     则回退到调用方提供的 `default`，仍未提供时返回「未知错误」。
 
     参数:
-        error_code (str): 应用级错误码（见 `ErrorCodes`）
+        error_code (str): 应用级错误码(见 `ErrorCodes`)
         default (str, 可选): 未命中映射时的兜底文案
 
     返回:
@@ -180,7 +180,7 @@ def setup_error_handlers(app: FastAPI):
         无
 
     异常:
-        无（注册过程本身不抛出）
+        无(注册过程本身不抛出)
     适用场景:
         - 应用启动装配阶段调用一次，完成全局异常屏蔽
     """
@@ -189,8 +189,8 @@ def setup_error_handlers(app: FastAPI):
     async def http_exception_handler(request: Request, exc: HTTPException):
         """处理 HTTP 异常，返回统一格式错误体。
 
-        将常见 HTTP 状态码映射到应用级错误码（如 401→AUTH_INVALID_TOKEN、
-        403→权限不足、413→文件过大、429→限流），并以 `exc.detail` 作为提示；
+        将常见 HTTP 状态码映射到应用级错误码(如 401→AUTH_INVALID_TOKEN、
+        403→权限不足、413→文件过大、429→限流)，并以 `exc.detail` 作为提示；
         若状态码无对应错误码则仅返回原始信息，保证语义清晰。
         """
         # 将常见 HTTP 状态码映射到应用级错误码
@@ -216,7 +216,7 @@ def setup_error_handlers(app: FastAPI):
 
     @app.exception_handler(ValueError)
     async def value_error_handler(request: Request, exc: ValueError):
-        """处理 `ValueError`（如参数非法、类型错误）。
+        """处理 `ValueError`(如参数非法、类型错误)。
 
         记录警告日志并返回 400 错误；将异常信息作为提示返回给调用方，
         错误码归为系统内部错误 `SYS_INTERNAL_ERROR`。
@@ -232,7 +232,7 @@ def setup_error_handlers(app: FastAPI):
     async def file_not_found_handler(request: Request, exc: FileNotFoundError):
         """处理 `FileNotFoundError`。
 
-        记录警告日志并返回 404，提示文案复用「文档不存在」（DOC_NOT_FOUND），
+        记录警告日志并返回 404，提示文案复用「文档不存在」(DOC_NOT_FOUND)，
         用于统一文件缺失类错误的用户感知。
         """
         logger.warning("FileNotFoundError: {} - {}", exc, request.url)
@@ -247,7 +247,7 @@ def setup_error_handlers(app: FastAPI):
         """处理 `PermissionError`。
 
         记录警告日志并返回 403，提示文案复用「权限不足」
-        （AUTH_INSUFFICIENT_PERMISSIONS），统一权限类错误的呈现。
+        (AUTH_INSUFFICIENT_PERMISSIONS)，统一权限类错误的呈现。
         """
         logger.warning("PermissionError: {} - {}", exc, request.url)
         return error_response(
@@ -260,8 +260,8 @@ def setup_error_handlers(app: FastAPI):
     async def general_exception_handler(request: Request, exc: Exception):
         """兜底处理所有未被上述处理器捕获的异常。
 
-        记录错误日志与完整堆栈（debug 级别），并返回 500。是否把堆栈作为
-        `detail` 暴露给客户端，取决于应用是否处于 debug 模式：生产环境
+        记录错误日志与完整堆栈(debug 级别)，并返回 500。是否把堆栈作为
+        `detail` 暴露给客户端，取决于应用是否处于 debug 模式:生产环境
         出于安全考虑不泄露内部细节。
         """
         logger.error("Unhandled exception: {} - {}", exc, request.url)

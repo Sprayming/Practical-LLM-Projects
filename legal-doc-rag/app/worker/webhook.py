@@ -2,24 +2,24 @@
 webhook.py —— Legal-DOC-RAG Webhook 通知系统
 
 【作用与功能】
-本模块提供基于 SQLite 的 Webhook 订阅与事件推送能力：租户可配置外部回调
+本模块提供基于 SQLite 的 Webhook 订阅与事件推送能力:租户可配置外部回调
 地址与关注的事件类型，系统在相应事件发生时异步推送通知，并对失败的推送
-进行周期性重试（最多 `MAX_RETRIES` 次）。若未安装 `httpx`，触发与发送
+进行周期性重试(最多 `MAX_RETRIES` 次)。若未安装 `httpx`，触发与发送
 会被安全跳过。
 
 【主要组成】
-- `_db_path` / `_init_db`：webhooks.db 路径与表结构（webhooks / webhook_logs）
-- `WebhookManager`：增删改查 Webhook、触发事件、发送与重试推送
-- `get_webhook_manager()`：获取全局单例
-- `WebhookEvents`：事件类型常量
+- `_db_path` / `_init_db`:webhooks.db 路径与表结构(webhooks / webhook_logs)
+- `WebhookManager`:增删改查 Webhook、触发事件、发送与重试推送
+- `get_webhook_manager()`:获取全局单例
+- `WebhookEvents`:事件类型常量
 
 【适用场景】
-- 场景1：租户在前台配置 Webhook 订阅（如文档上传完成、对话完成）
-- 场景2：业务事件发生时调用 `trigger_event` 异步通知外部系统
+- 场景1:租户在前台配置 Webhook 订阅(如文档上传完成、对话完成)
+- 场景2:业务事件发生时调用 `trigger_event` 异步通知外部系统
 
 【依赖关系】
-- 上游调用方：事件触发逻辑、管理后台 Webhook 配置接口
-- 下游依赖：sqlite3、httpx（可选）、loguru
+- 上游调用方:事件触发逻辑、管理后台 Webhook 配置接口
+- 下游依赖:sqlite3、httpx(可选)、loguru
 """
 import json
 import hashlib
@@ -37,7 +37,7 @@ try:
 except ImportError:
     HTTPX_AVAILABLE = False
 
-# 失败 Webhook 的最大发送次数（含首次触发），达到后不再重试
+# 失败 Webhook 的最大发送次数(含首次触发)，达到后不再重试
 MAX_RETRIES = 5
 
 
@@ -54,7 +54,7 @@ def _db_path() -> str:
         str: webhooks.db 的绝对路径
 
     异常:
-        无（目录创建失败时由调用方抛错）
+        无(目录创建失败时由调用方抛错)
     适用场景:
         - 所有数据库操作前获取统一存储路径
     """
@@ -67,8 +67,8 @@ def _db_path() -> str:
 def _init_db():
     """初始化 Webhook 相关数据库表。
 
-    创建 `webhooks`（订阅配置：租户、名称、URL、密钥、事件、启用状态）与
-    `webhook_logs`（发送日志，外键级联删除）两张表。语句均带
+    创建 `webhooks`(订阅配置:租户、名称、URL、密钥、事件、启用状态)与
+    `webhook_logs`(发送日志，外键级联删除)两张表。语句均带
     IF NOT EXISTS，可重复安全调用。
 
     参数:
@@ -78,7 +78,7 @@ def _init_db():
         None
 
     异常:
-        无（sqlite 错误向上抛出，由调用方处理）
+        无(sqlite 错误向上抛出，由调用方处理)
     适用场景:
         - `WebhookManager` 实例化时调用，确保表存在
     """
@@ -152,7 +152,7 @@ class WebhookManager:
     def stop(self):
         """停止 Webhook 管理器与重试线程。
 
-        置 `_running=False` 并 `join` 重试线程（最多 5 秒），完成优雅关闭。
+        置 `_running=False` 并 `join` 重试线程(最多 5 秒)，完成优雅关闭。
 
         参数:
             无
@@ -178,21 +178,21 @@ class WebhookManager:
     ) -> Tuple[bool, str, int]:
         """创建 Webhook 订阅。
 
-        将租户、名称、回调 URL、签名密钥与关注的事件列表（JSON 序列化）写入
+        将租户、名称、回调 URL、签名密钥与关注的事件列表(JSON 序列化)写入
         `webhooks` 表，返回新纪录 id；失败则回滚并返回错误信息。
 
         参数:
-            tenant_id (str): 租户标识（用于隔离订阅）
+            tenant_id (str): 租户标识(用于隔离订阅)
             name (str): Webhook 名称
             url (str): 回调地址
-            events (List[str]): 关注的事件类型列表（如 ["document.uploaded"]）
+            events (List[str]): 关注的事件类型列表(如 ["document.uploaded"])
             secret (str, 可选): 用于签名校验的密钥
 
         返回:
             Tuple[bool, str, int]: (是否成功, 消息, 新建 Webhook 的 id)
 
         异常:
-            无（数据库错误被捕获并以 (False, 错误信息, 0) 返回）
+            无(数据库错误被捕获并以 (False, 错误信息, 0) 返回)
         适用场景:
             - 管理后台新增 Webhook 订阅
         """
@@ -216,7 +216,7 @@ class WebhookManager:
         """列出某租户的全部 Webhook 订阅。
 
         读取 `webhooks` 表中该租户的记录，将 `events` JSON 反序列化后返回
-        字典列表（含 id、名称、URL、事件、启用状态与创建时间）。
+        字典列表(含 id、名称、URL、事件、启用状态与创建时间)。
 
         参数:
             tenant_id (str): 租户标识
@@ -262,12 +262,12 @@ class WebhookManager:
         """更新指定 Webhook 订阅的字段。
 
         先校验 Webhook 存在且属于该租户，再按需更新提供的字段
-        （名称/URL/事件/启用状态），并刷新 `updated_at`。无变更时返回
+        (名称/URL/事件/启用状态)，并刷新 `updated_at`。无变更时返回
         「无需更新」。
 
         参数:
             webhook_id (int): 要更新的 Webhook id
-            tenant_id (str): 租户标识（权限校验）
+            tenant_id (str): 租户标识(权限校验)
             name (str, 可选): 新名称
             url (str, 可选): 新回调地址
             events (List[str], 可选): 新事件列表
@@ -277,7 +277,7 @@ class WebhookManager:
             Tuple[bool, str]: (是否成功, 消息)
 
         异常:
-            无（数据库错误被捕获并回滚）
+            无(数据库错误被捕获并回滚)
         适用场景:
             - 管理后台修改 Webhook 配置
         """
@@ -330,7 +330,7 @@ class WebhookManager:
 
         参数:
             webhook_id (int): 要删除的 Webhook id
-            tenant_id (str): 租户标识（权限校验）
+            tenant_id (str): 租户标识(权限校验)
 
         返回:
             Tuple[bool, str]: (是否成功, 消息)
@@ -369,16 +369,16 @@ class WebhookManager:
 
         参数:
             tenant_id (str): 租户标识
-            event_type (str): 事件类型（见 `WebhookEvents`）
+            event_type (str): 事件类型(见 `WebhookEvents`)
             payload (Dict): 随事件携带的数据
 
         返回:
             int: 成功触发的 Webhook 数量
 
         异常:
-            无（数据库/发送异常被捕获并降级为返回 0）
+            无(数据库/发送异常被捕获并降级为返回 0)
         适用场景:
-            - 业务事件（文档上传、对话完成等）发生时调用
+            - 业务事件(文档上传、对话完成等)发生时调用
         """
         if not HTTPX_AVAILABLE:
             logger.warning("httpx not installed, skipping webhook trigger")
@@ -432,16 +432,16 @@ class WebhookManager:
     ):
         """向单个 Webhook 地址发送一次通知。
 
-        构造请求头（含 `X-Webhook-Event`），若提供 `secret` 则以
+        构造请求头(含 `X-Webhook-Event`)，若提供 `secret` 则以
         `sha256(payload + secret)` 生成 `X-Webhook-Signature` 签名；通过
-        httpx 发送 JSON 体（含事件、时间戳、数据），并把响应状态/正文写回
-        `webhook_logs`（成功与否）。发送异常同样记录到日志。
+        httpx 发送 JSON 体(含事件、时间戳、数据)，并把响应状态/正文写回
+        `webhook_logs`(成功与否)。发送异常同样记录到日志。
 
         参数:
             log_id (int): 对应的 webhook_logs 记录 id
             webhook_id (int): Webhook id
             url (str): 回调地址
-            secret (str): 签名密钥（可为空）
+            secret (str): 签名密钥(可为空)
             event_type (str): 事件类型
             payload (Dict): 事件数据
 
@@ -449,7 +449,7 @@ class WebhookManager:
             None
 
         异常:
-            无（异常被捕获并写入日志，不向上抛出）
+            无(异常被捕获并写入日志，不向上抛出)
         适用场景:
             - 事件触发与失败重试时复用同一发送逻辑
         """
@@ -508,7 +508,7 @@ class WebhookManager:
     def _retry_loop(self):
         """失败 Webhook 重试后台循环。
 
-        在 `start()` 启动的守护线程中运行：每 60 秒调用一次 `_retry_failed`
+        在 `start()` 启动的守护线程中运行:每 60 秒调用一次 `_retry_failed`
         重发未成功的推送，直到 `stop()` 将 `_running` 置 False。
 
         参数:
@@ -518,7 +518,7 @@ class WebhookManager:
             None
 
         异常:
-            无（单轮异常被捕获并记录，不影响后续循环）
+            无(单轮异常被捕获并记录，不影响后续循环)
         """
         while self._running:
             try:
@@ -531,7 +531,7 @@ class WebhookManager:
         """重发所有未成功且未超过最大发送次数的 Webhook 日志。
 
         扫描 `webhook_logs` 中 `success=0` 且 `attempts < MAX_RETRIES` 的记录，
-        逐条重新读取对应 Webhook 的 URL/密钥（可能已变更或删除）：若 Webhook
+        逐条重新读取对应 Webhook 的 URL/密钥(可能已变更或删除):若 Webhook
         已删除则将其 attempts 置为上限以停止重试；否则先递增 attempts，再
         复用 `_send_webhook` 重新发送。
 
@@ -542,7 +542,7 @@ class WebhookManager:
             None
 
         异常:
-            无（单条失败被捕获并继续后续）
+            无(单条失败被捕获并继续后续)
         适用场景:
             - 由 `_retry_loop` 周期性调用
         """
@@ -558,7 +558,7 @@ class WebhookManager:
             conn.close()
 
         for log_id, webhook_id, event_type, payload_str in rows:
-            # 重新读取 webhook 的 url/secret（可能被更新或删除）
+            # 重新读取 webhook 的 url/secret(可能被更新或删除)
             conn = sqlite3.connect(_db_path())
             try:
                 row = conn.execute(
@@ -568,7 +568,7 @@ class WebhookManager:
                 conn.close()
 
             if not row:
-                # webhook 已删除：将该日志置为最大次数，停止重试
+                # webhook 已删除:将该日志置为最大次数，停止重试
                 conn = sqlite3.connect(_db_path())
                 try:
                     conn.execute(
@@ -582,7 +582,7 @@ class WebhookManager:
 
             url, secret = row
 
-            # 递增重试计数（达到 MAX_RETRIES 后下一轮不再选中）
+            # 递增重试计数(达到 MAX_RETRIES 后下一轮不再选中)
             conn = sqlite3.connect(_db_path())
             try:
                 conn.execute(
@@ -598,7 +598,7 @@ class WebhookManager:
             except json.JSONDecodeError:
                 payload = {}
 
-            # 复用统一发送逻辑（含签名与日志更新）
+            # 复用统一发送逻辑(含签名与日志更新)
             self._send_webhook(log_id, webhook_id, url, secret, event_type, payload)
 
     def get_webhook_logs(
@@ -607,14 +607,14 @@ class WebhookManager:
         tenant_id: str,
         limit: int = 50,
     ) -> List[Dict]:
-        """获取指定 Webhook 的发送日志（按时间倒序）。
+        """获取指定 Webhook 的发送日志(按时间倒序)。
 
-        先校验 Webhook 属于该租户（防越权），再读取最近的 `limit` 条日志，
+        先校验 Webhook 属于该租户(防越权)，再读取最近的 `limit` 条日志，
         返回含事件类型、响应状态、成功标记与重试次数的字典列表。
 
         参数:
             webhook_id (int): Webhook id
-            tenant_id (str): 租户标识（权限校验）
+            tenant_id (str): 租户标识(权限校验)
             limit (int): 返回条数上限，默认 50
 
         返回:
@@ -664,7 +664,7 @@ _webhook_manager: Optional[WebhookManager] = None
 
 
 def get_webhook_manager() -> WebhookManager:
-    """获取全局单例 Webhook 管理器（懒初始化）。
+    """获取全局单例 Webhook 管理器(懒初始化)。
 
     首次调用时创建 `WebhookManager` 实例并复用，保证全应用共享同一管理器
     与数据库锁。

@@ -7,19 +7,19 @@ app/evaluation/evaluator —— 基于 RAGAS 的 RAG 端到端评估模块
 生成答案，最后用 RAGAS 框架计算多项质量指标并落盘评估报告。
 
 【主要组成】
-- `build_retriever`：基于 text2vec 嵌入构建向量检索器（top-3）。
-- `generate_answer`：调用 DeepSeek API 基于上下文生成答案。
-- `run_evaluation`：评估主流程，串联检索/生成/RAGAS/报告保存。
-- `TEST_QUESTIONS`：预设的劳动法律领域测试问题（含标准答案）。
+- `build_retriever`:基于 text2vec 嵌入构建向量检索器(top-3)。
+- `generate_answer`:调用 DeepSeek API 基于上下文生成答案。
+- `run_evaluation`:评估主流程，串联检索/生成/RAGAS/报告保存。
+- `TEST_QUESTIONS`:预设的劳动法律领域测试问题(含标准答案)。
 
 【适用场景】
-- 场景1：模型或检索策略迭代后，命令行运行 `run_evaluation()` 对比质量。
-- 场景2：CI/回归中评估指标是否劣化。
+- 场景1:模型或检索策略迭代后，命令行运行 `run_evaluation()` 对比质量。
+- 场景2:CI/回归中评估指标是否劣化。
 
 【依赖关系】
-- 上游调用方：评估入口 / `python -m app.evaluation.evaluator`。
-- 下游依赖：RAGAS、`langchain` 系列、HuggingFace 嵌入、DeepSeek API。
-- 预设依赖：项目根 `data/labor_law.txt` 与 `.env`（API 配置）。
+- 上游调用方:评估入口 / `python -m app.evaluation.evaluator`。
+- 下游依赖:RAGAS、`langchain` 系列、HuggingFace 嵌入、DeepSeek API。
+- 预设依赖:项目根 `data/labor_law.txt` 与 `.env`(API 配置)。
 
 评估指标:
 - Faithfulness (忠实度): 评估生成答案与检索到的事实是否一致
@@ -33,7 +33,7 @@ app/evaluation/evaluator —— 基于 RAGAS 的 RAG 端到端评估模块
 import types, sys, json, os
 from pathlib import Path
 
-# 临时处理依赖：模拟 langchain_community.chat_models.vertexai 模块
+# 临时处理依赖:模拟 langchain_community.chat_models.vertexai 模块
 # 避免在评估环境中安装 VertexAI 相关依赖
 fake = types.ModuleType("langchain_community.chat_models.vertexai")
 class FakeDummy: pass
@@ -45,7 +45,7 @@ from ragas.dataset_schema import SingleTurnSample, EvaluationDataset
 from ragas.metrics.collections import faithfulness, answer_relevancy, context_precision, context_recall
 from ragas import evaluate
 
-# 预设的法律领域测试问题集（包含问题和标准答案）
+# 预设的法律领域测试问题集(包含问题和标准答案)
 TEST_QUESTIONS = [
     {"question": "建立劳动关系需要签订什么形式的合同？", "ground_truth": "应当订立书面劳动合同"},
     {"question": "已建立劳动关系但未同时订立书面合同的，应在多久内补签？", "ground_truth": "自用工之日起一个月内"},
@@ -63,10 +63,10 @@ def build_retriever(data_path):
     使用 HuggingFace 的 text2vec-base-chinese 模型创建向量库，
     并配置为返回 top 3 相关文档的检索器。
     
-    参数：
+    参数:
         data_path (str): 待索引的文本文件路径。
         
-    返回：
+    返回:
         VectorStoreRetriever: 配置好的检索器实例。
 
     异常:
@@ -98,7 +98,7 @@ def build_retriever(data_path):
         embedding=embedder
     )
     
-    # 3. 返回配置好的检索器（返回 top 3 相关文档）
+    # 3. 返回配置好的检索器(返回 top 3 相关文档)
     return store.as_retriever(search_kwargs={"k": 3})
 
 
@@ -108,15 +108,15 @@ def generate_answer(question, contexts):
     
     使用 DeepSeek API 基于检索到的上下文生成回答。
     
-    参数：
+    参数:
         question (str): 用户问题。
         contexts (List[str]): 检索到的相关上下文列表。
         
-    返回：
+    返回:
         str: 生成的答案，如果出错则返回错误信息。
 
     异常:
-        无：API 非 200 或网络异常时返回 "[API Error]" / "[Error: ...]"，不抛出。
+        无:API 非 200 或网络异常时返回 "[API Error]" / "[Error: ...]"，不抛出。
     适用场景:
         - 评估流程对每题检索到的上下文调用，生成待评估的答案。
     """
@@ -160,23 +160,23 @@ def run_evaluation(data_path=None):
     """
     执行完整的 RAG 评估流程。
     
-    主要步骤：
+    主要步骤:
     1. 构建检索器
-    2. 对每个测试问题：
+    2. 对每个测试问题:
        - 检索相关上下文
        - 生成答案
        - 构建评估样本
     3. 使用 RAGAS 框架进行评估
     4. 输出评估结果并保存报告
     
-    参数：
+    参数:
         data_path (str, optional): 待评估的文本文件路径。如果未提供，使用默认的法律文本。
         
-    返回：
+    返回:
         dict: RAGAS 评估结果字典，包含各项指标的分数。
 
     异常:
-        无：检索/生成/评估各阶段异常尽量被内部吞掉并返回可序列化结果；
+        无:检索/生成/评估各阶段异常尽量被内部吞掉并返回可序列化结果；
         但 RAGAS 评估本身可能抛出，需在调用方处理。
     适用场景:
         - 作为评估入口直接运行，默认评测 `data/labor_law.txt` 并写出

@@ -6,15 +6,15 @@ feedback.py —— 用户反馈收集 API 模块
 存储于 data/feedback 目录，文件名使用 Unix 时间戳保证唯一，便于后续离线分析与模型评估。
 
 【主要组成】
-- `submit_feedback`：提交反馈，记录 query、rating、answer（截取前 500 字符）及用户名。
+- `submit_feedback`:提交反馈，记录 query、rating、answer(截取前 500 字符)及用户名。
 
 【适用场景】
 - 前端在用户对某条回答点赞/点踩或打分后调用，沉淀回答质量信号。
 - 运营或算法团队离线分析反馈文件，评估与改进回答质量。
 
 【依赖关系】
-- 上游调用方：前端对话页反馈组件。
-- 下游依赖：app.api.auth（require_user 鉴权）、本地文件系统 data/feedback。
+- 上游调用方:前端对话页反馈组件。
+- 下游依赖:app.api.auth(require_user 鉴权)、本地文件系统 data/feedback。
 """
 
 import sys, json, os, time
@@ -34,9 +34,9 @@ class FeedbackRequest(BaseModel):
     """
     用户反馈请求的数据模型。
     
-    属性：
+    属性:
         answer (str): AI 生成的回答内容，默认为空字符串。
-        rating (int): 用户对回答的评分（如 1-5 分），默认为 0。
+        rating (int): 用户对回答的评分(如 1-5 分)，默认为 0。
         query (str): 用户原始提问内容，默认为空字符串。
     """
     answer: str = ""
@@ -52,11 +52,11 @@ def submit_feedback(req: FeedbackRequest, user: dict = Depends(require_user)):
     接收用户对 AI 回答的评分和评价，将其以 JSON 文件形式按租户分类存储在 data/feedback 目录下。
     文件名使用 Unix 时间戳确保唯一性，便于后续分析。
     
-    参数：
+    参数:
         req (FeedbackRequest): 包含回答内容、评分和原始提问的请求体。
         user (dict): 依赖注入获取的当前登录用户信息，用于提取 tenant_id 和 username。
         
-    返回：
+    返回:
         dict: 包含成功标志和确认消息。
     """
     tenant_id = user["tenant_id"]
@@ -70,8 +70,8 @@ def submit_feedback(req: FeedbackRequest, user: dict = Depends(require_user)):
     with open(fb_file, "w", encoding="utf-8") as f:
         json.dump({
             "query": req.query,       # 用户原始提问
-            "rating": req.rating,     # 用户评分（1-5分）
-            "answer": req.answer[:500], # AI 回答（截取前500字符）
+            "rating": req.rating,     # 用户评分(1-5分)
+            "answer": req.answer[:500], # AI 回答(截取前500字符)
             "timestamp": time.time(), # 反馈提交时间戳
             "username": user.get("username", ""), # 提交反馈的用户名
         }, f, ensure_ascii=False)  # 确保中文正常写入

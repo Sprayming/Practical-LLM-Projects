@@ -1,15 +1,15 @@
 """
-test_memory_manager_fixed.py —— 对 app.memory.memory_manager 记忆系统（修复版）的单元测试。
+test_memory_manager_fixed.py —— 对 app.memory.memory_manager 记忆系统(修复版)的单元测试。
 
 【测试覆盖范围】
-- 初始化：验证 Chroma / RedisClient / ForgettingMechanism / ProfileStore / Worker
-  等组件被正确注入，且参数（如遗忘阈值）正确传递。
-- 记忆写入：add 在 Redis 不可用时的回退，短期记忆入队与 Redis 调用。
-- 上下文构建：get_context 组合长期 / 中期 / 近期记忆并格式化（含标记段）。
-- 会话管理：clear_session 清除记忆并刷新 session_id、通知 Redis。
-- 统计信息：stats 各计数（短期条数、中期是否存在、长期块数、Redis 可用性）正确。
-- 长期检索：retrieve_long_term 向量检索 + 遗忘机制过滤后返回内容文本。
-- 后台任务：短期记忆溢出时 trigger_background_jobs 正确提交 Worker 任务。
+- 初始化:验证 Chroma / RedisClient / ForgettingMechanism / ProfileStore / Worker
+  等组件被正确注入，且参数(如遗忘阈值)正确传递。
+- 记忆写入:add 在 Redis 不可用时的回退，短期记忆入队与 Redis 调用。
+- 上下文构建:get_context 组合长期 / 中期 / 近期记忆并格式化(含标记段)。
+- 会话管理:clear_session 清除记忆并刷新 session_id、通知 Redis。
+- 统计信息:stats 各计数(短期条数、中期是否存在、长期块数、Redis 可用性)正确。
+- 长期检索:retrieve_long_term 向量检索 + 遗忘机制过滤后返回内容文本。
+- 后台任务:短期记忆溢出时 trigger_background_jobs 正确提交 Worker 任务。
 
 【适用场景】
 - 用 pytest 运行，覆盖记忆系统的初始化、读写、检索、会话与后台任务的边界与异常。
@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 
 
 class TestMemorySystem:
-    """记忆系统（MemorySystem）类的测试"""
+    """记忆系统(MemorySystem)类的测试"""
 
     @patch("app.memory.memory_manager.get_worker")
     @patch("app.memory.memory_manager.ProfileStore")
@@ -35,7 +35,7 @@ class TestMemorySystem:
         """
         测试记忆系统初始化
         
-        验证：
+        验证:
         1. 所有组件正确初始化
         2. 参数正确传递
         3. 外部依赖正确注入
@@ -73,7 +73,7 @@ class TestMemorySystem:
         """
         测试添加记忆功能
         
-        验证：
+        验证:
         1. 短期记忆正确添加
         2. Redis 正确调用
         3. 回退机制正常工作
@@ -109,7 +109,7 @@ class TestMemorySystem:
         """
         测试获取上下文功能
         
-        验证：
+        验证:
         1. 正确组合不同类型的记忆
         2. 格式化输出正确
         3. 各部分内容完整
@@ -153,7 +153,7 @@ class TestMemorySystem:
         """
         测试清除会话功能
         
-        验证：
+        验证:
         1. 会话 ID 正确更新
         2. 所有记忆被清除
         3. Redis 正确调用
@@ -192,7 +192,7 @@ class TestMemorySystem:
         """
         测试统计功能
         
-        验证：
+        验证:
         1. 统计信息完整
         2. 各项计数正确
         3. 状态信息准确
@@ -237,7 +237,7 @@ class TestMemorySystem:
         """
         测试长期记忆检索功能
         
-        验证：
+        验证:
         1. 向量检索正确调用
         2. 遗忘机制正确应用
         3. 结果格式正确
@@ -293,7 +293,7 @@ class TestMemorySystem:
         """
         测试后台任务触发功能
         
-        验证：
+        验证:
         1. 短期记忆溢出时触发任务
         2. Worker 正确调用
         3. 任务参数正确
@@ -313,7 +313,7 @@ class TestMemorySystem:
             persist_dir="./test_db"
         )
 
-        # 制造短期记忆溢出（超过 max_short_term），触发后台压缩任务
+        # 制造短期记忆溢出(超过 max_short_term)，触发后台压缩任务
         memory.short_term = [
             {"role": "user", "content": f"msg-{i}"}
             for i in range(memory.max_short_term + 1)

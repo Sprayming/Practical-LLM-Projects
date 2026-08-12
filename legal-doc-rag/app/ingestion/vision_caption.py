@@ -2,31 +2,31 @@
 app/ingestion/vision_caption —— Vision LLM 图片标注
 
 【作用与功能】
-调用 Vision LLM（如 DeepSeek）为图片生成一句话语义描述，与 OCR 提取的
-图片文字配合，实现“以文搜图”的检索能力：图片的描述文本会与页面文本一起
+调用 Vision LLM(如 DeepSeek)为图片生成一句话语义描述，与 OCR 提取的
+图片文字配合，实现“以文搜图”的检索能力:图片的描述文本会与页面文本一起
 被向量化，从而让用户用自然语言检索到相关图片/页面。
 
 【主要组成】
-- `VisionCaptioner`：图片标注器类，`caption()` 标注单张图片，
+- `VisionCaptioner`:图片标注器类，`caption()` 标注单张图片，
   `batch_caption()` 标注批量图片。
 
 【适用场景】
-- 场景1：处理管线对每页图片调用 `caption()` 生成“[图片描述]”并入块。
-- 场景2：扫描件、图表类法律文档补充可被检索的图片语义信息。
+- 场景1:处理管线对每页图片调用 `caption()` 生成“[图片描述]”并入块。
+- 场景2:扫描件、图表类法律文档补充可被检索的图片语义信息。
 
 【依赖关系】
-- 上游调用方：`app.processing.multimodal_pipeline`。
-- 下游依赖：Vision LLM API（`LLM_API_KEY` / `LLM_BASE_URL` 来自
-  `app.core.config` 或 .env），以及 `requests` 与 `loguru`。
+- 上游调用方:`app.processing.multimodal_pipeline`。
+- 下游依赖:Vision LLM API(`LLM_API_KEY` / `LLM_BASE_URL` 来自
+  `app.core.config` 或 .env)，以及 `requests` 与 `loguru`。
 
-与 processing/ocr_engine.py 配合使用：
+与 processing/ocr_engine.py 配合使用:
 - OCR 引擎提取图片中的文字
 - Vision LLM 生成图片的语义描述
 - 两者结合实现基于文字的图片搜索功能
 
-主要特点：
+主要特点:
 1. 支持 base64 编码的图片输入
-2. 自动处理不同图片格式（jpg/png）
+2. 自动处理不同图片格式(jpg/png)
 3. 批量处理能力
 4. 完善的错误处理和日志记录
 """
@@ -42,7 +42,7 @@ class VisionCaptioner:
     图片标注器类，用于调用 Vision LLM API 生成图片描述。
 
     支持单张图片和批量图片的标注，自动处理图片格式转换和 API 调用。
-    构造时从环境变量（或显式参数）加载 API 密钥与基础地址，供后续
+    构造时从环境变量(或显式参数)加载 API 密钥与基础地址，供后续
     `caption()` / `batch_caption()` 复用。
     """
     
@@ -52,7 +52,7 @@ class VisionCaptioner:
 
         从环境变量加载 API 配置，支持手动传入参数覆盖环境变量。
 
-        参数：
+        参数:
             api_key (Optional[str]): Vision API 密钥，如果未提供则从环境变量 LLM_API_KEY 读取。
             base_url (Optional[str]): Vision API 基础 URL，如果未提供则从环境变量 LLM_BASE_URL 读取。
 
@@ -76,16 +76,16 @@ class VisionCaptioner:
 
         将图片转换为 base64 编码，构造 API 请求，调用 Vision LLM 生成描述。
 
-        参数：
+        参数:
             image_bytes (bytes): 图片的二进制数据。
-            image_ext (str): 图片扩展名（png/jpg），默认为 png。
+            image_ext (str): 图片扩展名(png/jpg)，默认为 png。
 
-        返回：
+        返回:
             str: 生成的图片描述文字。如果 API 调用失败或未配置，返回空字符串。
-                 注意：失败时返回空串而非错误信息，避免无意义的占位文本污染向量库。
+                 注意:失败时返回空串而非错误信息，避免无意义的占位文本污染向量库。
 
         异常:
-            无：API 未配置时返回提示串，请求异常时记录 warning 并返回空串，
+            无:API 未配置时返回提示串，请求异常时记录 warning 并返回空串，
             不会中断上层处理流程。
         适用场景:
             - 处理管线对每页图片逐一调用，生成“[图片描述]”文本并入块。
@@ -136,17 +136,17 @@ class VisionCaptioner:
             logger.warning("Vision caption failed: {}", e)
             
         # 失败时返回空字符串，避免无意义的占位文本污染向量库
-        # 特别注意：对于无 OCR/无文字层的扫描页，不应写入无意义的占位 chunk
+        # 特别注意:对于无 OCR/无文字层的扫描页，不应写入无意义的占位 chunk
         return ""
 
     def batch_caption(self, images: list[tuple[bytes, str]]) -> list[str]:
         """
         批量处理多张图片的标注。
 
-        参数：
+        参数:
             images (list[tuple[bytes, str]]): 图片列表，每个元素是 (图片二进制数据, 图片扩展名) 的元组。
 
-        返回：
+        返回:
             list[str]: 每张图片对应的描述文字列表，顺序与输入一致。
 
         适用场景:

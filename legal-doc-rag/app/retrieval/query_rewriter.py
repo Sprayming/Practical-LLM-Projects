@@ -1,28 +1,28 @@
 # 
-# 策略：
-#   1. 查询扩展：补充同义词、上下位法律概念
-#   2. 查询分解：复合问题拆解为多个子查询
-#   3. HyDE：先生成假设性回答，用其向量检索
-#   4. 回退：API 不可用时返回原查询
+# 策略:
+#   1. 查询扩展:补充同义词、上下位法律概念
+#   2. 查询分解:复合问题拆解为多个子查询
+#   3. HyDE:先生成假设性回答，用其向量检索
+#   4. 回退:API 不可用时返回原查询
 
 """
 query_rewriter —— 法律查询改写器。
 
 【作用与功能】
-在检索前用 LLM 将用户原始问题改写为更利于向量/全文检索的形式（同义扩展、
-子问题拆分、HyDE 思路），并对改写失败做回退；另提供不依赖 API 的规则式
+在检索前用 LLM 将用户原始问题改写为更利于向量/全文检索的形式(同义扩展、
+子问题拆分、HyDE 思路)，并对改写失败做回退；另提供不依赖 API 的规则式
 关键词扩展，提升法律术语召回。
 
 【主要组成】
-- `QueryRewriter`：调用 LLM 改写查询并返回多个变体；内置规则式关键词扩展
+- `QueryRewriter`:调用 LLM 改写查询并返回多个变体；内置规则式关键词扩展
 
 【适用场景】
-- 场景1：用户提问口语化/过短，先改写为多个检索友好变体再召回
-- 场景2：API 不可用时 `expand` 用同义词词典做轻量扩展
+- 场景1:用户提问口语化/过短，先改写为多个检索友好变体再召回
+- 场景2:API 不可用时 `expand` 用同义词词典做轻量扩展
 
 【依赖关系】
-- 上游调用方：RAG 问答流水线（检索前）
-- 下游依赖：LLM Chat Completions API（deepseek 等）、requests、loguru
+- 上游调用方:RAG 问答流水线(检索前)
+- 下游依赖:LLM Chat Completions API(deepseek 等)、requests、loguru
 """
 import json, os
 from typing import Optional
@@ -36,12 +36,12 @@ class QueryRewriter:
     def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
         """初始化查询改写器。
 
-        保存 API Key 与 base_url（缺省取 LLM_BASE_URL 或 deepseek 默认地址），
+        保存 API Key 与 base_url(缺省取 LLM_BASE_URL 或 deepseek 默认地址)，
         随后尝试从 .env 加载缺失的 API Key。
 
         参数:
             api_key: LLM API Key；为空时后续改写将回退为原查询
-            base_url: LLM 服务基址（默认 deepseek v1）
+            base_url: LLM 服务基址(默认 deepseek v1)
         """
         self.api_key = api_key
         self.base_url = base_url or os.getenv("LLM_BASE_URL", "https://api.deepseek.com/v1")
@@ -63,21 +63,21 @@ class QueryRewriter:
 
         prompt = f"""你是一个法律检索专家。请将用户的问题改写成更适合向量检索的形式。
 
-原问题：{query}
+原问题:{query}
 
-要求：
+要求:
 1. 保持原意不变
 2. 补充相关法律术语和关键词
 3. 如果包含多个子问题，拆分成独立查询
 4. 每个变体不超过 50 字
 
-输出格式（JSON 数组）：
+输出格式(JSON 数组):
 ["改写后的查询1", "改写后的查询2"]
 
 只输出 JSON 数组，不要其他内容。"""
 
         if context:
-            prompt += f"\n对话上下文：{context}"
+            prompt += f"\n对话上下文:{context}"
 
         try:
             import requests
@@ -105,7 +105,7 @@ class QueryRewriter:
         return [query]
 
     def expand(self, query: str) -> str:
-        """简单查询扩展（不调用 API，用规则）"""
+        """简单查询扩展(不调用 API，用规则)"""
         # 法律常见术语扩展
         expansions = {
             "合同": "合同 协议 契约 合约",

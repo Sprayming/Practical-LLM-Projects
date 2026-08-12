@@ -7,16 +7,16 @@ app.observability —— 可观测性子包
 是定位性能瓶颈与线上问题的核心支撑。
 
 【主要组成】
-- `structured_logger`：结构化日志封装（带模块标识与上下文字段）。
-- `tracker`：调用链/请求追踪（TraceContext），串联一次问答的完整链路。
-- `monitoring`：监控指标采集与健康检查（如 /health 状态、查询耗时上报）。
+- `structured_logger`:结构化日志封装(带模块标识与上下文字段)。
+- `tracker`:调用链/请求追踪(TraceContext)，串联一次问答的完整链路。
+- `monitoring`:监控指标采集与健康检查(如 /health 状态、查询耗时上报)。
 
 【适用场景】
-- 需要统一、可检索的日志格式时（替代散落的 print）。
+- 需要统一、可检索的日志格式时(替代散落的 print)。
 - 需要追踪单次请求在检索/重写/生成各阶段的耗时与状态时。
-- 健康检查与指标上报（Prometheus 等）接入时。
+- 健康检查与指标上报(Prometheus 等)接入时。
 
 【依赖关系】
-- 上游调用方：app.api.*、app.retrieval.*、app.worker.* 等各业务模块。
-- 下游依赖：可选指标后端（如 Prometheus 客户端）、本地/Redis 存储。
+- 上游调用方:app.api.*、app.retrieval.*、app.worker.* 等各业务模块。
+- 下游依赖:可选指标后端(如 Prometheus 客户端)、本地/Redis 存储。
 """

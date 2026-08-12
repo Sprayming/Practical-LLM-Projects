@@ -2,26 +2,26 @@
 auth.py —— Legal-DOC-RAG 用户、租户与鉴权模块
 
 【作用与功能】
-本模块负责系统的身份与多租户基础：基于 SQLite（users.db）管理用户账户、
-租户归属、角色（super_admin/user）、密码安全（PBKDF2-HMAC-SHA256 加盐哈希），
+本模块负责系统的身份与多租户基础:基于 SQLite(users.db)管理用户账户、
+租户归属、角色(super_admin/user)、密码安全(PBKDF2-HMAC-SHA256 加盐哈希)，
 并提供注册、登录、用户列表/删除、角色调整、改密以及管理员密钥重置密码等
 能力。注册首个用户自动成为 super_admin，其余为普通 user。
 
 【主要组成】
-- `_db_path` / `_init_db`：users.db 路径与建表（users/tenants/文档分类/文档/对话/消息）
-- `_hash_password` / `_verify_password`：密码加盐哈希与校验
-- `register` / `login` / `has_users`：注册、登录与是否已有用户
-- `list_users` / `delete_user` / `set_user_role`：管理后台用户治理
-- `change_password` / `reset_password_with_key`：密码修改与密钥重置
+- `_db_path` / `_init_db`:users.db 路径与建表(users/tenants/文档分类/文档/对话/消息)
+- `_hash_password` / `_verify_password`:密码加盐哈希与校验
+- `register` / `login` / `has_users`:注册、登录与是否已有用户
+- `list_users` / `delete_user` / `set_user_role`:管理后台用户治理
+- `change_password` / `reset_password_with_key`:密码修改与密钥重置
 
 【适用场景】
-- 场景1：登录/注册接口调用 `login` / `register`
-- 场景2：管理后台治理用户与权限
-- 场景3：忘记密码时由管理员用 `ADMIN_RESET_KEY` 重置
+- 场景1:登录/注册接口调用 `login` / `register`
+- 场景2:管理后台治理用户与权限
+- 场景3:忘记密码时由管理员用 `ADMIN_RESET_KEY` 重置
 
 【依赖关系】
-- 上游调用方：鉴权路由、管理后台、依赖注入
-- 下游依赖：app.core.config（ADMIN_RESET_KEY）、sqlite3
+- 上游调用方:鉴权路由、管理后台、依赖注入
+- 下游依赖:app.core.config(ADMIN_RESET_KEY)、sqlite3
 """
 import os
 import hashlib
@@ -34,7 +34,7 @@ import app.core.config as cfg
 
 
 def _db_path() -> str:
-    """返回 users.db 的磁盘路径（位于项目根的 tenant_data 目录）。
+    """返回 users.db 的磁盘路径(位于项目根的 tenant_data 目录)。
 
     参数:
         无
@@ -43,7 +43,7 @@ def _db_path() -> str:
         str: users.db 的绝对路径
 
     异常:
-        无（目录创建失败时由调用方抛错）
+        无(目录创建失败时由调用方抛错)
     适用场景:
         - 所有用户/租户数据库操作前获取统一存储路径
     """
@@ -67,7 +67,7 @@ def _init_db():
         None
 
     异常:
-        无（sqlite 错误向上抛出由调用方处理）
+        无(sqlite 错误向上抛出由调用方处理)
     适用场景:
         - 各业务函数执行 SQL 前确保表存在
     """
@@ -101,7 +101,7 @@ def _init_db():
             UNIQUE(tenant_id, name)
         )
     """)
-    # 文档表（用于存储文档元数据和分类）
+    # 文档表(用于存储文档元数据和分类)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS documents (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -154,7 +154,7 @@ def _hash_password(password: str) -> str:
         password (str): 明文密码
 
     返回:
-        str: `salt$hash`（十六进制）格式的存储串
+        str: `salt$hash`(十六进制)格式的存储串
 
     异常:
         无
@@ -179,7 +179,7 @@ def _verify_password(password: str, stored: str) -> bool:
         bool: 匹配为 True，否则 False
 
     异常:
-        无（拆分/编码错误由调用方上下文决定；此处假设格式正确）
+        无(拆分/编码错误由调用方上下文决定；此处假设格式正确)
     适用场景:
         - 登录、改密原密码校验
     """
@@ -197,13 +197,13 @@ def register(username: str, password: str) -> Tuple[bool, str]:
 
     参数:
         username (str): 用户名
-        password (str): 明文密码（入库前加盐哈希）
+        password (str): 明文密码(入库前加盐哈希)
 
     返回:
         Tuple[bool, str]: (是否成功, 消息/错误信息)
 
     异常:
-        无（数据库错误被捕获并回滚，返回 (False, 错误字符串)）
+        无(数据库错误被捕获并回滚，返回 (False, 错误字符串))
     适用场景:
         - 注册接口受理新用户
     """
@@ -252,7 +252,7 @@ def login(username: str, password: str) -> Tuple[bool, Optional[Dict]]:
         Tuple[bool, Optional[Dict]]: (成功, 用户信息 / 错误字典)
 
     异常:
-        无（仅查询，数据库错误由 finally 关闭连接）
+        无(仅查询，数据库错误由 finally 关闭连接)
     适用场景:
         - 登录接口验证凭据
     """
@@ -281,7 +281,7 @@ def login(username: str, password: str) -> Tuple[bool, Optional[Dict]]:
 def has_users() -> bool:
     """检查系统中是否已存在任何用户。
 
-    用于判断是否需要初始化（如首个用户应为 super_admin），以及是否展示
+    用于判断是否需要初始化(如首个用户应为 super_admin)，以及是否展示
     注册入口。
 
     参数:
@@ -305,7 +305,7 @@ def has_users() -> bool:
 
 
 def list_users() -> List[Dict]:
-    """列出全部用户（供管理后台使用）。
+    """列出全部用户(供管理后台使用)。
 
     按 id 升序读取 users 表，返回含 user_id、用户名、租户 ID、角色与创建
     时间的字典列表。
@@ -345,7 +345,7 @@ def list_users() -> List[Dict]:
 def delete_user(username: str) -> bool:
     """删除指定用户。
 
-    按用户名删除 users 表记录，返回是否实际删除了行（rowcount > 0）。
+    按用户名删除 users 表记录，返回是否实际删除了行(rowcount > 0)。
 
     参数:
         username (str): 待删除的用户名
@@ -354,7 +354,7 @@ def delete_user(username: str) -> bool:
         bool: 实际删除成功为 True，否则 False
 
     异常:
-        无（数据库错误由 finally 关闭连接）
+        无(数据库错误由 finally 关闭连接)
     适用场景:
         - 管理后台移除用户
     """
@@ -369,7 +369,7 @@ def delete_user(username: str) -> bool:
 
 
 def set_user_role(username: str, role: str) -> Tuple[bool, str]:
-    """修改用户角色（super_admin / user），用于管理后台提权/降级。
+    """修改用户角色(super_admin / user)，用于管理后台提权/降级。
 
     先校验角色取值合法，再确认用户存在，之后更新其 role 字段。
 
@@ -381,7 +381,7 @@ def set_user_role(username: str, role: str) -> Tuple[bool, str]:
         Tuple[bool, str]: (是否成功, 消息)
 
     异常:
-        无（数据库错误被捕获并回滚）
+        无(数据库错误被捕获并回滚)
     适用场景:
         - 管理后台调整用户权限
     """
@@ -413,14 +413,14 @@ def change_password(username: str, old_password: str, new_password: str) -> Tupl
 
     参数:
         username (str): 用户名
-        old_password (str): 原明文密码（用于校验）
-        new_password (str): 新明文密码（入库前哈希）
+        old_password (str): 原明文密码(用于校验)
+        new_password (str): 新明文密码(入库前哈希)
 
     返回:
         Tuple[bool, str]: (是否成功, 消息)
 
     异常:
-        无（数据库错误被捕获并回滚）
+        无(数据库错误被捕获并回滚)
     适用场景:
         - 用户主动改密
     """
@@ -451,9 +451,9 @@ def change_password(username: str, old_password: str, new_password: str) -> Tupl
 
 
 def reset_password_with_key(username: str, reset_key: str) -> Tuple[bool, str]:
-    """管理员用重置密钥重置任意用户密码（忘记密码自救）。
+    """管理员用重置密钥重置任意用户密码(忘记密码自救)。
 
-    不依赖原密码，但需要正确的 `ADMIN_RESET_KEY`（来自配置）。校验通过后
+    不依赖原密码，但需要正确的 `ADMIN_RESET_KEY`(来自配置)。校验通过后
     将该用户密码统一重置为 `123456`，并提示登录后立即修改。
 
     参数:
@@ -464,7 +464,7 @@ def reset_password_with_key(username: str, reset_key: str) -> Tuple[bool, str]:
         Tuple[bool, str]: (是否成功, 消息)
 
     异常:
-        无（数据库错误被捕获并回滚）
+        无(数据库错误被捕获并回滚)
     适用场景:
         - 管理员代为重置忘记密码的账号
     """

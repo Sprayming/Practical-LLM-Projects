@@ -1,25 +1,25 @@
 """
-app/memory/memory_manager.py —— 三层记忆系统核心编排（MemorySystem）
+app/memory/memory_manager.py —— 三层记忆系统核心编排(MemorySystem)
 
 【作用与功能】
-定义 legal-doc-rag 的「三层记忆」架构并负责统一编排：短期记忆（最近几轮对话，
-Redis 列表 + 内存回退）、中期记忆（对话摘要，Redis 字符串 + 内存回退）、长期记忆
-（向量化知识/实体，ChromaDB 向量库）。同时整合遗忘机制（访问即激活的反遗忘）、
-后台异步整理（ShadowWorker）、实体画像提取与 Redis 容灾恢复，对外提供高优先级
+定义 legal-doc-rag 的「三层记忆」架构并负责统一编排:短期记忆(最近几轮对话，
+Redis 列表 + 内存回退)、中期记忆(对话摘要，Redis 字符串 + 内存回退)、长期记忆
+(向量化知识/实体，ChromaDB 向量库)。同时整合遗忘机制(访问即激活的反遗忘)、
+后台异步整理(ShadowWorker)、实体画像提取与 Redis 容灾恢复，对外提供高优先级
 的同步读写接口与中低优先级的异步整理接口。
 
 【主要组成】
-- `MemorySystem`：三层记忆系统主类，封装 add / retrieve_long_term / get_context /
+- `MemorySystem`:三层记忆系统主类，封装 add / retrieve_long_term / get_context /
   trigger_background_jobs / clear_session / stats 等接口
 
 【适用场景】
-- 场景1：每次用户对话时同步调用 add 写入短期记忆、get_context 组装上下文
-- 场景2：对话结束后调用 trigger_background_jobs 触发异步摘要与实体提取
-- 场景3：需要重置会话时调用 clear_session，需要观测状态时调用 stats
+- 场景1:每次用户对话时同步调用 add 写入短期记忆、get_context 组装上下文
+- 场景2:对话结束后调用 trigger_background_jobs 触发异步摘要与实体提取
+- 场景3:需要重置会话时调用 clear_session，需要观测状态时调用 stats
 
 【依赖关系】
-- 上游调用方：app 主流程 / API 层
-- 下游依赖：redis_client、forgetting、profile_store、langchain_chroma、app.worker.shadow_worker
+- 上游调用方:app 主流程 / API 层
+- 下游依赖:redis_client、forgetting、profile_store、langchain_chroma、app.worker.shadow_worker
 """
 
 import json
@@ -40,20 +40,20 @@ class MemorySystem:
     """
     三层记忆系统框架
     
-    记忆层次：
-    1. 短期记忆：最近 N 轮对话（Redis List，TTL 2h）
-       - 回退方案：内存列表（Redis 不可用时）
-    2. 中期记忆：对话摘要（Redis String，TTL 24h）
-       - 回退方案：内存字符串（Redis 不可用时）
-    3. 长期记忆：向量化知识/实体（ChromaDB，永久存储）
+    记忆层次:
+    1. 短期记忆:最近 N 轮对话(Redis List，TTL 2h)
+       - 回退方案:内存列表(Redis 不可用时)
+    2. 中期记忆:对话摘要(Redis String，TTL 24h)
+       - 回退方案:内存字符串(Redis 不可用时)
+    3. 长期记忆:向量化知识/实体(ChromaDB，永久存储)
        - 带遗忘机制，通过评分过滤低价值记忆
     
-    [2026-07-19] 主要改进：
-    - clear_session：先清理 Redis 再重置 session_id，避免僵尸数据
+    [2026-07-19] 主要改进:
+    - clear_session:先清理 Redis 再重置 session_id，避免僵尸数据
     - 检索时异步递增 access_count，实现"访问即激活"的反遗忘机制
-    - 完善实体提取（ShadowWorker 后台异步提取并存入长期记忆）
-    - 增量摘要合并：整理时将旧摘要与新对话一并提交 LLM
-    - Redis 容灾恢复：启动时从 Redis 恢复短期/中期记忆
+    - 完善实体提取(ShadowWorker 后台异步提取并存入长期记忆)
+    - 增量摘要合并:整理时将旧摘要与新对话一并提交 LLM
+    - Redis 容灾恢复:启动时从 Redis 恢复短期/中期记忆
     """
     
     def __init__(
@@ -68,7 +68,7 @@ class MemorySystem:
         """
         初始化记忆系统。
         
-        参数：
+        参数:
             embedding_model: 文本嵌入模型，用于向量化长期记忆。
             persist_dir (str): ChromaDB 持久化存储目录。
             redis_url (Optional[str]): Redis 连接 URL，如果未提供则使用本地 Redis。
@@ -82,16 +82,16 @@ class MemorySystem:
         self.max_short_term = max_short_term  # 短期记忆最大长度
 
         # ---- 存储引擎初始化 ----
-        self.redis = RedisClient(redis_url)  # Redis 客户端（短期/中期记忆）
+        self.redis = RedisClient(redis_url)  # Redis 客户端(短期/中期记忆)
         self.store = Chroma(
             collection_name=f"memory_{self.tenant_id}",  # 按租户命名向量集合
             embedding_function=embedding_model,
             persist_directory=persist_dir,
         )
 
-        # ---- 内存回退方案（Redis 不可用时使用）----
-        self.short_term: List[Dict] = []  # 短期记忆（内存列表）
-        self.mid_term: str = ""  # 中期记忆（内存字符串）
+        # ---- 内存回退方案(Redis 不可用时使用)----
+        self.short_term: List[Dict] = []  # 短期记忆(内存列表)
+        self.mid_term: str = ""  # 中期记忆(内存字符串)
 
         # ---- 高级机制 ----
         self.forgetting = ForgettingMechanism(threshold=forgetting_threshold)  # 遗忘机制
@@ -102,15 +102,15 @@ class MemorySystem:
         self._restore_from_redis()
 
     # ==========================================
-    # 1. 同步读写接口（高优先级，低延迟）
+    # 1. 同步读写接口(高优先级，低延迟)
     # ==========================================
 
     def add(self, role: str, content: str):
         """
-        同步写入：记录对话到短期记忆。
+        同步写入:记录对话到短期记忆。
         
-        参数：
-            role (str): 发言角色（user/assistant）。
+        参数:
+            role (str): 发言角色(user/assistant)。
             content (str): 对话内容。
         """
         entry = {"role": role, "content": content, "timestamp": datetime.now().isoformat()}
@@ -119,27 +119,27 @@ class MemorySystem:
 
     def retrieve_long_term(self, query: str, k: int = 3, min_score: float = 0.25) -> List[str]:
         """
-        同步读取：从长期记忆检索相关内容。
+        同步读取:从长期记忆检索相关内容。
         
         使用相似度搜索结合遗忘评分进行过滤，并异步更新访问计数。
         
-        参数：
+        参数:
             query (str): 检索查询文本。
             k (int): 返回的最大结果数，默认为 3。
             min_score (float): 最小相似度阈值，默认为 0.25。
             
-        返回：
+        返回:
             List[str]: 相关的记忆内容列表。
         """
         try:
-            # 1. 执行相似度搜索（获取 3 倍数量的候选结果）
+            # 1. 执行相似度搜索(获取 3 倍数量的候选结果)
             results = self.store.similarity_search_with_score(query, k=k * 3)
             filtered_docs = []
             activated_ids = []
 
             # 2. 过滤并激活记忆
             for doc, distance in results:
-                # 计算相似度分数（0-1）
+                # 计算相似度分数(0-1)
                 similarity = max(0.0, 1.0 - distance / 2.0)
                 if similarity < min_score:
                     continue
@@ -159,7 +159,7 @@ class MemorySystem:
                     if doc_id:
                         activated_ids.append((doc_id, access + 1))
 
-            # 3. 异步更新访问计数（不阻塞检索路径）
+            # 3. 异步更新访问计数(不阻塞检索路径)
             if activated_ids:
                 self._async_bump_access(activated_ids)
 
@@ -175,7 +175,7 @@ class MemorySystem:
         """
         异步提交访问计数更新到 Worker。
         
-        参数：
+        参数:
             id_pairs (List[tuple]): 待更新的记忆 ID 和新计数的列表。
         """
         task = ShadowTask(
@@ -190,7 +190,7 @@ class MemorySystem:
         """
         在后台线程执行 ChromaDB 元数据更新。
         
-        参数：
+        参数:
             id_pairs (List[tuple]): 记忆 ID 和新计数的列表。
         """
         try:
@@ -219,10 +219,10 @@ class MemorySystem:
         
         整合长期记忆、中期记忆和短期记忆，构建完整的对话上下文。
         
-        参数：
+        参数:
             query (str): 用户查询文本。
             
-        返回：
+        返回:
             str: 组装好的完整上下文。
         """
         parts = []
@@ -232,12 +232,12 @@ class MemorySystem:
         if long_memories:
             parts.append("[Related Past]\n" + "\n---\n".join(long_memories))
 
-        # 2. 添加中期记忆（对话摘要）
+        # 2. 添加中期记忆(对话摘要)
         mid = self.redis.get_mid_term(self.session_id) or self.mid_term
         if mid:
             parts.append("[Session Summary]\n" + mid)
 
-        # 3. 添加短期记忆（最近对话）
+        # 3. 添加短期记忆(最近对话)
         if self.short_term:
             recent = "\n".join([f"{m['role']}: {m['content'][:200]}" for m in self.short_term[-4:]])
             parts.append("[Recent]\n" + recent)
@@ -245,7 +245,7 @@ class MemorySystem:
         return "\n\n".join(parts)
 
     # ==========================================
-    # 2. 异步整理接口（中低优先级，后台执行）
+    # 2. 异步整理接口(中低优先级，后台执行)
     # ==========================================
 
     def trigger_background_jobs(self, llm_func: Callable[[str], str]):
@@ -254,16 +254,16 @@ class MemorySystem:
         
         在每次对话结束后调用，执行记忆整理和实体提取等任务。
         
-        参数：
+        参数:
             llm_func (Callable[[str], str]): 调用 LLM 的函数。
         """
         self._async_consolidate(llm_func)
 
     def _async_consolidate(self, llm_func: Callable[[str], str]):
         """
-        异步整理：当短期记忆溢出时，提炼为中期和长期记忆。
+        异步整理:当短期记忆溢出时，提炼为中期和长期记忆。
         
-        参数：
+        参数:
             llm_func (Callable[[str], str]): 调用 LLM 的函数。
         """
         # 只有当短期记忆超过最大长度时才执行
@@ -280,9 +280,9 @@ class MemorySystem:
 
     def _do_consolidate(self, llm_func: Callable[[str], str]):
         """
-        实际整理逻辑：增量合并旧摘要 + 新对话。
+        实际整理逻辑:增量合并旧摘要 + 新对话。
         
-        参数：
+        参数:
             llm_func (Callable[[str], str]): 调用 LLM 的函数。
         """
         try:
@@ -327,16 +327,16 @@ class MemorySystem:
             logger.error("Consolidation failed: {}", e)
 
     # ==========================================
-    # 3. 实体提取（异步，不阻塞）
+    # 3. 实体提取(异步，不阻塞)
     # ==========================================
 
     def extract_entities(self, user_input: str, answer: str, llm_func: Callable):
         """
-        提取实体画像（异步，不阻塞）。
+        提取实体画像(异步，不阻塞)。
         
         从用户输入和回答中提取实体信息，并存入用户画像存储。
         
-        参数：
+        参数:
             user_input (str): 用户输入文本。
             answer (str): AI 回答文本。
             llm_func (Callable): 调用 LLM 的函数。
@@ -353,9 +353,9 @@ class MemorySystem:
         """
         后台实体提取逻辑。
         
-        将提取的实体存入 ProfileStore（不是 ChromaDB）。
+        将提取的实体存入 ProfileStore(不是 ChromaDB)。
         
-        参数：
+        参数:
             user_input (str): 用户输入文本。
             answer (str): AI 回答文本。
             llm_func (Callable): 调用 LLM 的函数。
@@ -420,7 +420,7 @@ class MemorySystem:
         """
         获取记忆系统状态。
         
-        返回：
+        返回:
             Dict: 包含各项记忆统计信息的字典。
         """
         return {

@@ -2,22 +2,22 @@
 app/memory/forgetting.py —— 基于艾宾浩斯遗忘曲线的记忆评分与淘汰机制
 
 【作用与功能】
-实现一套综合评分系统，用于判断哪些长期记忆应被「遗忘」（清理/降权）。评分由三个
-维度加权得到：新近度（Recency，时间越近分越高）、频率（Frequency，被访问越多分
-越高）、重要性（Importance，内容越长或显式权重越高分越高）。当综合评分低于阈值
+实现一套综合评分系统，用于判断哪些长期记忆应被「遗忘」(清理/降权)。评分由三个
+维度加权得到:新近度(Recency，时间越近分越高)、频率(Frequency，被访问越多分
+越高)、重要性(Importance，内容越长或显式权重越高分越高)。当综合评分低于阈值
 时即判定为可遗忘，从而在有限存储下保留高价值记忆。
 
 【主要组成】
-- `ForgettingMechanism`：遗忘机制核心类，提供 score / should_forget /
+- `ForgettingMechanism`:遗忘机制核心类，提供 score / should_forget /
   filter_memories / estimate_forgetting_curve 方法
 
 【适用场景】
-- 场景1：在 MemorySystem 检索长期记忆后，用于过滤低价值记忆（反遗忘/清理）
-- 场景2：用于离线模拟或可视化不同时间点的记忆保留率（遗忘曲线）
+- 场景1:在 MemorySystem 检索长期记忆后，用于过滤低价值记忆(反遗忘/清理)
+- 场景2:用于离线模拟或可视化不同时间点的记忆保留率(遗忘曲线)
 
 【依赖关系】
-- 上游调用方：app.memory.memory_manager（MemorySystem.retrieve_long_term）
-- 下游依赖：仅依赖标准库（math / time）与 loguru，无外部服务依赖
+- 上游调用方:app.memory.memory_manager(MemorySystem.retrieve_long_term)
+- 下游依赖:仅依赖标准库(math / time)与 loguru，无外部服务依赖
 """
 
 # Forgetting mechanism - Ebbinghaus forgetting curve
@@ -32,25 +32,25 @@ class ForgettingMechanism:
     """
     基于艾宾浩斯遗忘曲线的记忆管理器。
     
-    实现了一个综合评分系统，结合三个维度来评估记忆的重要性：
-    1. 新近度（Recency）：距离上次访问的时间
-    2. 频率（Frequency）：被访问的次数
-    3. 重要性（Importance）：内容本身的权重或长度
+    实现了一个综合评分系统，结合三个维度来评估记忆的重要性:
+    1. 新近度(Recency):距离上次访问的时间
+    2. 频率(Frequency):被访问的次数
+    3. 重要性(Importance):内容本身的权重或长度
     
     当综合评分低于阈值时，认为该记忆可以被遗忘。
     
-    参数说明：
-    - threshold: 遗忘阈值（0-1之间），低于此值的记忆将被遗忘
-    - decay_hours: 记忆衰减常数（小时），影响新近度计算的衰减速度
+    参数说明:
+    - threshold: 遗忘阈值(0-1之间)，低于此值的记忆将被遗忘
+    - decay_hours: 记忆衰减常数(小时)，影响新近度计算的衰减速度
     """
     
     def __init__(self, threshold: float = 0.15, decay_hours: float = 168.0):
         """
         初始化遗忘机制参数。
         
-        参数：
+        参数:
             threshold (float): 遗忘阈值，默认为 0.15。低于此值的记忆将被遗忘。
-            decay_hours (float): 记忆衰减时间常数（小时），默认为 168 小时（1周）。
+            decay_hours (float): 记忆衰减时间常数(小时)，默认为 168 小时(1周)。
                                 值越小表示遗忘速度越快。
         """
         self.threshold = threshold
@@ -60,24 +60,24 @@ class ForgettingMechanism:
         """
         计算记忆的综合评分。
         
-        评分公式：
+        评分公式:
         final = 0.5 * recency + 0.3 * frequency + 0.2 * importance
         
-        参数：
+        参数:
             content (str): 记忆内容文本。
             timestamp (datetime): 记忆的创建或最后访问时间。
             access_count (int): 记忆被访问的次数，默认为 0。
-            importance (Optional[float]): 记忆的重要性权重（0-1之间），
+            importance (Optional[float]): 记忆的重要性权重(0-1之间)，
                                         如果未提供则根据内容长度自动计算。
                                         
-        返回：
-            float: 记忆的综合评分（0-1之间的浮点数），保留 4 位小数。
+        返回:
+            float: 记忆的综合评分(0-1之间的浮点数)，保留 4 位小数。
         """
-        # 1. 计算新近度得分（基于时间衰减）
+        # 1. 计算新近度得分(基于时间衰减)
         hours_elapsed = (datetime.now() - timestamp).total_seconds() / 3600.0
         recency = math.exp(-hours_elapsed / self.decay_hours)  # 指数衰减函数
         
-        # 2. 计算频率得分（对数函数，避免过度放大高频访问）
+        # 2. 计算频率得分(对数函数，避免过度放大高频访问)
         frequency = math.log(access_count + 1) / 10.0  # +1 避免 log(0)
         
         # 3. 计算重要性得分
@@ -85,7 +85,7 @@ class ForgettingMechanism:
             # 确保重要性在 0-1 范围内
             imp = max(0.0, min(1.0, importance))
         else:
-            # 如果未提供重要性，则根据内容长度估算（最长 500 字为满分）
+            # 如果未提供重要性，则根据内容长度估算(最长 500 字为满分)
             imp = min(len(content) / 500.0, 1.0)
         
         # 4. 计算综合评分
@@ -96,11 +96,11 @@ class ForgettingMechanism:
         """
         判断记忆是否应该被遗忘。
         
-        参数：
+        参数:
             score (float): 记忆的综合评分。
             
-        返回：
-            bool: 如果评分低于阈值则返回 True（应该遗忘），否则返回 False。
+        返回:
+            bool: 如果评分低于阈值则返回 True(应该遗忘)，否则返回 False。
         """
         return score < self.threshold
 
@@ -108,12 +108,12 @@ class ForgettingMechanism:
         """
         过滤记忆列表，保留重要记忆并移除被遗忘的记忆。
         
-        参数：
+        参数:
             memories (list): 记忆内容列表。
             timestamps (list): 每个记忆对应的时间戳列表。
             access_counts (list, optional): 每个记忆的访问次数列表，默认为全 0。
             
-        返回：
+        返回:
             list: 保留的记忆列表，每个元素是 (记忆内容, 评分) 的元组，按评分降序排列。
         """
         # 如果未提供访问次数列表，初始化为全 0
@@ -151,10 +151,10 @@ class ForgettingMechanism:
         """
         估计遗忘曲线在不同时间点的保留率。
         
-        参数：
-            hours (list): 时间点列表（单位：小时）。
+        参数:
+            hours (list): 时间点列表(单位:小时)。
             
-        返回：
-            list: 每个时间点的记忆保留率（0-1 之间的浮点数），保留 4 位小数。
+        返回:
+            list: 每个时间点的记忆保留率(0-1 之间的浮点数)，保留 4 位小数。
         """
         return [round(math.exp(-h / self.decay_hours), 4) for h in hours]

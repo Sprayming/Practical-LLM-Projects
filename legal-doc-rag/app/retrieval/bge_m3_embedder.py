@@ -1,24 +1,24 @@
 """
-bge_m3_embedder.py —— BGE-M3 嵌入器：同时提供稠密向量与 SPLADE 稀疏权重
+bge_m3_embedder.py —— BGE-M3 嵌入器:同时提供稠密向量与 SPLADE 稀疏权重
 
 【作用与功能】
 该模块在 legal-doc-rag 检索链路中提供向量化能力，封装 BGE-M3 模型，
-同时输出稠密（1024 维）与稀疏（SPLADE 词汇权重）两种向量，供 Chroma 入库
+同时输出稠密(1024 维)与稀疏(SPLADE 词汇权重)两种向量，供 Chroma 入库
 与 RRF 融合召回使用。其稀疏向量由本模块确定性自计算，规避 FlagEmbedding
 `_sparse_embedding` 在 CPU 下偶发丢值的缺陷，且模型以进程内单例加载以节省显存。
 
 【主要组成】
-- `get_bge_m3_model`：懒加载并返回 BGEM3FlagModel 单例（失败降级为 None）
-- `encode_sparse_direct`：直接基于编码器 + sparse_linear 确定性计算 SPLADE 稀疏字典
-- `BGEM3Embedder`：langchain 兼容的嵌入器，提供稠密接口与稀疏接口
+- `get_bge_m3_model`:懒加载并返回 BGEM3FlagModel 单例(失败降级为 None)
+- `encode_sparse_direct`:直接基于编码器 + sparse_linear 确定性计算 SPLADE 稀疏字典
+- `BGEM3Embedder`:langchain 兼容的嵌入器，提供稠密接口与稀疏接口
 
 【适用场景】
-- 场景1：文档入库/查询时生成稠密向量供 Chroma 使用
-- 场景2：混合检索中生成稀疏权重，与 BM25/稠密做 RRF 融合以提升法律术语召回
+- 场景1:文档入库/查询时生成稠密向量供 Chroma 使用
+- 场景2:混合检索中生成稀疏权重，与 BM25/稠密做 RRF 融合以提升法律术语召回
 
 【依赖关系】
-- 上游调用方：HybridRetriever（稀疏召回）、入库流程（稠密入库）
-- 下游依赖：FlagEmbedding.BGEM3FlagModel、torch、langchain_core.embeddings.Embeddings
+- 上游调用方:HybridRetriever(稀疏召回)、入库流程(稠密入库)
+- 下游依赖:FlagEmbedding.BGEM3FlagModel、torch、langchain_core.embeddings.Embeddings
 """
 import os
 import threading
@@ -33,7 +33,7 @@ _ENCODE_LOCK = threading.Lock()
 
 
 def _unused_token_ids(tokenizer) -> set:
-    """收集 BGE-M3 tokenizer 的特殊 token id（这些 token 不应进入稀疏词典）。"""
+    """收集 BGE-M3 tokenizer 的特殊 token id(这些 token 不应进入稀疏词典)。"""
     unused = set()
     for key in ("cls_token", "eos_token", "pad_token", "unk_token"):
         if key in tokenizer.special_tokens_map:
@@ -47,7 +47,7 @@ def _unused_token_ids(tokenizer) -> set:
 
 
 def _get_device(module: torch.nn.Module) -> torch.device:
-    """推断给定模块所在的设备（CPU/GPU）。
+    """推断给定模块所在的设备(CPU/GPU)。
 
     通过取模块第一个参数的 device 判断其所在设备；若模块无参数或出错，
     则回退到 CPU。用于在稀疏编码前确定张量应放置的设备。
@@ -55,7 +55,7 @@ def _get_device(module: torch.nn.Module) -> torch.device:
     参数:
         module (torch.nn.Module): 待推断设备的模型模块
     返回:
-        torch.device: 模型所在设备（如 cpu / cuda:0）
+        torch.device: 模型所在设备(如 cpu / cuda:0)
     """
     try:
         return next(module.parameters()).device
@@ -64,21 +64,21 @@ def _get_device(module: torch.nn.Module) -> torch.device:
 
 
 def get_bge_m3_model():
-    """懒加载并返回 BGEM3FlagModel 单例；加载失败返回 None（稀疏能力降级关闭）。"""
+    """懒加载并返回 BGEM3FlagModel 单例；加载失败返回 None(稀疏能力降级关闭)。"""
     global _MODEL
     if _MODEL is not None:
         return _MODEL if _MODEL else None
-    with _MODEL_LOCK:  # 双重检查锁定：仅首个线程进入加载，其余直接复用
+    with _MODEL_LOCK:  # 双重检查锁定:仅首个线程进入加载，其余直接复用
         if _MODEL is not None:
             return _MODEL if _MODEL else None
         try:
             from FlagEmbedding import BGEM3FlagModel
 
             model_name = os.getenv("HF_MODEL_NAME", "BAAI/bge-m3")
-            # FP16：权重减半（约 2GB），检索质量无损，显著降低内存峰值，
+            # FP16:权重减半(约 2GB)，检索质量无损，显著降低内存峰值，
             # 也让沙箱/低内存机器能跑起重索引与服务。
             inst = BGEM3FlagModel(model_name, use_fp16=True)
-            # warm-up：触发稠密前向（Transformer 编译/首次推理开销），
+            # warm-up:触发稠密前向(Transformer 编译/首次推理开销)，
             # 稀疏路径复用同一 Transformer，无需重复 warm-up。
             try:
                 inst.encode(
@@ -106,16 +106,16 @@ def encode_sparse_direct(
 ) -> List[Dict[str, float]]:
     """确定性地计算 BGE-M3 SPLADE 稀疏权重字典列表。
 
-    绕过 FlagEmbedding 的 `_sparse_embedding`（内部 scatter_reduce(reduce="amax") 在
-    CPU 下偶发整条稀疏向量丢失）。这里直接使用模型自身的 XLM-RoBERTa 编码器 +
-    逐位置标量门控 `sparse_linear`，按 token id 取最大门控权重（=amax）聚合成词表
+    绕过 FlagEmbedding 的 `_sparse_embedding`(内部 scatter_reduce(reduce="amax") 在
+    CPU 下偶发整条稀疏向量丢失)。这里直接使用模型自身的 XLM-RoBERTa 编码器 +
+    逐位置标量门控 `sparse_linear`，按 token id 取最大门控权重(=amax)聚合成词表
     维度稀疏向量，再组装为 {token_id: weight}。结果 100% 可复现，不依赖库的稀疏实现。
 
     参数:
         model: BGEM3FlagModel 实例
         texts: 待编码文本列表
     返回:
-        与 texts 等长的列表，每项为 {str(token_id): float(weight)}（可能为空字典）
+        与 texts 等长的列表，每项为 {str(token_id): float(weight)}(可能为空字典)
     """
     if not texts:
         return []
@@ -149,10 +149,10 @@ def encode_sparse_direct(
             with torch.no_grad():
                 out = transformer(input_ids=input_ids, attention_mask=attention_mask)
                 hidden = out.last_hidden_state  # (B, S, H)
-                # BGE-M3 的稀疏头是逐 token 位置的标量门控：Linear(H -> 1)。
+                # BGE-M3 的稀疏头是逐 token 位置的标量门控:Linear(H -> 1)。
                 # 真正 SPLADE 词表向量 = 按 input_ids 把每个位置的门控权重聚合到词表维度
-                # （FlagEmbedding 用 scatter_reduce(reduce="amax")，CPU 下曾偶发丢值）。
-                # 这里用确定性方式：对每个 token id 取其在序列中的最大门控权重（=amax），
+                # (FlagEmbedding 用 scatter_reduce(reduce="amax")，CPU 下曾偶发丢值)。
+                # 这里用确定性方式:对每个 token id 取其在序列中的最大门控权重(=amax)，
                 # 数学上等价且 100% 可复现，不依赖库的 scatter_reduce。
                 gate = torch.relu(sparse_linear(hidden)).squeeze(-1)  # (B, S)
 
@@ -189,19 +189,19 @@ encode_sparse_safe = encode_sparse_direct
 
 
 class BGEM3Embedder(Embeddings):
-    """langchain 兼容的 BGE-M3 嵌入器（稠密 + 稀疏）。"""
+    """langchain 兼容的 BGE-M3 嵌入器(稠密 + 稀疏)。"""
 
     def __init__(self):
         """初始化 langchain 兼容的 BGE-M3 嵌入器。
 
-        构造时懒加载全局 BGE-M3 模型单例（进程内仅一份权重）。
-        模型加载失败时 self._model 为 None：稠密接口抛错、稀疏接口降级返回空。
+        构造时懒加载全局 BGE-M3 模型单例(进程内仅一份权重)。
+        模型加载失败时 self._model 为 None:稠密接口抛错、稀疏接口降级返回空。
         """
         self._model = get_bge_m3_model()
 
     # ---------- langchain 稠密接口 ----------
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        """批量生成稠密向量（langchain Embeddings 接口）。
+        """批量生成稠密向量(langchain Embeddings 接口)。
 
         调用底层 BGEM3FlagModel 的稠密编码并取 dense_vecs 转 list 返回，
         供 Chroma 入库与查询。模型未加载时抛出 RuntimeError。
@@ -225,7 +225,7 @@ class BGEM3Embedder(Embeddings):
         return out["dense_vecs"].tolist()
 
     def embed_query(self, text: str) -> List[float]:
-        """生成单个查询的稠密向量（langchain Embeddings 接口）。
+        """生成单个查询的稠密向量(langchain Embeddings 接口)。
 
         复用 embed_documents 对单条文本编码并取首个结果，确保与文档同处
         一个向量空间，便于相似度检索。
@@ -237,7 +237,7 @@ class BGEM3Embedder(Embeddings):
         """
         return self.embed_documents([text])[0]
 
-    # ---------- 稀疏接口（BGE-M3 SPLADE，自计算，确定性） ----------
+    # ---------- 稀疏接口(BGE-M3 SPLADE，自计算，确定性) ----------
     def encode_sparse(self, texts: List[str]) -> List[Dict[str, float]]:
         """返回每个文本的稀疏权重字典 {token_id: weight}。"""
         if self._model is None:

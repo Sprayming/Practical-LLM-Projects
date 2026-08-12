@@ -2,8 +2,8 @@
 tests.unit 包 —— legal-doc-rag 项目单元测试代码的子包初始化文件。
 
 【测试覆盖范围】
-- 本包聚合所有单元测试模块（test_config、test_hybrid_retriever_v3、
-  test_memory_manager_fixed、test_bge_m3_sparse、test_api_chat_simple 等），
+- 本包聚合所有单元测试模块(test_config、test_hybrid_retriever_v3、
+  test_memory_manager_fixed、test_bge_m3_sparse、test_api_chat_simple 等)，
   本身不含测试逻辑。
 
 【适用场景】

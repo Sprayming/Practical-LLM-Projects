@@ -3,25 +3,25 @@ main —— legal-doc-rag FastAPI 应用入口模块
 
 【作用与功能】
 该模块是 legal-doc-rag RAG 系统的 Web 服务统一入口，负责创建并配置 FastAPI
-应用实例：加载环境变量、装配 CORS 与安全中间件、注册全局限流与错误处理器、
-挂载所有业务路由（鉴权、对话、文档、反馈、管理后台、分类、会话、A/B 测试、
-Webhook、监控），并提供前端静态资源服务。同时定义了应用启动/关闭钩子，
+应用实例:加载环境变量、装配 CORS 与安全中间件、注册全局限流与错误处理器、
+挂载所有业务路由(鉴权、对话、文档、反馈、管理后台、分类、会话、A/B 测试、
+Webhook、监控)，并提供前端静态资源服务。同时定义了应用启动/关闭钩子，
 在启动时恢复未完成文档索引任务、启动 Webhook 管理器。
 
 【主要组成】
-- `app`：全局 FastAPI 实例。
-- `root()`：根路径处理器，返回前端入口 HTML。
-- `startup_event()`：启动钩子，启动后台服务并恢复未完成的索引任务。
-- `_recover_incomplete_indexing()`：扫描上传目录，对未索引的 PDF 重新提交任务。
-- `shutdown_event()`：关闭钩子，优雅停止 Webhook 管理器。
+- `app`:全局 FastAPI 实例。
+- `root()`:根路径处理器，返回前端入口 HTML。
+- `startup_event()`:启动钩子，启动后台服务并恢复未完成的索引任务。
+- `_recover_incomplete_indexing()`:扫描上传目录，对未索引的 PDF 重新提交任务。
+- `shutdown_event()`:关闭钩子，优雅停止 Webhook 管理器。
 
 【适用场景】
-- 场景1：以 `python -m app.main` 或 uvicorn 直接启动 ASGI 服务。
-- 场景2：被容器/进程管理器（如 gunicorn + uvicorn worker）加载 `app.main:app`。
+- 场景1:以 `python -m app.main` 或 uvicorn 直接启动 ASGI 服务。
+- 场景2:被容器/进程管理器(如 gunicorn + uvicorn worker)加载 `app.main:app`。
 
 【依赖关系】
-- 上游调用方：ASGI 服务器（uvicorn）、容器编排。
-- 下游依赖：app.api.* 各路由、app.security.*、app.worker.webhook、
+- 上游调用方:ASGI 服务器(uvicorn)、容器编排。
+- 下游依赖:app.api.* 各路由、app.security.*、app.worker.webhook、
   app.core.limiter、app.core.config 等子模块。
 """
 
@@ -31,7 +31,7 @@ import os
 os.environ['TRANSFORMERS_OFFLINE'] = '1'
 # 禁用 HuggingFace Hub 关于符号链接的警告信息
 os.environ['HF_HUB_DISABLE_SYMLINKS_WARNING'] = '1'
-# os.environ['HF_ENDPOINT'] = '' # 可选：配置自定义的 HuggingFace 镜像端点
+# os.environ['HF_ENDPOINT'] = '' # 可选:配置自定义的 HuggingFace 镜像端点
 
 import os
 from pathlib import Path
@@ -96,10 +96,10 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
-# 添加安全响应头中间件（如 X-Content-Type-Options, X-Frame-Options 等）
+# 添加安全响应头中间件(如 X-Content-Type-Options, X-Frame-Options 等)
 app.add_middleware(SecurityHeadersMiddleware)
 
-# 添加请求体大小限制中间件（限制为 100MB，主要用于文档上传场景）
+# 添加请求体大小限制中间件(限制为 100MB，主要用于文档上传场景)
 app.add_middleware(RequestSizeLimitMiddleware, max_size_mb=100)
 
 # 注册所有业务路由
@@ -139,7 +139,7 @@ async def startup_event():
     """
     应用启动事件钩子。
     
-    在 FastAPI 应用启动时执行：
+    在 FastAPI 应用启动时执行:
     1. 启动 Webhook 管理器，开始监听并处理外部通知。
     2. 调用恢复函数，检查并重新提交因服务异常中断而未完成的文档索引任务。
     """
@@ -158,7 +158,7 @@ def _recover_incomplete_indexing():
     它会遍历所有租户的上传目录，比对向量数据库中已存在的记录，
     找出遗漏的 PDF 文件并重新创建索引任务提交到后台 Worker 执行。
     
-    工作流程：
+    工作流程:
     1. 遍历上传目录下的各个租户文件夹。
     2. 提取该租户文件夹下所有的 PDF 文件名。
     3. 检查向量数据库，获取已成功索引的文件来源列表。
@@ -183,7 +183,7 @@ def _recover_incomplete_indexing():
     # 延迟初始化 embedder，避免在不需要恢复时占用资源
     embedder = None
 
-    # 遍历上传目录下的所有项（预期为租户ID文件夹）
+    # 遍历上传目录下的所有项(预期为租户ID文件夹)
     for tenant_id in os.listdir(cfg.UPLOAD_DIR):
         tenant_upload_dir = os.path.join(cfg.UPLOAD_DIR, tenant_id)
         
@@ -201,7 +201,7 @@ def _recover_incomplete_indexing():
         existing_sources = set()
         if os.path.exists(persist_dir):
             try:
-                # 懒加载：仅在确认有向量库目录时才初始化 embedder
+                # 懒加载:仅在确认有向量库目录时才初始化 embedder
                 if embedder is None:
                     embedder = create_embedder()
                 store = Chroma(
@@ -230,7 +230,7 @@ def _recover_incomplete_indexing():
             if filename in active_files:
                 continue
             
-            # 符合条件：文件存在但未被索引且无活动任务，重新提交索引
+            # 符合条件:文件存在但未被索引且无活动任务，重新提交索引
             file_path = os.path.join(tenant_upload_dir, filename)
             task_id = create_task(tenant_id, filename)
             submit_indexing_job(_run_indexing, task_id, tenant_id, file_path, filename)

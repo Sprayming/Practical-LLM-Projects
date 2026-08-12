@@ -2,27 +2,27 @@
 tenant_manager.py —— Legal-DOC-RAG 多租户管理器
 
 【作用与功能】
-本模块定义「租户（Tenant）」抽象与全局租户管理器，是系统多租户隔离的基石。
-每个租户拥有独立的命名空间（`tenant:<id>`），进而派生出隔离的 Redis Key
+本模块定义「租户(Tenant)」抽象与全局租户管理器，是系统多租户隔离的基石。
+每个租户拥有独立的命名空间(`tenant:<id>`)，进而派生出隔离的 Redis Key
 前缀、向量库 Collection、记忆系统与文档索引，保证不同租户的数据互不干扰。
 模块启动即创建默认租户，并通过 `get_tenant_manager()` 暴露全局单例。
 
 【主要组成】
-- `Tenant`：租户对象，提供 collection_name / redis_prefix 等隔离命名
-- `TenantManager`：租户的创建、查询、删除与默认租户管理
-- `get_tenant_manager()`：获取全局单例管理器
+- `Tenant`:租户对象，提供 collection_name / redis_prefix 等隔离命名
+- `TenantManager`:租户的创建、查询、删除与默认租户管理
+- `get_tenant_manager()`:获取全局单例管理器
 
 【适用场景】
-- 场景1：应用启动时获取单例，初始化默认租户
-- 场景2：业务层按 tenant_id 取得隔离的资源命名空间（向量库/缓存）
+- 场景1:应用启动时获取单例，初始化默认租户
+- 场景2:业务层按 tenant_id 取得隔离的资源命名空间(向量库/缓存)
 
 【依赖关系】
-- 上游调用方：app 启动流程、向量库/记忆/缓存初始化
-- 下游依赖：标准库 uuid、loguru
+- 上游调用方:app 启动流程、向量库/记忆/缓存初始化
+- 下游依赖:标准库 uuid、loguru
 """
 #
-# 每个租户拥有隔离的：
-#   - 命名空间（Redis Key 前缀、ChromaDB Collection）
+# 每个租户拥有隔离的:
+#   - 命名空间(Redis Key 前缀、ChromaDB Collection)
 #   - 向量库实例
 #   - 记忆系统实例
 #   - 文档索引
@@ -34,8 +34,8 @@ from loguru import logger
 class Tenant:
     """单个租户。
 
-    封装租户标识、名称与命名空间（`tenant:<id>`），并据此派生隔离的资源名
-    （向量库 Collection、Redis Key 前缀），是数据隔离的边界单位。
+    封装租户标识、名称与命名空间(`tenant:<id>`)，并据此派生隔离的资源名
+    (向量库 Collection、Redis Key 前缀)，是数据隔离的边界单位。
     """
 
     def __init__(self, tenant_id: str, name: str):
@@ -43,7 +43,7 @@ class Tenant:
 
         参数:
             tenant_id (str): 租户唯一标识
-            name (str): 租户名称（用于展示/日志）
+            name (str): 租户名称(用于展示/日志)
         """
         self.tenant_id = tenant_id
         self.name = name
@@ -55,7 +55,7 @@ class Tenant:
     def collection_name(self, base: str = "knowledge") -> str:
         """返回该租户隔离的向量库 Collection 名称。
 
-        在命名空间上拼接业务基名（默认 knowledge），确保不同租户落到
+        在命名空间上拼接业务基名(默认 knowledge)，确保不同租户落到
         各自的 Collection。
 
         参数:
@@ -151,7 +151,7 @@ class TenantManager:
         return self._default_tenant
 
     def delete_tenant(self, tenant_id: str) -> bool:
-        """删除指定租户（仅内存态）。
+        """删除指定租户(仅内存态)。
 
         从字典中移除对应租户对象；移除成功返回 True，否则 False。
 
@@ -164,7 +164,7 @@ class TenantManager:
         异常:
             无
         适用场景:
-            - 清理不再使用的租户（注意：此删除不触碰持久化数据）
+            - 清理不再使用的租户(注意:此删除不触碰持久化数据)
         """
         tenant = self._tenants.pop(tenant_id, None)
         if tenant:
@@ -192,9 +192,9 @@ _manager: Optional[TenantManager] = None
 
 
 def get_tenant_manager() -> TenantManager:
-    """获取全局单例租户管理器（懒初始化）。
+    """获取全局单例租户管理器(懒初始化)。
 
-    首次调用时创建 `TenantManager`（内含默认租户），之后复用同一实例，
+    首次调用时创建 `TenantManager`(内含默认租户)，之后复用同一实例，
     保证全应用共享同一套租户注册。
 
     参数:

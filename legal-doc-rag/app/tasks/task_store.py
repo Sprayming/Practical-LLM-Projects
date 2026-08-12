@@ -7,20 +7,20 @@ task_store.py —— 文档索引异步任务状态存储模块
 模块导入时自动恢复，避免服务重启后误判"请先上传文档"，使上传接口秒回且不阻塞主 API。
 
 【主要组成】
-- `_load_tasks` / `_save_tasks`：从磁盘恢复/快照持久化任务状态。
-- `create_task`：创建一条 pending 任务并返回 task_id。
-- `update_task`：更新任务任意状态字段并刷新时间戳。
-- `get_task` / `list_tasks_for_tenant`：读取单任务/某租户全部任务快照。
-- `get_active_task_for_tenant` / `has_failed_task_for_tenant`：查询活跃/失败任务。
-- `submit_indexing_job`：将索引函数提交到单 worker 线程池异步执行。
+- `_load_tasks` / `_save_tasks`:从磁盘恢复/快照持久化任务状态。
+- `create_task`:创建一条 pending 任务并返回 task_id。
+- `update_task`:更新任务任意状态字段并刷新时间戳。
+- `get_task` / `list_tasks_for_tenant`:读取单任务/某租户全部任务快照。
+- `get_active_task_for_tenant` / `has_failed_task_for_tenant`:查询活跃/失败任务。
+- `submit_indexing_job`:将索引函数提交到单 worker 线程池异步执行。
 
 【适用场景】
 - 文档上传接口受理后创建任务并异步执行索引；前端轮询读取进度与结果。
 - 聊天接口在缺乏文档时，据此提示"索引进行中"或"此前提索引失败"。
 
 【依赖关系】
-- 上游调用方：上传接口、聊天接口、管理后台。
-- 下游依赖：concurrent.futures.ThreadPoolExecutor、JSON 文件（data/tasks.json）、
+- 上游调用方:上传接口、聊天接口、管理后台。
+- 下游依赖:concurrent.futures.ThreadPoolExecutor、JSON 文件(data/tasks.json)、
   BGE-M3 嵌入器、Chroma 向量库。
 """
 import threading
@@ -30,7 +30,7 @@ import json
 import os
 from concurrent.futures import ThreadPoolExecutor
 
-# 持久化文件路径：项目根目录下的 data/tasks.json
+# 持久化文件路径:项目根目录下的 data/tasks.json
 _PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 _DATA_DIR = os.path.join(_PROJECT_ROOT, "data")
 _TASKS_FILE = os.path.join(_DATA_DIR, "tasks.json")
@@ -40,7 +40,7 @@ os.makedirs(_DATA_DIR, exist_ok=True)
 _TASKS: dict = {}
 _LOCK = threading.Lock()
 
-# 单 worker：BGE-M3 模型为进程内单例，并发前向对 torch 不安全；
+# 单 worker:BGE-M3 模型为进程内单例，并发前向对 torch 不安全；
 # 上传接口仍秒回，重活在后台线程排队执行，不阻塞主 API。
 _EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="doc-index")
 
@@ -59,7 +59,7 @@ def _load_tasks() -> None:
         None
 
     异常:
-        无（读取或解析失败时静默重置为空字典，不影响启动）
+        无(读取或解析失败时静默重置为空字典，不影响启动)
     适用场景:
         - 模块导入时自动调用，保证服务重启后未完成任务可继续追踪
     """
@@ -70,7 +70,7 @@ def _load_tasks() -> None:
     try:
         with open(_TASKS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-        # 过滤掉已完成的任务（避免文件无限增长），只保留 pending/processing/failed
+        # 过滤掉已完成的任务(避免文件无限增长)，只保留 pending/processing/failed
         _TASKS = {
             k: v
             for k, v in data.items()
@@ -84,7 +84,7 @@ def _save_tasks() -> None:
     """将当前内存中的任务状态快照写回磁盘。
 
     在持锁下先拷贝 `_TASKS` 快照，再以 JSON 写入 `tasks.json`，使用
-    `ensure_ascii=False` 保留中文文件名。写入失败（如磁盘满）仅静默忽略，
+    `ensure_ascii=False` 保留中文文件名。写入失败(如磁盘满)仅静默忽略，
     不阻断主业务流程。
 
     参数:
@@ -94,7 +94,7 @@ def _save_tasks() -> None:
         None
 
     异常:
-        无（异常被捕获并忽略）
+        无(异常被捕获并忽略)
     适用场景:
         - 每次任务状态变更后调用，保证持久化与内存一致
     """
@@ -148,12 +148,12 @@ def create_task(tenant_id: str, filename: str) -> str:
 def update_task(task_id: str, **fields):
     """更新指定任务的任意状态字段并刷新 `updated_at`。
 
-    在锁内对任务字典做就地更新（如 `status`、`stage`、`progress`、`error`、
-    `result`），更新时间戳后持久化。若 task_id 不存在则静默跳过。
+    在锁内对任务字典做就地更新(如 `status`、`stage`、`progress`、`error`、
+    `result`)，更新时间戳后持久化。若 task_id 不存在则静默跳过。
 
     参数:
         task_id (str): 目标任务 id
-        **fields: 任意需更新的字段键值对（如 status="done", progress=100）
+        **fields: 任意需更新的字段键值对(如 status="done", progress=100)
 
     返回:
         None
@@ -172,7 +172,7 @@ def update_task(task_id: str, **fields):
 
 
 def get_task(task_id: str):
-    """获取任务的当前状态快照（深拷贝副本）。
+    """获取任务的当前状态快照(深拷贝副本)。
 
     返回任务字典的副本，避免调用方修改影响内部状态；任务不存在时返回 None。
 
@@ -193,7 +193,7 @@ def get_task(task_id: str):
 
 
 def list_tasks_for_tenant(tenant_id: str):
-    """列出某租户下的全部任务（副本列表）。
+    """列出某租户下的全部任务(副本列表)。
 
     遍历 `_TASKS`，筛选 `tenant_id` 匹配的任务并以字典副本形式返回。
 
@@ -266,7 +266,7 @@ def has_failed_task_for_tenant(tenant_id: str, filename: str = None):
 def submit_indexing_job(fn, *args, **kwargs):
     """将 CPU 密集的索引函数提交到后台单 worker 线程池。
 
-    借助模块级 `_EXECUTOR`（单线程）执行 `PDF 抽取 + BGE-M3 嵌入 + 建索引`
+    借助模块级 `_EXECUTOR`(单线程)执行 `PDF 抽取 + BGE-M3 嵌入 + 建索引`
     等重活，使上传接口可以立即返回，重活在后台排队、不阻塞主 API，也避免
     对进程内单例模型并发前向。返回 `Future` 供后续取结果/异常。
 
@@ -278,12 +278,12 @@ def submit_indexing_job(fn, *args, **kwargs):
         concurrent.futures.Future: 代表后台任务的 Future 对象
 
     异常:
-        无（提交本身不抛异常，错误在 Future 内体现）
+        无(提交本身不抛异常，错误在 Future 内体现)
     适用场景:
         - 文档上传接口创建任务后，用此函数异步执行索引
     """
     return _EXECUTOR.submit(fn, *args, **kwargs)
 
 
-# 模块导入时自动加载持久化任务（服务启动即恢复）
+# 模块导入时自动加载持久化任务(服务启动即恢复)
 _load_tasks()
