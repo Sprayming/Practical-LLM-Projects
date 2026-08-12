@@ -946,7 +946,7 @@ app/main.py (FastAPI 入口)
     │  ├── app/api/auth.py          → app/tenant/auth.py (SQLite)
     │  │                               └── app/core/config.py
     │  │
-    │  ├── app/api/chat.py          → app/retrieval/embedder_factory.py → 本地 BGE-M3 Embedding
+    │  ├── app/api/chat.py          → app/retrieval/embedder_factory.py → app/retrieval/bge_m3_embedder.py (BGE-M3 稠密+稀疏双路)
     │  │                               → app/retrieval/hybrid_retriever.py → BM25 + Dense + RRF
     │  │                               → app/retrieval/query_rewriter.py → DeepSeek LLM
     │  │                               → app/retrieval/citation.py
@@ -957,10 +957,12 @@ app/main.py (FastAPI 入口)
     │  │                               → app/observability/structured_logger.py
     │  │
     │  ├── app/api/documents.py     → app/retrieval/embedder_factory.py
+    │  │                               → app/retrieval/bge_m3_embedder.py (稠密+稀疏向量)
+    │  │                               → app/retrieval/sparse_store.py (稀疏向量落盘)
     │  │                               → app/processing/multimodal_pipeline.py
     │  │                                   → app/processing/pdf_extractor.py
     │  │                                   → app/processing/ocr_engine.py
-    │  │                               → langchain Chroma (向量持久化)
+    │  │                               → langchain Chroma (稠密向量持久化)
     │  │
     │  └── app/api/feedback.py      → app/memory/conversation_store.py
     │
@@ -973,7 +975,7 @@ app/main.py (FastAPI 入口)
 1. 用户上传 PDF
    POST /api/documents/upload
    ├── app/api/documents.py: 接收文件 → 保存到 ./uploads/{tenant_id}/ → 立即返回 task_id（**异步，不阻塞**）
-   ├── 后台线程池执行：app/processing/multimodal_pipeline.py 解析 PDF (PyMuPDF + OCR) → embedder_factory 生成向量 → ChromaDB 持久化到 ./chroma_db/{tenant_id}/
+   ├── 后台线程池执行: app/processing/multimodal_pipeline.py 解析 PDF (PyMuPDF + OCR) -> embedder_factory 经 bge_m3_embedder.py 生成稠密+稀疏向量 -> 稠密向量 ChromaDB 持久化到 ./chroma_db/{tenant_id}/，稀疏向量经 sparse_store.py 落盘到 ./sparse_db/{tenant_id}/
    ├── 任务状态持久化到 `data/tasks.json`，服务重启后从磁盘恢复，避免"已上传却提示请先上传文档"
    ├── 服务启动时自动扫描 `uploads/{tenant_id}/`，对未向量化的 PDF 重新提交后台索引任务
    ├── 进度查询：GET /api/documents/task/{task_id} 返回 pending/processing(extracting→embedding→building_index)/done/failed 及百分比
@@ -984,10 +986,10 @@ app/main.py (FastAPI 入口)
    ├── app/api/chat.py: 验证 Token → 加载 ChromaDB 向量库
    ├── app/retrieval/query_rewriter.py: LLM 改写/扩展查询
    ├── app/retrieval/hybrid_retriever.py:
-   │   ├── 稠密检索: ChromaDB.similarity_search_with_score()
-   │   ├── 稀疏检索: BM25Okapi.get_scores()
-   │   ├── BGE-M3 稀疏检索: SPLADE 词汇权重（自计算，dot-product 打分）
-   │   └── RRF 融合（稠密 + BM25 + BGE-M3 稀疏 + 可选 ES）+ 可选 BGE 重排
+   │   ├── 稠密检索: ChromaDB.similarity_search_with_score() (向量来自 bge_m3_embedder.py)
+   │   ├── 稀疏检索(BM25): BM25Okapi.get_scores()
+   │   ├── BGE-M3 稀疏检索: bge_m3_embedder.py 确定性自计算 SPLADE 词汇权重 + sparse_store.py 落盘 lookup (RRF keying 取 page_content[:200])
+   │   └── RRF 融合(稠密 + BM25 + BGE-M3 稀疏 + 可选 ES) + 可选 BGE 重排
    ├── app/retrieval/citation.py: 记录来源引用
    ├── app/memory/memory_manager.py: 加载短期/长期记忆
    ├── 调用 DeepSeek LLM (stream=True) 生成回答
