@@ -1,3 +1,24 @@
+"""
+app/memory/profile_store.py —— 多租户用户画像实体存储
+
+【作用与功能】
+管理结构化的用户画像信息（如姓名、偏好、关键属性等），与 ChromaDB 的非结构化
+长期记忆相分离。数据以 JSON 文件持久化，支持多租户隔离、线程安全读写、基于置信度
+的实体合并，并可将画像序列化为提示词文本注入 LLM 上下文。
+
+【主要组成】
+- `ProfileStore`：用户画像存储类，提供 get_profile / to_prompt_text /
+  merge_entities / clear 等方法
+
+【适用场景】
+- 场景1：在 MemorySystem 后台实体提取后，将抽取到的实体合并入画像
+- 场景2：组装上下文时调用 to_prompt_text 把用户画像注入 LLM 提示词
+
+【依赖关系】
+- 上游调用方：app.memory.memory_manager（实体提取、上下文组装）
+- 下游依赖：仅依赖标准库（json / os / threading）与 loguru
+"""
+
 import json, os, threading
 from datetime import datetime
 from loguru import logger

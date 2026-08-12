@@ -1,5 +1,21 @@
 """
-可插拔 Embedder 工厂。
+embedder_factory —— 可插拔 Embedder 工厂。
+
+【作用与功能】
+根据配置（EMBEDDER_TYPE）创建统一的文本嵌入器实例，屏蔽「云端 API 嵌入」
+与「本地模型嵌入」的差异，供索引构建与检索查询复用。
+
+【主要组成】
+- `DirectEmbed`：直接调用豆包/OpenAI 兼容 Embedding API（分批+限速+退避重试）
+- `create_embedder`：按 EMBEDDER_TYPE 创建 openai / huggingface 嵌入器
+
+【适用场景】
+- 场景1：文档索引时为海量 chunk 批量生成向量
+- 场景2：提问时生成查询向量以做相似度检索
+
+【依赖关系】
+- 上游调用方：索引构建脚本、HybridRetriever（稠密通道）
+- 下游依赖：app.core.config、requests、FlagEmbedding/BGE-M3、langchain_huggingface
 """
 import os
 import time
@@ -14,6 +30,16 @@ class DirectEmbed:
     不依赖 langchain-openai 的 tokenizer，确保发送原始文本。
     """
     def __init__(self, model: str, api_key: str, base_url: str):
+        """初始化直接调用云端 Embedding API 的客户端。
+
+        保存模型名、API Key 与 base_url（统一去掉尾部斜杠）。
+        分批/限速/重试参数在类属性 BATCH_SIZE/BATCH_INTERVAL/MAX_RETRY 中定义。
+
+        参数:
+            model: 云端 Embedding 模型名（如 doubao-embedding / text-embedding-3）
+            api_key: API 密钥
+            base_url: API 基址（如 https://ark.cn-beijing.volces.com/api/v3）
+        """
         self.model = model
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
@@ -26,6 +52,13 @@ class DirectEmbed:
     MAX_RETRY = 6             # 429/5xx 最大重试次数
 
     def _post(self, texts: List[str]):
+        """向 /embeddings 端点发送一次 Embedding 请求并返回响应对象。
+
+        参数:
+            texts: 本批次待嵌入文本列表
+        返回:
+            requests.Response: 原始 HTTP 响应（由调用方判断状态码）
+        """
         return requests.post(
             f"{self.base_url}/embeddings",
             headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},

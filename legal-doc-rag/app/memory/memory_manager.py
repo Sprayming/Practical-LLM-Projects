@@ -1,3 +1,27 @@
+"""
+app/memory/memory_manager.py —— 三层记忆系统核心编排（MemorySystem）
+
+【作用与功能】
+定义 legal-doc-rag 的「三层记忆」架构并负责统一编排：短期记忆（最近几轮对话，
+Redis 列表 + 内存回退）、中期记忆（对话摘要，Redis 字符串 + 内存回退）、长期记忆
+（向量化知识/实体，ChromaDB 向量库）。同时整合遗忘机制（访问即激活的反遗忘）、
+后台异步整理（ShadowWorker）、实体画像提取与 Redis 容灾恢复，对外提供高优先级
+的同步读写接口与中低优先级的异步整理接口。
+
+【主要组成】
+- `MemorySystem`：三层记忆系统主类，封装 add / retrieve_long_term / get_context /
+  trigger_background_jobs / clear_session / stats 等接口
+
+【适用场景】
+- 场景1：每次用户对话时同步调用 add 写入短期记忆、get_context 组装上下文
+- 场景2：对话结束后调用 trigger_background_jobs 触发异步摘要与实体提取
+- 场景3：需要重置会话时调用 clear_session，需要观测状态时调用 stats
+
+【依赖关系】
+- 上游调用方：app 主流程 / API 层
+- 下游依赖：redis_client、forgetting、profile_store、langchain_chroma、app.worker.shadow_worker
+"""
+
 import json
 import uuid
 import os

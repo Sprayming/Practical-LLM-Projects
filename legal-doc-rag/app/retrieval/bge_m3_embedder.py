@@ -48,6 +48,16 @@ def _unused_token_ids(tokenizer) -> set:
 
 
 def _get_device(module: torch.nn.Module) -> torch.device:
+    """推断给定模块所在的设备（CPU/GPU）。
+
+    通过取模块第一个参数的 device 判断其所在设备；若模块无参数或出错，
+    则回退到 CPU。用于在稀疏编码前确定张量应放置的设备。
+
+    参数:
+        module (torch.nn.Module): 待推断设备的模型模块
+    返回:
+        torch.device: 模型所在设备（如 cpu / cuda:0）
+    """
     try:
         return next(module.parameters()).device
     except Exception:  # noqa: BLE001
@@ -59,7 +69,7 @@ def get_bge_m3_model():
     global _MODEL
     if _MODEL is not None:
         return _MODEL if _MODEL else None
-    with _MODEL_LOCK:
+    with _MODEL_LOCK:  # 双重检查锁定：仅首个线程进入加载，其余直接复用
         if _MODEL is not None:
             return _MODEL if _MODEL else None
         try:
@@ -183,10 +193,27 @@ class BGEM3Embedder(Embeddings):
     """langchain 兼容的 BGE-M3 嵌入器（稠密 + 稀疏）。"""
 
     def __init__(self):
+        """初始化 langchain 兼容的 BGE-M3 嵌入器。
+
+        构造时懒加载全局 BGE-M3 模型单例（进程内仅一份权重）。
+        模型加载失败时 self._model 为 None：稠密接口抛错、稀疏接口降级返回空。
+        """
         self._model = get_bge_m3_model()
 
     # ---------- langchain 稠密接口 ----------
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
+        """批量生成稠密向量（langchain Embeddings 接口）。
+
+        调用底层 BGEM3FlagModel 的稠密编码并取 dense_vecs 转 list 返回，
+        供 Chroma 入库与查询。模型未加载时抛出 RuntimeError。
+
+        参数:
+            texts (List[str]): 待编码文本列表
+        返回:
+            List[List[float]]: 与输入等长的 1024 维稠密向量列表
+        异常:
+            RuntimeError: BGEM3FlagModel 未成功加载时抛出
+        """
         if self._model is None:
             raise RuntimeError("BGEM3FlagModel 未加载，无法生成稠密向量")
         out = self._model.encode(
@@ -199,6 +226,16 @@ class BGEM3Embedder(Embeddings):
         return out["dense_vecs"].tolist()
 
     def embed_query(self, text: str) -> List[float]:
+        """生成单个查询的稠密向量（langchain Embeddings 接口）。
+
+        复用 embed_documents 对单条文本编码并取首个结果，确保与文档同处
+        一个向量空间，便于相似度检索。
+
+        参数:
+            text (str): 查询文本
+        返回:
+            List[float]: 1024 维稠密向量
+        """
         return self.embed_documents([text])[0]
 
     # ---------- 稀疏接口（BGE-M3 SPLADE，自计算，确定性） ----------
@@ -209,5 +246,15 @@ class BGEM3Embedder(Embeddings):
         return encode_sparse_direct(self._model, texts)
 
     def encode_query_sparse(self, text: str) -> Dict[str, float]:
+        """生成单个查询的 BGE-M3 SPLADE 稀疏权重字典。
+
+        便于单查询场景复用 encode_sparse 的确定性自计算路径，
+        返回 {token_id: weight}；模型不可用时为空字典。
+
+        参数:
+            text (str): 查询文本
+        返回:
+            Dict[str, float]: 稀疏权重字典
+        """
         res = self.encode_sparse([text])
         return res[0]

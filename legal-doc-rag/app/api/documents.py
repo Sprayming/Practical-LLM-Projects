@@ -1,3 +1,30 @@
+"""
+documents.py —— 文档上传、索引与预览 API 模块
+
+【作用与功能】
+本模块负责文档全生命周期的 HTTP 接口：接收 PDF 上传并进行安全与体积校验，立即创建后台
+异步索引任务（避免大文档阻塞主服务），提供任务进度查询、已上传文档列表、PDF 在线预览，
+以及管理员删除文档（同步清理稠密向量、稀疏向量与源文件）。它是 RAG 检索链路的数据入口。
+
+【主要组成】
+- `upload_document`：上传 PDF 并异步提交索引任务，返回 task_id。
+- `_run_indexing`：后台线程执行文本抽取、稀疏/稠密向量化与建库，全程更新任务状态。
+- `get_upload_task`：查询索引任务进度（含跨租户越权校验）。
+- `list_documents`：列出当前租户已上传的 PDF 文件名。
+- `preview_document`：安全地在线预览 PDF（防目录遍历攻击）。
+- `delete_document`：管理员删除文档并清理向量与源文件。
+
+【适用场景】
+- 用户在知识库页面上传法律文档，系统异步构建可检索向量索引。
+- 前端轮询任务进度，索引完成后即可在对话中检索该文档。
+- 管理员清理过期或错误文档及其全部向量数据。
+
+【依赖关系】
+- 上游调用方：前端知识库上传/管理页面。
+- 下游依赖：app.retrieval.embedder_factory、app.processing.multimodal_pipeline、
+  app.retrieval.sparse_store、app.security.middleware、app.tasks.task_store、Chroma 向量库。
+"""
+
 import os, sys, json, tempfile
 
 # 将项目根目录添加到系统路径中，以便正确导入项目内的其他模块

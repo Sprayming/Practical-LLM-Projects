@@ -1,3 +1,23 @@
+"""
+app/memory/conversation_store.py —— 对话历史的本地 JSON 文件存储
+
+【作用与功能】
+提供对话历史的本地持久化能力：将每一轮或多轮对话以 JSON 文件形式落盘，支持按
+对话 ID 保存、加载完整历史，以及按修改时间倒序列出所有对话的元信息。该模块与
+ Redis 短期记忆互补，常用于会话级的全量备份或离线审计。
+
+【主要组成】
+- `ConversationStore`：对话存储管理器，封装 save / load / list_all 三类操作
+
+【适用场景】
+- 场景1：需要把整段对话持久化到磁盘以便后续复盘或继续对话时调用 save/load
+- 场景2：在管理后台展示「历史会话列表」时调用 list_all 获取元信息
+
+【依赖关系】
+- 上游调用方：app.memory.memory_manager 或其他需要会话落盘的业务代码
+- 下游依赖：仅依赖标准库（json / os / uuid / pathlib），无外部服务依赖
+"""
+
 import json, os, uuid
 from datetime import datetime
 from pathlib import Path

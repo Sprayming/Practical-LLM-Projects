@@ -9,6 +9,12 @@ import pytest
 
 @pytest.mark.integration
 def test_register_and_login_flow(client):
+    """验证「注册→重复注册拒绝→错误密码拒绝→登录拿 token」的完整认证链路。
+
+    验证点：注册成功返回 success；重复用户名返回 400；错误密码返回 401；
+            正确登录返回 200 且携带 token，首个用户角色为 super_admin。
+    边界/异常：重复注册、错误密码等失败路径的 HTTP 状态码。
+    """
     # 1) 注册成功
     r = client.post(
         "/api/auth/register",
@@ -47,6 +53,12 @@ def test_register_and_login_flow(client):
 
 @pytest.mark.integration
 def test_me_endpoint_auth(client):
+    """验证 /api/auth/me 接口对鉴权头的处理（无 token / 错误 token / 正确 token）。
+
+    验证点：无 Authorization 头 → 422（Header 必填）；错误 JWT → 401；
+            正确 token → 200 且返回当前登录用户名。
+    边界/异常：非法/缺失凭证时的拒绝行为。
+    """
     # 先登录拿 token
     client.post(
         "/api/auth/register",
@@ -78,6 +90,12 @@ def test_me_endpoint_auth(client):
 
 @pytest.mark.integration
 def test_protected_endpoint_requires_valid_jwt(client):
+    """验证受保护接口（聊天）在无有效 JWT 时拒绝访问。
+
+    验证点：未带 token 访问 /api/chat，因 require_user 依赖 Header 必填，
+            返回 401 或 422，绝不会是 200。
+    边界/异常：缺少鉴权凭证的拒绝路径。
+    """
     # 未带 token 访问受保护接口（聊天）
     r = client.post("/api/chat", json={"message": "hi", "stream": False})
     # require_user 依赖 Header，缺失 → 422；非 200

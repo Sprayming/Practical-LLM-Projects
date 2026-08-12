@@ -14,12 +14,19 @@ import pytest
 
 
 class _FakeChunk:
+    """模拟 MultimodalPipeline 产出的分块对象（仅含 text 字段），用于 mock 索引流程。"""
     def __init__(self, text):
         self.text = text
 
 
 @pytest.mark.integration
 def test_upload_document_success_and_listed(client, auth_headers, test_env):
+    """验证文档上传成功、后台索引产出 chunks、文件落盘且列表接口可见（多租户隔离）。
+
+    验证点：上传返回 task_id；轮询后台任务至 done 且产出 2 个 chunks 并带回 tenant_id；
+            文件真实落盘到该 tenant 的临时上传目录；/api/documents 列表可见该文件。
+    边界/异常：patch 作用域需覆盖后台线程，避免真实解析假 PDF 失败。
+    """
     chunks = [_FakeChunk("第一段法律文本"), _FakeChunk("第二段法律文本")]
     fake_pipeline = MagicMock()
     fake_pipeline.process.return_value = chunks
@@ -76,6 +83,7 @@ def test_upload_document_success_and_listed(client, auth_headers, test_env):
 
 @pytest.mark.integration
 def test_upload_rejects_non_pdf(client, auth_headers):
+    """验证上传非 PDF 文件（如 .txt）被接口拒绝，返回 400。"""
     r = client.post(
         "/api/documents/upload",
         files={"file": ("note.txt", b"hello world", "text/plain")},
@@ -86,6 +94,7 @@ def test_upload_rejects_non_pdf(client, auth_headers):
 
 @pytest.mark.integration
 def test_upload_requires_auth(client):
+    """验证未携带 Authorization 头时上传接口被拒（401 或 422，Header 必填）。"""
     # 缺 Authorization 头 → 422（Header 必填）
     r = client.post(
         "/api/documents/upload",
@@ -96,6 +105,7 @@ def test_upload_requires_auth(client):
 
 @pytest.mark.integration
 def test_upload_rejects_bad_token(client):
+    """验证携带非法 JWT token 时上传接口被拒，返回 401。"""
     r = client.post(
         "/api/documents/upload",
         files={"file": ("a.pdf", b"%PDF", "application/pdf")},

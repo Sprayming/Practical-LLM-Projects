@@ -1,3 +1,29 @@
+"""
+config —— legal-doc-rag 全局配置集中管理模块
+
+【作用与功能】
+该模块负责从环境变量中读取并集中定义 legal-doc-rag RAG 系统运行所需的全部
+配置项，包括大语言模型（LLM）、文本嵌入模型（Embedding）、向量数据库存储、
+Redis 缓存、JWT 安全、管理员以及路径相关的参数。通过统一的配置入口，各业务
+模块无需各自读取环境变量，便于部署、测试与多环境切换。
+
+【主要组成】
+- `BASE_DIR`：项目根目录的绝对路径，用于拼接其他相对目录。
+- LLM 配置：`LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL`。
+- 嵌入配置：`EMBEDDER_TYPE`、`EMBEDDING_*`、`HF_MODEL_NAME` / `HF_CACHE_DIR`。
+- 存储与缓存：`CHROMA_PERSIST_DIR`、`UPLOAD_DIR`、`REDIS_URL`。
+- 安全与管理：`JWT_SECRET`、`ADMIN_RESET_KEY`、`MAX_SUPER_ADMINS`。
+- 路径：`TENANT_DB`（租户 SQLite 数据库路径）。
+
+【适用场景】
+- 场景1：应用启动及运行时，各模块通过 `from app.core import config` 获取参数。
+- 场景2：通过 .env 或系统环境变量覆盖默认值，实现不同环境的配置切换。
+
+【依赖关系】
+- 上游调用方：app.main、app.api 各路由、app.retrieval 等。
+- 下游依赖：仅依赖标准库 `os` 与 `pathlib`，无业务耦合。
+"""
+
 import os
 from pathlib import Path
 

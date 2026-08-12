@@ -1,5 +1,22 @@
 """
-Legal-DOC-RAG 测试的 pytest 配置和固定装置 (fixtures)
+conftest.py —— legal-doc-rag 项目的 pytest 全局配置与共享固定装置 (fixtures)。
+
+【测试覆盖范围】
+- 重型/可选依赖惰性桩：注册 MetaPathFinder，对当前环境「未安装」的 chromadb、
+  paddleocr、bs4、sentence_transformers 等重型/可选包动态返回 MagicMock 桩，
+  保证单元测试在干净环境（CI / 未安装重型依赖）下也能秒级通过；已真实安装的
+  包不受影响（真实环境优先）。
+- 共享 fixture：project_root（项目根目录）、temp_dir（临时目录）、mock_config
+  （模拟配置模块）、mock_redis（模拟 Redis）、mock_chroma（模拟 ChromaDB）、
+  mock_llm（模拟 LLM HTTP 调用）、sample_document / sample_query / sample_user
+  （示例数据）、authenticated_headers（带 JWT 的认证头），供各 unit 测试复用。
+
+【适用场景】
+- 由 pytest 自动加载，为 app.* 各模块的单元/接口测试提供运行环境与依赖模拟。
+
+【依赖】
+- 依赖 pytest、unittest.mock；并对 app.core.config、app.memory.redis_client、
+  app.retrieval.hybrid_retriever、httpx 等模块做 patch。
 """
 import sys
 import importlib

@@ -29,6 +29,14 @@ class Reranker:
     """BGE 交叉编码器重排序（可选，模型加载失败则跳过）"""
 
     def __init__(self, model_name: str = "BAAI/bge-reranker-base"):
+        """初始化 BGE 交叉编码器重排序器（模型加载失败则降级跳过）。
+
+        尝试从 sentence_transformers 加载 CrossEncoder（CPU）。加载失败仅告警、
+        available 置 False，后续 rerank 跳过精排直接截断返回，保证链路可用。
+
+        参数:
+            model_name: 重排序模型名（默认 "BAAI/bge-reranker-base"）
+        """
         self.model = None
         self.available = False
         try:
@@ -68,6 +76,24 @@ class HybridRetriever:
         sparse_store: Optional[dict] = None,
         bge_sparse_weight: float = 1.0,
     ):
+        """初始化混合检索器，建立各召回通道。
+
+        保存各通道引用与融合参数；基于全部文本构建 BM25 索引（用于稀疏召回）；
+        按需初始化重排序器与 Elasticsearch 全文通道（不可用时降级为 None）。
+
+        参数:
+            dense_store: 稠密向量库（Chroma 等）的相似度检索接口
+            texts: 全部候选文档文本列表（BM25 与稀疏检索的语料）
+            k: 最终返回的 Top-K（默认 5）
+            rrf_k: RRF 融合常数（默认 60，平滑排名影响）
+            dense_weight: 稠密通道 RRF 权重
+            sparse_weight: BM25 稀疏通道 RRF 权重
+            use_reranker: 是否启用 BGE 重排序精排
+            use_elasticsearch: 是否启用 ES 全文召回
+            tenant_id: 租户 ID（ES 检索过滤用）
+            sparse_store: BGE-M3 稀疏向量 lookup（dict 或对象）
+            bge_sparse_weight: BGE-M3 稀疏通道 RRF 权重
+        """
         self.dense_store = dense_store
         self.texts = texts
         self.k = k

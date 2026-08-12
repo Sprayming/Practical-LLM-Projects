@@ -1,11 +1,22 @@
 """
-Query Cache for Legal-DOC-RAG.
+QueryCache —— legal-doc-rag 的查询结果缓存（LRU + TTL）。
 
-Provides:
-- LRU cache with TTL expiration
-- Thread-safe operations
-- Cache statistics
-- Multiple backend support (memory, file, Redis)
+【作用与功能】
+为检索问答提供带 TTL 过期与 LRU 淘汰的线程安全缓存；命中时直接返回历史
+答案，避免重复调用大模型/检索链路，显著降低延迟与成本。
+
+【主要组成】
+- `QueryCache`：基于内存 OrderedDict（LRU）与文件落盘的双后端缓存，
+  支持 TTL 过期、命中率统计、清理与清除。
+
+【适用场景】
+- 场景1：相同/相似法律问题的高频重复提问
+- 场景2：服务重启后从文件缓存恢复热点答案
+
+【依赖关系】
+- 上游调用方：问答流水线（命中则跳过检索+生成）
+- 下游依赖：本地文件系统（可选）、loguru 日志
+（原英文说明：LRU + TTL、线程安全、统计、多后端 memory/file/redis 支持）
 """
 import json
 import os
@@ -38,13 +49,16 @@ class QueryCache:
         use_memory: bool = True,
     ):
         """
-        Initialize the cache.
+        初始化缓存。
 
-        Args:
-            cache_dir: Directory for file-based cache storage
-            ttl_seconds: Time-to-live in seconds (default: 24 hours)
-            max_size: Maximum number of cached entries
-            use_memory: If True, use in-memory LRU cache (faster)
+        创建缓存根目录，建立内存 LRU 缓存与统计计数；若启用内存模式，
+        则从文件缓存恢复未过期的历史条目，并记录初始化日志。
+
+        参数:
+            cache_dir: 文件缓存存储目录（默认 "cache"）
+            ttl_seconds: 缓存存活时间（秒，默认 86400=24 小时）
+            max_size: 内存缓存最大条目数（默认 1000，超出触发 LRU 淘汰）
+            use_memory: 是否启用内存 LRU 缓存（True 更快，默认 True）
         """
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -71,7 +85,7 @@ class QueryCache:
         )
 
     def _load_file_cache(self):
-        """Load existing file cache entries into memory."""
+        """将磁盘上的文件缓存读取进内存（仅保留未过期条目）。"""
         try:
             count = 0
             for path in self.cache_dir.glob("*.json"):
@@ -94,18 +108,21 @@ class QueryCache:
             logger.warning("Failed to load file cache: {}", e)
 
     def _key(self, query: str) -> str:
-        """Generate cache key from query."""
+        """对查询字符串计算 MD5 作为缓存键（相同问题命中同一缓存）。"""
         return hashlib.md5(query.encode("utf-8")).hexdigest()
 
     def get(self, query: str) -> Optional[str]:
         """
-        Get cached answer for a query.
+        根据查询获取缓存的答案。
 
-        Args:
-            query: The query string
+        优先查内存 LRU；命中且未过期则移到队尾（标记最近使用）并返回；
+        否则回退到文件缓存，命中则同步回种内存。过期条目会被删除。
+        未命中或异常均返回 None 并累计 miss。
 
-        Returns:
-            Cached answer or None if not found/expired
+        参数:
+            query: 查询字符串
+        返回:
+            Optional[str]: 缓存答案文本；未命中/已过期返回 None
         """
         key = self._key(query)
 
@@ -156,12 +173,12 @@ class QueryCache:
 
     def set(self, query: str, answer: str, metadata: Optional[Dict] = None):
         """
-        Cache an answer for a query.
+        写入一条查询答案到缓存（内存 + 文件双写）。
 
-        Args:
-            query: The query string
-            answer: The answer to cache
-            metadata: Optional metadata to store
+        参数:
+            query: 查询字符串（作为缓存键）
+            answer: 待缓存的答案文本
+            metadata: 可选附带的元数据（如模型、耗时等）
         """
         key = self._key(query)
         entry = {
@@ -186,13 +203,13 @@ class QueryCache:
             logger.warning("Cache write error: {}", e)
 
     def _trim_memory_cache(self):
-        """Trim memory cache to max size (LRU eviction)."""
+        """超出 max_size 时按 LRU 淘汰最久未使用条目，并累计淘汰计数。"""
         while len(self._memory_cache) > self.max_size:
             self._memory_cache.popitem(last=False)
             self._evictions += 1
 
     def clear(self):
-        """Clear all cache entries."""
+        """清空全部缓存（内存 + 磁盘文件）并重置统计计数。"""
         with self._lock:
             self._memory_cache.clear()
 
@@ -208,7 +225,7 @@ class QueryCache:
         logger.info("Cache cleared")
 
     def stats(self) -> Dict[str, Any]:
-        """Get cache statistics."""
+        """返回缓存统计：内存/文件条目数、命中/未命中/淘汰数、命中率(%)等。"""
         with self._lock:
             memory_size = len(self._memory_cache)
 
@@ -228,7 +245,7 @@ class QueryCache:
         }
 
     def cleanup_expired(self) -> int:
-        """Remove expired entries from file cache. Returns number of removed entries."""
+        """扫描并删除文件中已过期的缓存条目，返回删除数量。"""
         removed = 0
         for path in self.cache_dir.glob("*.json"):
             try:

@@ -85,6 +85,7 @@ def fake_model():
 
 def test_non_empty_output(fake_model):
     """修复前 scatter_reduce 偶发整条稀疏为空——这里必须稳定非空。"""
+    # 构造中文法律语料样例，验证稀疏向量稳定非空
     texts = ["劳动合同解除", "违约金 定金"]
     res = encode_sparse_direct(fake_model, texts)
     assert len(res) == 2
@@ -109,6 +110,7 @@ def test_single_text_stable(fake_model):
 
 def test_special_tokens_filtered(fake_model):
     """特殊 token（cls/eos/pad/unk）不应进入稀疏词典。"""
+    # 计算应被过滤的特殊 token 集合（cls/eos/pad/unk）
     unused = _unused_token_ids(fake_model.tokenizer)
     res = encode_sparse_direct(fake_model, ["劳动合同解除"])
     for tid in res[0]:

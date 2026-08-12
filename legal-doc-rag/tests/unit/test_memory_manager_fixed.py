@@ -1,5 +1,22 @@
 """
-app.memory.memory_manager 模块的单元测试（修复版）
+test_memory_manager_fixed.py —— 对 app.memory.memory_manager 记忆系统（修复版）的单元测试。
+
+【测试覆盖范围】
+- 初始化：验证 Chroma / RedisClient / ForgettingMechanism / ProfileStore / Worker
+  等组件被正确注入，且参数（如遗忘阈值）正确传递。
+- 记忆写入：add 在 Redis 不可用时的回退，短期记忆入队与 Redis 调用。
+- 上下文构建：get_context 组合长期 / 中期 / 近期记忆并格式化（含标记段）。
+- 会话管理：clear_session 清除记忆并刷新 session_id、通知 Redis。
+- 统计信息：stats 各计数（短期条数、中期是否存在、长期块数、Redis 可用性）正确。
+- 长期检索：retrieve_long_term 向量检索 + 遗忘机制过滤后返回内容文本。
+- 后台任务：短期记忆溢出时 trigger_background_jobs 正确提交 Worker 任务。
+
+【适用场景】
+- 用 pytest 运行，覆盖记忆系统的初始化、读写、检索、会话与后台任务的边界与异常。
+
+【依赖】
+- 依赖 app.memory.memory_manager，使用 unittest.mock 桩化 Chroma / RedisClient /
+  ForgettingMechanism / ProfileStore / get_worker。
 """
 import pytest
 from unittest.mock import Mock, patch, MagicMock
@@ -66,7 +83,7 @@ class TestMemorySystem:
         mock_embedding = Mock()
         mock_redis_instance = Mock()
         mock_redis.return_value = mock_redis_instance
-        # 模拟 Redis 不可用的情况
+        # 模拟 Redis 不可用的情况，触发记忆系统的回退逻辑
         mock_redis_instance.is_available.return_value = False
 
         memory = MemorySystem(
@@ -296,7 +313,7 @@ class TestMemorySystem:
             persist_dir="./test_db"
         )
 
-        # 制造短期记忆溢出（超过 max_short_term）
+        # 制造短期记忆溢出（超过 max_short_term），触发后台压缩任务
         memory.short_term = [
             {"role": "user", "content": f"msg-{i}"}
             for i in range(memory.max_short_term + 1)

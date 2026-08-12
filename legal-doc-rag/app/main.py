@@ -1,4 +1,31 @@
-﻿import os
+﻿"""
+main —— legal-doc-rag FastAPI 应用入口模块
+
+【作用与功能】
+该模块是 legal-doc-rag RAG 系统的 Web 服务统一入口，负责创建并配置 FastAPI
+应用实例：加载环境变量、装配 CORS 与安全中间件、注册全局限流与错误处理器、
+挂载所有业务路由（鉴权、对话、文档、反馈、管理后台、分类、会话、A/B 测试、
+Webhook、监控），并提供前端静态资源服务。同时定义了应用启动/关闭钩子，
+在启动时恢复未完成文档索引任务、启动 Webhook 管理器。
+
+【主要组成】
+- `app`：全局 FastAPI 实例。
+- `root()`：根路径处理器，返回前端入口 HTML。
+- `startup_event()`：启动钩子，启动后台服务并恢复未完成的索引任务。
+- `_recover_incomplete_indexing()`：扫描上传目录，对未索引的 PDF 重新提交任务。
+- `shutdown_event()`：关闭钩子，优雅停止 Webhook 管理器。
+
+【适用场景】
+- 场景1：以 `python -m app.main` 或 uvicorn 直接启动 ASGI 服务。
+- 场景2：被容器/进程管理器（如 gunicorn + uvicorn worker）加载 `app.main:app`。
+
+【依赖关系】
+- 上游调用方：ASGI 服务器（uvicorn）、容器编排。
+- 下游依赖：app.api.* 各路由、app.security.*、app.worker.webhook、
+  app.core.limiter、app.core.config 等子模块。
+"""
+
+import os
 
 # 设置环境变量，强制 Transformers 库在离线模式下运行，避免联网检查模型更新
 os.environ['TRANSFORMERS_OFFLINE'] = '1'

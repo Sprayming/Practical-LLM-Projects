@@ -13,6 +13,11 @@ import pytest
 
 @pytest.mark.integration
 def test_login_rate_limit_returns_429(client):
+    """验证 /api/auth/login 的 slowapi 限流（20/minute，按 IP）超限后返回 429。
+
+    验证点：连续请求中，限流阈值前正常返回 401（错误密码），超过 20 次/分钟后返回 429。
+    边界/异常：限流为单进程内存计数、键按 IP；conftest 每测试 reset_limiter() 保证互不串扰。
+    """
     creds = {"username": "ratelimit_user", "password": "any_pass"}
     saw_401 = False
     saw_429 = False

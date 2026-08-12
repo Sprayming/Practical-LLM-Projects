@@ -1,5 +1,17 @@
 """
-app.core.config 模块的单元测试
+test_config.py —— 对 app.core.config 配置模块的单元测试。
+
+【测试覆盖范围】
+- 基础路径：验证 BASE_DIR 为 Path 对象且目录真实存在、并能正确指向项目根目录。
+- 配置默认值：验证 LLM / 嵌入模型 / 存储 / Redis / JWT / 租户库 等各类配置的
+  默认值类型与取值（如 REDIS_URL 含 redis://、TENANT_DB 以 users.db 结尾）。
+- 环境变量覆盖：验证通过环境变量（如 LLM_API_KEY）可覆盖默认配置值（reload 后生效）。
+
+【适用场景】
+- 用 pytest 运行，验证配置模块在「默认值」与「环境变量覆盖」两种场景下的正确性。
+
+【依赖】
+- 依赖 app.core.config，使用 os.environ + importlib.reload 模拟环境变量覆盖。
 """
 import os
 import pytest
@@ -114,7 +126,7 @@ class TestConfig:
         2. 重新导入模块后能获取到新值
         """
         with patch.dict(os.environ, {"LLM_API_KEY": "test-key"}):
-            # 重新导入以获取新值
+            # 重新导入以获取新值（环境变量需在模块加载时读取）
             import importlib
             import app.core.config
             importlib.reload(app.core.config)

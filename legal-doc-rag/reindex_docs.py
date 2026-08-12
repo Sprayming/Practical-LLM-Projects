@@ -43,12 +43,37 @@ pipeline = MultimodalPipeline()
 
 
 def extract_chunks(pdf_path: str):
-    """调用多模态管线：文字层 + OCR + 图片 caption → 文本块列表。"""
+    """调用多模态管线抽取 PDF 文本块。
+
+    依次尝试从 PDF 中提取文字层、OCR 扫描件文字以及图片 caption，
+    将管线产出的有效 chunk 收敛为纯文本字符串列表。
+
+    参数:
+        pdf_path (str): 待处理的 PDF 文件绝对/相对路径
+    返回:
+        list[str]: 经去空白过滤后的有效文本块列表（可能为空）
+    适用场景:
+        - 在重索引流程中作为「抽取」环节，为后续向量化提供文本来源
+    """
     chunks = pipeline.process(pdf_path)
     return [c.text for c in chunks if c.text.strip()]
 
 
 def reindex_tenant(tenant_id: str):
+    """对单个租户执行全量重索引。
+
+    遍历该租户 uploads 目录下的所有 PDF，逐一抽取文本并向量化写入
+    对应 Chroma 集合；对无有效文本的 PDF 清理历史垃圾 chunk；
+    整个过程幂等（先清旧 chunk 再写入），单文件失败不影响其他文件。
+
+    参数:
+        tenant_id (str): 租户标识，对应 chroma_db 与 uploads 下的子目录名
+    返回:
+        无（直接打印处理进度与结果统计）
+    适用场景:
+        - 由 `__main__` 入口遍历所有租户逐个调用
+        - 单独排查/重建某个租户索引时可直接调用
+    """
     upload_dir = os.path.join(UPLOAD_ROOT, tenant_id)
     persist_dir = os.path.join(CHROMA_ROOT, tenant_id)
     if not os.path.isdir(upload_dir):
@@ -149,6 +174,7 @@ def reindex_tenant(tenant_id: str):
 
 
 if __name__ == "__main__":
+    # 扫描 chroma_db 根目录下所有子目录作为租户列表，逐个重索引
     tenants = [
         d for d in os.listdir(CHROMA_ROOT)
         if os.path.isdir(os.path.join(CHROMA_ROOT, d))

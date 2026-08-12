@@ -17,6 +17,7 @@ _lock = threading.Lock()
 
 
 def _tenant_dir(tenant_id: str) -> str:
+    """返回（并创建）某租户的稀疏向量存储目录。"""
     d = os.path.join(SPARSE_DB_DIR, tenant_id)
     os.makedirs(d, exist_ok=True)
     return d
@@ -25,12 +26,13 @@ def _tenant_dir(tenant_id: str) -> str:
 def save_sparse(tenant_id: str, filename: str, items: List[dict]) -> None:
     """items: [{"key": text[:200], "sp": {token_id: weight}}, ...]"""
     path = os.path.join(_tenant_dir(tenant_id), f"{filename}.json")
-    with _lock:
+    with _lock:  # 全局锁防止多进程/多线程并发写同一租户目录
         with open(path, "w", encoding="utf-8") as f:
             json.dump({"items": items}, f, ensure_ascii=False)
 
 
 def delete_sparse(tenant_id: str, filename: str) -> None:
+    """删除某租户下指定文件名对应的稀疏向量文件（忽略异常）。"""
     path = os.path.join(_tenant_dir(tenant_id), f"{filename}.json")
     try:
         if os.path.exists(path):

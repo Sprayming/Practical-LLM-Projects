@@ -1,4 +1,31 @@
-﻿import os, sys, json, requests, time
+﻿"""
+chat.py —— 对话（RAG 检索增强生成）API 模块
+
+【作用与功能】
+本模块实现 legal-doc-rag 的核心问答接口，串联完整的 RAG 流程：按租户构建检索管道 ->
+查询重写 -> 缓存命中检查 -> 混合检索（稠密+稀疏）与重排序 -> 引用追踪 -> 构建提示词 ->
+调用大模型生成回答，并以 SSE 流式或非流式方式返回，同时维护缓存与长期记忆。
+
+【主要组成】
+- `chat` / `chat_stream`：问答主入口，支持流式与非流式两种响应模式。
+- `_build_pipeline`：按租户组装嵌入器、向量库、重写器、缓存、引用追踪、记忆等组件。
+- `_get_context`：执行混合检索、重排序并拼接记忆与历史构建最终提示词。
+- `_handle_streaming_response` / `_handle_non_streaming_response`：分别处理两种响应模式。
+- `_handle_post_processing`：回答后写缓存、更新记忆并触发后台任务。
+- `call_llm`：异步调用大模型（用于记忆总结等非流式场景）。
+- `_get_memory` / `_get_reranker`：记忆系统与重排序器的缓存/单例获取。
+
+【适用场景】
+- 前端用户向系统提问，系统基于已上传法律文档检索并生成带引用的回答。
+- 长文档问答、多轮对话记忆、基于分类实验的回答质量对比（A/B 测试）。
+
+【依赖关系】
+- 上游调用方：前端对话页。
+- 下游依赖：app.retrieval（嵌入/检索/重写/引用/缓存）、app.memory、app.worker.shadow_worker、
+  app.observability（日志/追踪/监控）、app.tasks.task_store、Chroma 向量库、langchain_community。
+"""
+
+import os, sys, json, requests, time
 
 # 将项目根目录添加到系统路径中，以便能够正确导入项目内的其他模块
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))

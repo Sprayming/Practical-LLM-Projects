@@ -1,5 +1,23 @@
 """
-A/B Testing Framework for Legal-DOC-RAG.
+app/evaluation/ab_testing —— A/B 测试框架（Legal-DOC-RAG）
+
+【作用与功能】
+基于 SQLite 的轻量 A/B 实验管理框架，用于在法律 RAG 系统中对多套策略
+（如不同提示词、检索参数、模型）进行线上对比实验。它负责实验生命周期
+管理、按权重与用户哈希的确定性流量分配、用户行为事件记录与统计。
+
+【主要组成】
+- `ABTestManager`：实验管理器核心类（CRUD、分配、事件、统计）。
+- `get_ab_manager`：返回全局单例管理器。
+- `_db_path` / `_init_db`：数据库路径与表结构初始化（底层辅助）。
+
+【适用场景】
+- 场景1：创建实验与变体，按流量占比灰度上线新策略。
+- 场景2：根据用户 ID 确定性分配变体，记录点击/转化等事件并统计。
+
+【依赖关系】
+- 上游调用方：评估/实验入口、Web 后端。
+- 下游依赖：SQLite（`tenant_data/ab_testing.db`）、`loguru`、`hashlib`。
 
 提供以下功能：
 - 实验配置与管理（创建、启动、停止、删除）
@@ -138,6 +156,11 @@ class ABTestManager:
             
         Returns:
             Tuple[bool, str, int]: (是否成功, 消息, 实验ID)。如果名称重复，返回失败和错误信息。
+
+        异常:
+            无：名称冲突返回 (False, "实验名称已存在", 0)；其他异常回滚后以字符串返回，不抛出。
+        适用场景:
+            - 灰度上线新策略前，先创建实验再添加变体，最后 start。
         """
         conn = sqlite3.connect(_db_path())
         try:
@@ -174,6 +197,11 @@ class ABTestManager:
             
         Returns:
             Tuple[bool, str, int]: (是否成功, 消息, 变体ID)。如果名称重复，返回失败和错误信息。
+
+        异常:
+            无：名称冲突返回 (False, "变体名称已存在", 0)；其他异常回滚后以字符串返回，不抛出。
+        适用场景:
+            - 实验创建后为其添加 A/B 变体（不同提示词/模型/参数）。
         """
         conn = sqlite3.connect(_db_path())
         try:
@@ -202,6 +230,11 @@ class ABTestManager:
             
         Returns:
             Tuple[bool, str]: (是否成功, 消息)。如果操作失败，返回错误信息。
+
+        异常:
+            无：失败情况回滚后以错误信息字符串返回，不抛出。
+        适用场景:
+            - 实验配置就绪后调用，开始按流量占比分配用户。
         """
         conn = sqlite3.connect(_db_path())
         try:
@@ -226,6 +259,11 @@ class ABTestManager:
             
         Returns:
             Tuple[bool, str]: (是否成功, 消息)。如果操作失败，返回错误信息。
+
+        异常:
+            无：失败情况回滚后以错误信息字符串返回，不抛出。
+        适用场景:
+            - 实验结束或需暂停流量分配时调用。
         """
         conn = sqlite3.connect(_db_path())
         try:
@@ -262,6 +300,11 @@ class ABTestManager:
         Returns:
             Optional[Dict]: 分配的变体信息字典（包含 variant_id, name, config），
                            如果不符合分配条件则返回 None。
+
+        异常:
+            无：分配过程中的数据库/解析异常被捕获并记录日志，最终返回 None。
+        适用场景:
+            - 请求进入实验时按 user_id 调用，确定该用户命中的变体（确定性、可复现）。
         """
         with self._lock:
             conn = sqlite3.connect(_db_path())
@@ -363,6 +406,11 @@ class ABTestManager:
             
         Returns:
             bool: 事件记录是否成功。
+
+        异常:
+            无：写入失败回滚后返回 False，并记 error 日志，不抛出。
+        适用场景:
+            - 用户触发关键行为（点击/转化）时上报，用于实验效果统计。
         """
         conn = sqlite3.connect(_db_path())
         try:
@@ -394,6 +442,9 @@ class ABTestManager:
             
         Returns:
             Dict: 包含实验详细统计结果的数据字典。
+
+        适用场景:
+            - 实验运行一段时间后，查询各变体的用户数、事件数与转化率，决定胜出策略。
         """
         conn = sqlite3.connect(_db_path())
         try:
@@ -464,6 +515,9 @@ class ABTestManager:
         
         Returns:
             List[Dict]: 实验列表，每个元素是一个包含实验基本信息的字典。
+
+        适用场景:
+            - 管理后台列出全部实验（按创建时间倒序）供查看/操作。
         """
         conn = sqlite3.connect(_db_path())
         try:
@@ -488,18 +542,20 @@ class ABTestManager:
     def delete_experiment(self, experiment_id: int) -> Tuple[bool, str]:
         """
         删除指定实验及其所有相关数据。
-        
+
         采用级联删除策略：
         1. 先删除事件记录
         2. 再删除用户分配记录
         3. 然后删除变体
         4. 最后删除实验本身
-        
+
         Args:
             experiment_id (int): 要删除的实验 ID。
-            
-        Returns:
-            Tuple[bool, str]: (是否成功, 消息)。如果操作失败，返回错误信息。
+
+        异常:
+            无：失败情况回滚后以错误信息字符串返回，不抛出。
+        适用场景:
+            - 实验废弃或清理测试数据时调用，按依赖逆序删除以避免外键冲突。
         """
         conn = sqlite3.connect(_db_path())
         try:
@@ -527,9 +583,12 @@ def get_ab_manager() -> ABTestManager:
     
     采用延迟初始化策略，仅在首次调用时创建实例。
     
-    Returns:
-        ABTestManager: A/B 测试管理器的单例实例。
-    """
+        Returns:
+            ABTestManager: A/B 测试管理器的单例实例。
+
+        适用场景:
+            - 各模块统一通过本函数获取管理器，避免重复初始化与多实例数据不一致。
+        """
     global _ab_manager
     if _ab_manager is None:
         _ab_manager = ABTestManager()

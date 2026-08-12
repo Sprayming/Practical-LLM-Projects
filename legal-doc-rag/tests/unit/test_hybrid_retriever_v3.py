@@ -1,5 +1,20 @@
 """
-app.retrieval.hybrid_retriever 模块的单元测试 - 版本 3
+test_hybrid_retriever_v3.py —— 对 app.retrieval.hybrid_retriever 混合检索器的单元测试（v3）。
+
+【测试覆盖范围】
+- Reranker：模型加载成功 / 失败时的 available 与 model 状态；无模型、空文档、
+  有模型时的 rerank 行为（保持顺序 / 返回空 / 按分数排序）。
+- HybridRetriever：初始化参数正确性；中英文分词（小写按词、中文单字+bigram、
+  停用词过滤、中英混合）；稀疏(BM25)检索、稠密检索与分数归一化；RRF 融合；
+  retrieve 与 LangChain invoke 接口的一致性。
+
+【适用场景】
+- 用 pytest 运行，覆盖混合检索与重排序的功能、边界（空文档列表）与异常
+  （CrossEncoder 加载失败）场景。
+
+【依赖】
+- 依赖 app.retrieval.hybrid_retriever，使用 unittest.mock 桩化 BM25Okapi 与
+  sentence_transformers.CrossEncoder，并用 langchain_core.documents.Document 构造样例。
 """
 import pytest
 from unittest.mock import Mock, patch, MagicMock
@@ -229,6 +244,7 @@ class TestHybridRetriever:
         results = retriever._dense_search("query")
 
         assert len(results) == 3
+        # 分数归一化：1 - distance / k（此处 k=2，distance=0.1）
         assert results[0][1] == 1.0 - 0.1 / 2.0
 
     @patch("app.retrieval.hybrid_retriever.BM25Okapi")

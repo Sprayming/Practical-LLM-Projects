@@ -1,5 +1,25 @@
 """
-RAG 评估模块 - 基于 RAGAS 框架
+app/evaluation/evaluator —— 基于 RAGAS 的 RAG 端到端评估模块
+
+【作用与功能】
+本模块通过预设的法律测试问题集，对 legal-doc-rag 的检索增强生成链路做
+端到端质量评估。它先用 HuggingFace 嵌入构建向量检索器，再对每题检索+
+生成答案，最后用 RAGAS 框架计算多项质量指标并落盘评估报告。
+
+【主要组成】
+- `build_retriever`：基于 text2vec 嵌入构建向量检索器（top-3）。
+- `generate_answer`：调用 DeepSeek API 基于上下文生成答案。
+- `run_evaluation`：评估主流程，串联检索/生成/RAGAS/报告保存。
+- `TEST_QUESTIONS`：预设的劳动法律领域测试问题（含标准答案）。
+
+【适用场景】
+- 场景1：模型或检索策略迭代后，命令行运行 `run_evaluation()` 对比质量。
+- 场景2：CI/回归中评估指标是否劣化。
+
+【依赖关系】
+- 上游调用方：评估入口 / `python -m app.evaluation.evaluator`。
+- 下游依赖：RAGAS、`langchain` 系列、HuggingFace 嵌入、DeepSeek API。
+- 预设依赖：项目根 `data/labor_law.txt` 与 `.env`（API 配置）。
 
 评估指标:
 - Faithfulness (忠实度): 评估生成答案与检索到的事实是否一致
@@ -48,6 +68,11 @@ def build_retriever(data_path):
         
     Returns:
         VectorStoreRetriever: 配置好的检索器实例。
+
+    异常:
+        FileNotFoundError: 当 data_path 指向的文本文件不存在时抛出。
+    适用场景:
+        - 评估主流程 `run_evaluation()` 内部调用，或单独构建检索器用于调试。
     """
     from langchain_text_splitters import RecursiveCharacterTextSplitter
     from langchain_chroma import Chroma
@@ -89,6 +114,11 @@ def generate_answer(question, contexts):
         
     Returns:
         str: 生成的答案，如果出错则返回错误信息。
+
+    异常:
+        无：API 非 200 或网络异常时返回 "[API Error]" / "[Error: ...]"，不抛出。
+    适用场景:
+        - 评估流程对每题检索到的上下文调用，生成待评估的答案。
     """
     import requests
     from dotenv import load_dotenv
@@ -144,6 +174,13 @@ def run_evaluation(data_path=None):
         
     Returns:
         dict: RAGAS 评估结果字典，包含各项指标的分数。
+
+    异常:
+        无：检索/生成/评估各阶段异常尽量被内部吞掉并返回可序列化结果；
+        但 RAGAS 评估本身可能抛出，需在调用方处理。
+    适用场景:
+        - 作为评估入口直接运行，默认评测 `data/labor_law.txt` 并写出
+          `evaluation_report.json`。
     """
     # 1. 准备评估数据
     if data_path is None:

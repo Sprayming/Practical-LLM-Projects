@@ -1,3 +1,25 @@
+"""
+app/memory/forgetting.py —— 基于艾宾浩斯遗忘曲线的记忆评分与淘汰机制
+
+【作用与功能】
+实现一套综合评分系统，用于判断哪些长期记忆应被「遗忘」（清理/降权）。评分由三个
+维度加权得到：新近度（Recency，时间越近分越高）、频率（Frequency，被访问越多分
+越高）、重要性（Importance，内容越长或显式权重越高分越高）。当综合评分低于阈值
+时即判定为可遗忘，从而在有限存储下保留高价值记忆。
+
+【主要组成】
+- `ForgettingMechanism`：遗忘机制核心类，提供 score / should_forget /
+  filter_memories / estimate_forgetting_curve 方法
+
+【适用场景】
+- 场景1：在 MemorySystem 检索长期记忆后，用于过滤低价值记忆（反遗忘/清理）
+- 场景2：用于离线模拟或可视化不同时间点的记忆保留率（遗忘曲线）
+
+【依赖关系】
+- 上游调用方：app.memory.memory_manager（MemorySystem.retrieve_long_term）
+- 下游依赖：仅依赖标准库（math / time）与 loguru，无外部服务依赖
+"""
+
 # Forgetting mechanism - Ebbinghaus forgetting curve
 
 import math, time

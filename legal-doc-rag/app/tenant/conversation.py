@@ -1,10 +1,26 @@
 """
-Conversation Management for Legal-DOC-RAG.
+conversation.py —— Legal-DOC-rag 对话与消息历史管理
 
-Provides:
-- Conversation CRUD operations
-- Message history
-- Conversation listing
+【作用与功能】
+本模块负责多轮对话及其消息历史的持久化与查询，支撑聊天界面的会话列表、
+历史回溯与统计。对话（conversations 表）按租户/用户隔离，消息
+（conversation_messages 表，外键级联删除）记录 role 与 content，从而支持
+上下文重建与用量统计。底层使用 users.db 的相关表。
+
+【主要组成】
+- `_db_path`：users.db 路径
+- `create_conversation` / `list_conversations`：对话的创建与列表
+- `add_message` / `get_conversation_messages`：消息的写入与按时间读取
+- `update_conversation_title` / `delete_conversation`：标题维护与删除
+- `get_conversation_stats`：租户级对话/消息统计
+
+【适用场景】
+- 场景1：用户发起或继续一次法律问答会话
+- 场景2：前端展示会话列表与历史消息、查看使用统计
+
+【依赖关系】
+- 上游调用方：聊天路由、会话管理接口、统计看板
+- 下游依赖：sqlite3、users.db（conversations/conversation_messages 表）
 """
 import sqlite3
 from pathlib import Path
@@ -14,7 +30,19 @@ from loguru import logger
 
 
 def _db_path() -> str:
-    """返回 users.db 的路径"""
+    """返回 users.db 的磁盘路径（位于项目根的 tenant_data 目录）。
+
+    参数:
+        无
+
+    返回:
+        str: users.db 的绝对路径
+
+    异常:
+        无
+    适用场景:
+        - 所有对话数据操作前获取统一存储路径
+    """
     base = Path(__file__).resolve().parent.parent.parent
     db_dir = base / "tenant_data"
     db_dir.mkdir(parents=True, exist_ok=True)
@@ -22,16 +50,23 @@ def _db_path() -> str:
 
 
 def create_conversation(tenant_id: str, user_id: str, title: str = None) -> Tuple[bool, str, int]:
-    """
-    Create a new conversation.
+    """创建一条新对话。
 
-    Args:
-        tenant_id: Tenant ID
-        user_id: User ID
-        title: Optional conversation title
+    写入 conversations 表；未提供标题时自动以当前时间生成（如「对话 08-12 14:30」），
+    返回新建的 conversation_id。
 
-    Returns:
-        Tuple of (success, message, conversation_id)
+    参数:
+        tenant_id (str): 租户标识
+        user_id (str): 用户标识
+        title (str, 可选): 对话标题；省略时自动生成
+
+    返回:
+        Tuple[bool, str, int]: (成功, 消息, 新建对话 id)
+
+    异常:
+        无（数据库错误被捕获并回滚）
+    适用场景:
+        - 用户发起新的问答会话
     """
     conn = sqlite3.connect(_db_path())
     try:
@@ -50,16 +85,23 @@ def create_conversation(tenant_id: str, user_id: str, title: str = None) -> Tupl
 
 
 def add_message(conversation_id: int, role: str, content: str) -> Tuple[bool, str]:
-    """
-    Add a message to a conversation.
+    """向对话追加一条消息，并刷新对话更新时间。
 
-    Args:
-        conversation_id: Conversation ID
-        role: Message role (user/assistant)
-        content: Message content
+    在 conversation_messages 表写入 (conversation_id, role, content)，同时
+    更新所属 conversations 的 updated_at，便于会话列表按最近活跃排序。
 
-    Returns:
-        Tuple of (success, message)
+    参数:
+        conversation_id (int): 目标对话 id
+        role (str): 消息角色，如 "user" / "assistant"
+        content (str): 消息内容
+
+    返回:
+        Tuple[bool, str]: (是否成功, 消息)
+
+    异常:
+        无（数据库错误被捕获并回滚）
+    适用场景:
+        - 聊天时记录用户提问与 AI 回答
     """
     conn = sqlite3.connect(_db_path())
     try:
@@ -82,15 +124,22 @@ def add_message(conversation_id: int, role: str, content: str) -> Tuple[bool, st
 
 
 def get_conversation_messages(conversation_id: int, limit: int = 50) -> List[Dict]:
-    """
-    Get messages for a conversation.
+    """获取某对话的消息列表（按时间正序）。
 
-    Args:
-        conversation_id: Conversation ID
-        limit: Maximum number of messages to return
+    按 id 降序取最近 `limit` 条后再逆转为时间正序，便于直接作为上下文喂给
+    模型；每条含 id、role、content、created_at。
 
-    Returns:
-        List of message dictionaries
+    参数:
+        conversation_id (int): 目标对话 id
+        limit (int): 返回消息数上限，默认 50
+
+    返回:
+        List[Dict]: 时间正序的消息字典列表
+
+    异常:
+        无
+    适用场景:
+        - 加载历史消息以重建会话上下文
     """
     conn = sqlite3.connect(_db_path())
     try:
@@ -119,15 +168,22 @@ def get_conversation_messages(conversation_id: int, limit: int = 50) -> List[Dic
 
 
 def list_conversations(tenant_id: str, user_id: str = None) -> List[Dict]:
-    """
-    List conversations for a tenant/user.
+    """列出某租户（或某用户）的对话。
 
-    Args:
-        tenant_id: Tenant ID
-        user_id: Optional user ID to filter by
+    按 updated_at 倒序返回对话列表；提供 `user_id` 时仅返回该用户的对话。
+    每条含 id、title、created_at、updated_at。
 
-    Returns:
-        List of conversation dictionaries
+    参数:
+        tenant_id (str): 租户标识
+        user_id (str, 可选): 用户标识；提供则按用户过滤
+
+    返回:
+        List[Dict]: 对话字典列表（最新活跃在前）
+
+    异常:
+        无
+    适用场景:
+        - 会话列表页展示
     """
     conn = sqlite3.connect(_db_path())
     try:
@@ -163,15 +219,21 @@ def list_conversations(tenant_id: str, user_id: str = None) -> List[Dict]:
 
 
 def update_conversation_title(conversation_id: int, title: str) -> Tuple[bool, str]:
-    """
-    Update conversation title.
+    """更新对话标题。
 
-    Args:
-        conversation_id: Conversation ID
-        title: New title
+    按 conversation_id 将 title 字段更新为新值。
 
-    Returns:
-        Tuple of (success, message)
+    参数:
+        conversation_id (int): 目标对话 id
+        title (str): 新标题
+
+    返回:
+        Tuple[bool, str]: (是否成功, 消息)
+
+    异常:
+        无（数据库错误被捕获并回滚）
+    适用场景:
+        - 用户重命名会话
     """
     conn = sqlite3.connect(_db_path())
     try:
@@ -189,14 +251,21 @@ def update_conversation_title(conversation_id: int, title: str) -> Tuple[bool, s
 
 
 def delete_conversation(conversation_id: int) -> Tuple[bool, str]:
-    """
-    Delete a conversation and its messages.
+    """删除对话及其全部消息。
 
-    Args:
-        conversation_id: Conversation ID
+    先删除 conversation_messages 中的消息（外键级联亦可），再删除
+    conversations 主记录，确保无孤儿消息残留。
 
-    Returns:
-        Tuple of (success, message)
+    参数:
+        conversation_id (int): 目标对话 id
+
+    返回:
+        Tuple[bool, str]: (是否成功, 消息)
+
+    异常:
+        无（数据库错误被捕获并回滚）
+    适用场景:
+        - 用户删除会话
     """
     conn = sqlite3.connect(_db_path())
     try:
@@ -220,14 +289,21 @@ def delete_conversation(conversation_id: int) -> Tuple[bool, str]:
 
 
 def get_conversation_stats(tenant_id: str) -> Dict:
-    """
-    Get conversation statistics for a tenant.
+    """统计某租户的对话与消息使用情况。
 
-    Args:
-        tenant_id: Tenant ID
+    计算总对话数、总消息数，并据此得出每对话平均消息数（无对话时为 0），
+    用于用量看板展示。
 
-    Returns:
-        Statistics dictionary
+    参数:
+        tenant_id (str): 租户标识
+
+    返回:
+        Dict: 含 total_conversations、total_messages、avg_messages_per_conversation
+
+    异常:
+        无
+    适用场景:
+        - 管理后台/用量统计面板
     """
     conn = sqlite3.connect(_db_path())
     try:

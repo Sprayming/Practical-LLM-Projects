@@ -1,5 +1,23 @@
 """
-回归测试 Runner - 加载 Golden Test Set + RAGAS 评估 + 历史追踪
+app/evaluation/runner —— 回归测试 Runner（黄金测试集 + RAGAS + 历史追踪）
+
+【作用与功能】
+本模块是 RAG 回归测试的执行器：从预置的黄金测试集加载问题，借助外部注入
+的检索器与生成函数跑端到端评估，并用 RAGAS 计算指标；同时把每次结果追加
+到历史文件，计算相对上一次的 delta，便于在系统迭代时快速发现指标劣化。
+
+【主要组成】
+- `load_test_set`：加载黄金测试集（默认 `tests/golden_test_set.json`）。
+- `run_regression`：回归主流程，输出当前指标与历史变化 delta。
+- `_save_history` / `_get_previous`：历史记录的写入与读取（底层辅助）。
+
+【适用场景】
+- 场景1：检索/生成策略改动后运行回归，对比指标是否下降。
+- 场景2：CI 中抽样（sample_size）快速验证，或全量回归评估。
+
+【依赖关系】
+- 上游调用方：评估入口、CI 脚本。
+- 下游依赖：RAGAS、`tests/golden_test_set.json`、`tests/regression_history.json`。
 
 主要功能：
 1. 加载预置的黄金测试集（golden test set）
@@ -25,6 +43,11 @@ def load_test_set(path=None):
         
     Returns:
         list: 包含测试问题的列表，每个元素是包含问题和标准答案的字典。
+
+    异常:
+        FileNotFoundError / KeyError: 测试集文件不存在或缺少 "questions" 键时抛出。
+    适用场景:
+        - `run_regression()` 内部调用以获取待评估问题；也可单独加载数据集调试。
     """
     if path is None:
         # 默认路径：项目根目录/tests/golden_test_set.json
@@ -53,6 +76,12 @@ def run_regression(retriever_func, llm_func, sample_size=None):
         
     Returns:
         dict: 包含当前评估结果和历史变化（delta）的字典。
+
+    异常:
+        无：依赖导入与 RAGAS 评估的异常可能向上抛出（如未安装 ragas），
+        但检索/生成阶段已做容错（空结果转为空上下文）。
+    适用场景:
+        - 注入 `retriever_func` 与 `llm_func` 后运行；抽样传 sample_size 做快速验证。
     """
     # 1. 加载测试问题集
     questions = load_test_set()
@@ -121,6 +150,9 @@ def _save_history(metrics, count):
     Args:
         metrics (dict): 本次评估的各项指标。
         count (int): 本次测试使用的样本数量。
+
+    适用场景:
+        - 由 `run_regression()` 在每次评估结束后调用，追加一条带时间戳的记录。
     """
     path = Path(__file__).resolve().parent.parent.parent / "tests" / "regression_history.json"
     # 如果历史文件存在则读取，否则初始化空列表
@@ -144,6 +176,9 @@ def _get_previous():
     
     Returns:
         dict or None: 上一次测试的指标字典，如果没有历史记录则返回 None。
+
+    适用场景:
+        - 由 `run_regression()` 调用，用于计算本次相对上次的指标 delta。
     """
     path = Path(__file__).resolve().parent.parent.parent / "tests" / "regression_history.json"
     if path.exists():

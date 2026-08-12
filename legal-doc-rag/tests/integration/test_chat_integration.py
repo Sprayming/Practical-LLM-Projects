@@ -13,6 +13,7 @@ import pytest
 
 
 def _make_fake_doc():
+    """构造一个伪造的检索文档对象，供 mock 向量库/引用追踪返回，模拟真实召回结果。"""
     doc = MagicMock(name="retrieved_doc")
     doc.page_content = "《劳动合同法》第十条规定：建立劳动关系，应当订立书面劳动合同。"
     doc.source = "test.pdf"
@@ -24,6 +25,13 @@ def _make_fake_doc():
 
 @pytest.mark.integration
 def test_chat_full_pipeline_with_mocked_llm(client, auth_headers):
+    """在 mock 外部依赖前提下，验证聊天接口完整链路（检索→重排→引用→记忆→响应）接线正确。
+
+    验证点：登录后携带 token 调用 /api/chat，编排层依次调用 query_rewriter、
+            HybridRetriever、reranker、citation_tracker、memory 与 LLM，最终返回
+            与 mock LLM 一致的 answer、citations 字段及 token_usage。
+    边界/异常：外部 LLM/向量库/reranker 全部 mock，保证离线可跑且可重复。
+    """
     doc = _make_fake_doc()
 
     fake_embedder = MagicMock(name="embedder")

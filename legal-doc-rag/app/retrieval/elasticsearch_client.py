@@ -1,11 +1,22 @@
 """
-Elasticsearch Client for Legal-DOC-RAG.
+ElasticsearchClient —— legal-doc-rag 的 Elasticsearch 全文检索客户端。
 
-Provides:
-- Elasticsearch connection management
-- Index creation and management
-- Document indexing and search
-- Chinese text analysis (using IK analyzer)
+【作用与功能】
+封装与 Elasticsearch 的连接管理、索引（中文 IK 分词）创建、文档入库与
+全文检索能力，作为混合检索中「全文召回」通道的后端之一。
+
+【主要组成】
+- `ElasticsearchClient`：连接管理 + 中文分词索引 + 文档检索/删除/计数/健康检查
+- `get_elasticsearch_client`：全局单例获取函数，初始化时自动建索引
+
+【适用场景】
+- 场景1：文档入库时为每个 chunk 写入 ES 供全文召回
+- 场景2：HybridRetriever 调用 `search` 做全文召回并参与 RRF 融合
+
+【依赖关系】
+- 上游调用方：HybridRetriever、索引构建脚本
+- 下游依赖：elasticsearch 官方客户端、IK 分词插件、loguru
+（原英文说明：连接管理、索引管理、文档索引/搜索、中文 IK 分析）
 """
 import os
 from typing import List, Dict, Optional, Tuple
@@ -37,12 +48,18 @@ class ElasticsearchClient:
         timeout: int = 30,
     ):
         """
-        Initialize Elasticsearch client.
+        初始化 Elasticsearch 客户端。
 
-        Args:
-            hosts: List of Elasticsearch hosts (default: from env or localhost:9200)
-            index_name: Name of the index
-            timeout: Connection timeout in seconds
+        当 elasticsearch 库未安装时直接抛 ImportError。否则读取环境变量
+        ELASTICSEARCH_HOSTS（逗号分隔），建立客户端并 ping 探活；
+        探活失败仅记录警告、client 置空（后续 is_available 返回 False 降级）。
+
+        参数:
+            hosts: ES 主机列表；缺省从 ELASTICSEARCH_HOSTS 或 localhost:9200 读取
+            index_name: 索引名（默认 "legal-documents"）
+            timeout: 连接超时（秒，默认 30）
+        异常:
+            ImportError: 当 elasticsearch 库未安装时抛出
         """
         if not ELASTICSEARCH_AVAILABLE:
             raise ImportError("Elasticsearch client not installed")
@@ -71,18 +88,21 @@ class ElasticsearchClient:
             self.client = None
 
     def is_available(self) -> bool:
-        """Check if Elasticsearch is available."""
+        """返回 ES 客户端是否可用（探活成功且已建立连接）。"""
         return self.client is not None
 
     def create_index(self, recreate: bool = False) -> bool:
         """
-        Create the search index with Chinese analyzer.
+        创建带中文 IK 分词器的索引。
 
-        Args:
-            recreate: If True, delete and recreate the index
+        若存在且 recreate=True 则先删除重建；不存在时按 settings/mappings 建索引：
+        content 用 chinese_analyzer（ik_max_word 分词）与 ik_smart 搜索分词，
+        source/tenant_id/chunk_index/metadata 作为过滤与元数据字段。
 
-        Returns:
-            True if successful
+        参数:
+            recreate: 为 True 时删除已存在索引并重建
+        返回:
+            bool: 建索引（或已存在）成功返回 True，不可用或异常返回 False
         """
         if not self.is_available():
             return False
@@ -144,18 +164,17 @@ class ElasticsearchClient:
         metadata: Dict = None,
     ) -> bool:
         """
-        Index a document.
+        将单个文档 chunk 写入 ES 索引。
 
-        Args:
-            doc_id: Document ID
-            content: Document content
-            source: Source filename
-            tenant_id: Tenant ID
-            chunk_index: Chunk index
-            metadata: Additional metadata
-
-        Returns:
-            True if successful
+        参数:
+            doc_id: 文档唯一 ID（建议 chunk 级唯一）
+            content: 文档正文内容
+            source: 来源文件名
+            tenant_id: 租户 ID（用于多租户隔离过滤）
+            chunk_index: chunk 序号
+            metadata: 附加元数据
+        返回:
+            bool: 写入成功返回 True，不可用或异常返回 False
         """
         if not self.is_available():
             return False
@@ -187,16 +206,18 @@ class ElasticsearchClient:
         min_score: float = 0.1,
     ) -> List[Dict]:
         """
-        Search documents using full-text search.
+        全文检索（按租户过滤的 bool 查询）。
 
-        Args:
-            query: Search query
-            tenant_id: Tenant ID to filter by
-            size: Number of results to return
-            min_score: Minimum score threshold
+        用 match 对 content 做全文匹配，并用 term 过滤 tenant_id；
+        结果按 _score 排序，返回归一化前的原始文档信息列表。
 
-        Returns:
-            List of search results
+        参数:
+            query: 检索查询
+            tenant_id: 租户 ID 过滤
+            size: 返回结果数量（默认 10）
+            min_score: 最低相关性阈值（默认 0.1）
+        返回:
+            List[Dict]: 每项含 id/score/content/source/metadata
         """
         if not self.is_available():
             return []
@@ -240,14 +261,13 @@ class ElasticsearchClient:
 
     def delete_documents_by_source(self, source: str, tenant_id: str) -> int:
         """
-        Delete all documents from a source.
+        删除指定来源（与租户）下的全部文档。
 
-        Args:
-            source: Source filename
-            tenant_id: Tenant ID
-
-        Returns:
-            Number of deleted documents
+        参数:
+            source: 来源文件名
+            tenant_id: 租户 ID
+        返回:
+            int: 实际删除的文档数量
         """
         if not self.is_available():
             return 0
@@ -278,13 +298,12 @@ class ElasticsearchClient:
 
     def get_document_count(self, tenant_id: str = None) -> int:
         """
-        Get document count.
+        获取索引中的文档总数（可按租户过滤）。
 
-        Args:
-            tenant_id: Optional tenant ID to filter by
-
-        Returns:
-            Number of documents
+        参数:
+            tenant_id: 可选租户 ID，用于按租户计数
+        返回:
+            int: 文档数量
         """
         if not self.is_available():
             return 0
@@ -306,10 +325,11 @@ class ElasticsearchClient:
 
     def health_check(self) -> Dict:
         """
-        Check Elasticsearch health.
+        检查 ES 集群健康状态。
 
-        Returns:
-            Health status dictionary
+        返回:
+            Dict: 含 status/cluster_name/节点数/分片数；不可用时
+            返回 {"status": "unavailable", ...}，异常返回 {"status": "error", ...}
         """
         if not self.is_available():
             return {"status": "unavailable", "message": "Elasticsearch client not initialized"}
@@ -333,7 +353,7 @@ _es_client: Optional[ElasticsearchClient] = None
 
 
 def get_elasticsearch_client() -> Optional[ElasticsearchClient]:
-    """Get or create Elasticsearch client singleton."""
+    """获取（或懒创建）Elasticsearch 客户端单例；首次创建时自动建索引。"""
     global _es_client
     if _es_client is None:
         try:

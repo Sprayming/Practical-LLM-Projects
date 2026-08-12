@@ -1,3 +1,32 @@
+"""
+auth.py —— 认证与鉴权 API 模块
+
+【作用与功能】
+本模块提供 legal-doc-rag 系统的用户认证与鉴权接口，包括用户注册、登录并签发 JWT、
+获取当前登录态、修改密码以及凭管理员重置密钥自助重置密码。它是所有受保护接口的身份
+校验入口，并通过 FastAPI 依赖注入（require_user）把解析出的用户信息传递给下游路由。
+
+【主要组成】
+- `register`：用户注册接口，速率限制 20 次/分钟以防批量注册。
+- `login`：用户登录接口，校验凭据后签发 JWT Token。
+- `change_password`：修改当前登录用户密码，速率限制 10 次/分钟。
+- `reset_password`：凭管理员重置密钥自助重置密码，速率限制 5 次/分钟。
+- `get_current_user`：解析 Token 返回当前用户登录态与基本信息。
+- `_create_token`：基于 HS256 算法生成带过期时间的 JWT。
+- `get_user_from_token`：解码并校验 JWT 签名与有效期，返回用户信息。
+- `require_user`：FastAPI 依赖函数，从 Authorization 头提取并校验 JWT。
+
+【适用场景】
+- 用户首次进入系统时注册账号、登录获取 Token。
+- 前端在每次请求受保护接口时在 Authorization 头携带该 Token。
+- 用户忘记密码时凭管理员颁发的重置密钥自助重置。
+
+【依赖关系】
+- 上游调用方：前端登录/注册页；所有受保护 API 通过 require_user 依赖本模块。
+- 下游依赖：app.tenant.auth（注册/登录/改密底层实现）、app.core.config（JWT 密钥）、
+  app.core.limiter（限流）、PyJWT 库。
+"""
+
 import sys
 
 # 将项目根目录添加到系统路径中，以便正确导入项目内的其他模块

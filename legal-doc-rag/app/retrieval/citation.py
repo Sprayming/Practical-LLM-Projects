@@ -4,6 +4,28 @@
 #   → 拼上下文时附带来源标记 [来源: filename]
 #   → AI 回答后提取实际引用的来源
 #   → 返回结构化引用列表
+
+"""
+citation —— 法律文档引用来源追踪与引用生成。
+
+【作用与功能】
+在检索与生成阶段记录每个 chunk 的来源 metadata（文件名、页码、chunk 索引等），
+为上下文拼接附带来源标记，并在 AI 回答后提取其实际引用的来源编号，
+最终输出结构化引用列表，支撑可溯源的法律问答。
+
+【主要组成】
+- `Source`：单条引用来源的 dataclass
+- `CitationResult`：引用结果（答案 + 来源列表 + 格式化文本）
+- `CitationTracker`：来源收集、上下文标记、引用列表与编号提取
+
+【适用场景】
+- 场景1：检索后收集各文档 chunk 来源，拼装带 [n] 标记的上下文
+- 场景2：生成后从回答中提取 [n] 编号，输出去重参考来源清单
+
+【依赖关系】
+- 上游调用方：RAG 问答流水线
+- 下游依赖：langchain Document、loguru
+"""
 from typing import Optional
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -33,6 +55,7 @@ class CitationTracker:
     """引用追踪器 - 记录检索到的来源并生成引用"""
 
     def __init__(self):
+        """初始化引用追踪器，建立来源列表。"""
         self._sources: list[Source] = []
 
     def add_source(self, source: Source):
@@ -85,7 +108,9 @@ class CitationTracker:
         return re.findall(r'\[(\d+)\]', answer)
 
     def get_sources(self) -> list[Source]:
+        """返回当前收集到的全部引用来源列表。"""
         return self._sources
 
     def clear(self):
+        """清空已收集的来源列表，准备新一轮追踪。"""
         self._sources.clear()

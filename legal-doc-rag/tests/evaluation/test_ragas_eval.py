@@ -19,7 +19,9 @@ from pathlib import Path
 
 import pytest
 
+# 项目根目录（tests/evaluation -> 上溯三级到 legal-doc-rag 根）
 ROOT = Path(__file__).resolve().parent.parent.parent
+# golden 回归测试集：离线校验其结构，并供 harness 离线评测使用
 GOLDEN = ROOT / "tests" / "golden_test_set.json"
 
 
