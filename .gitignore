@@ -17,6 +17,8 @@ env/
 # OS
 .DS_Store
 Thumbs.db
+# Windows 保留设备名误生成文件（无法在 Win32 删，单独忽略防误提交）
+ride-hailing-analytics-system/nul
 
 # Notebook checkpoints
 .ipynb_checkpoints/
