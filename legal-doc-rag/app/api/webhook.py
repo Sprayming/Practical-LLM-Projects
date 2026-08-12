@@ -271,4 +271,6 @@ def list_event_types():
             {"name": "user.deleted", "description": "用户删除"},
             {"name": "experiment.started", "description": "实验启动"},
             {"name": "experiment.stopped", "description": "实验停止"},
-            {"name": "system.error", "description":<codegeex-cursor></codegeex-cursor>
+            {"name": "system.error", "description": "系统错误"},
+        ]
+    }
