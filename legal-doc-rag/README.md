@@ -65,6 +65,196 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 | POST | /api/chat/stream | RAG 流式问答（SSE） | Bearer |
 | GET | /health | 健康检查（注意：无 `/api` 前缀） | 无 |
 
+
+## 项目框架 (FastAPI 版)
+
+### 目录结构
+
+```
+legal-doc-rag/
+├── app/
+│   ├── main.py                    # FastAPI 入口：注册路由 + 中间件 + 加载 .env + 启动自举（扫描 uploads 续索引）
+│   ├── api/                       # HTTP API 层（路由 + 请求/响应模型 + 限流）
+│   │   ├── __init__.py            # 聚合挂载所有子路由
+│   │   ├── auth.py                # POST /api/auth/* 注册/登录/改密/重置/me
+│   │   ├── chat.py                # POST /api/chat、/api/chat/stream（SSE 流式问答）
+│   │   ├── documents.py           # POST /api/documents/upload（异步）、GET list、DELETE、/preview、/task
+│   │   ├── feedback.py            # POST /api/feedback（👍/👎 满意度）
+│   │   ├── category.py            # 知识库分组 CRUD + 文档归类/按分类筛选
+│   │   ├── conversation.py        # 多轮对话 创建/列出/获取/删除
+│   │   ├── admin.py               # 管理后台：用户管理/系统统计/配置（仅超管
+│   │   └── webhook.py             # Webhook 管理：创建/更新/删除/触发/日志
+│   ├── frontend/
+│   │   └── index.html             # 单页前端（原生 JS + CSS：登录/问答/管理后台/修改密码）
+│   ├── core/
+│   │   ├── config.py              # 集中配置：API key、模型名、路径、各种开关
+│   │   └── limiter.py             # 集中管理 slowapi 限流器（登录/问答等）
+│   ├── retrieval/                 # 检索层
+│   │   ├── embedder_factory.py    # Embedding 工厂：本地 BGE-M3（默认）/ 线上 API 二选一
+│   │   ├── bge_m3_embedder.py     # BGEM3Embedder：稠密 1024 维 + 自计算 SPLADE 稀疏权重
+│   │   ├── hybrid_retriever.py    # HybridRetriever：BM25 + 稠密 + BGE-M3 稀疏 + 可选 ES，RRF 融合 + 重排
+│   │   ├── sparse_store.py        # BGE-M3 稀疏向量落盘/加载（./sparse_db/{tenant}）
+│   │   ├── query_rewriter.py      # QueryRewriter：LLM 查询改写/扩展
+│   │   ├── citation.py            # CitationTracker：来源引用追踪
+│   │   ├── cache.py               # QueryCache：Redis 查询缓存（LRU）
+│   │   └── elasticsearch_client.py# Elasticsearch 客户端（全文检索兜底，feature-flag 默认关闭）
+│   ├── processing/                # 文档处理层
+│   │   ├── multimodal_pipeline.py # MultimodalPipeline：PDF 图文解析（PyMuPDF 文字层 + OCR + 分块）
+│   │   ├── pdf_extractor.py       # PyMuPDF 图文/文字层抽取
+│   │   ├── ocr_engine.py          # OCREngine：PaddleOCR 3.7 封装（扫描件识别）
+│   │   └── __init__.py
+│   ├── memory/                    # 记忆层
+│   │   ├── memory_manager.py      # MemorySystem：短期 + 中期 + 长期记忆编排
+│   │   ├── conversation_store.py  # 对话持久化（Redis）
+│   │   ├── redis_client.py        # Redis 连接池 + TTL
+│   │   ├── forgetting.py          # 艾宾浩斯遗忘曲线（ShadowWorker 异步反遗忘）
+│   │   ├── profile_store.py       # 用户画像存储（置信度加权合并）
+│   │   └── __init__.py
+│   ├── tenant/                    # 租户与用户层
+│   │   ├── auth.py                # 注册/登录/密码哈希/改密/重置（SQLite）
+│   │   ├── tenant_manager.py      # 租户创建/隔离
+│   │   ├── category.py            # 知识库分组数据访问
+│   │   ├── conversation.py        # 多轮对话数据访问
+│   │   └── __init__.py
+│   ├── worker/                    # 异步任务层
+│   │   ├── shadow_worker.py       # ShadowWorker：后台线程池，摘要/实体画像/反遗忘
+│   │   ├── webhook.py             # Webhook 异步发送 + 失败重试（60s 轮询）
+│   │   └── __init__.py
+│   ├── security/                  # 安全层
+│   │   ├── middleware.py          # 安全响应头/请求体大小限制/路径穿越与注入防护/CORS 收紧
+│   │   ├── error_handlers.py      # 全局统一错误处理（20+ 错误码，中文提示）
+│   │   └── __init__.py
+│   ├── tasks/                     # 上传索引任务层
+│   │   ├── task_store.py          # 进程内任务状态 + 持久化 data/tasks.json（重启可恢复）
+│   │   └── __init__.py
+│   ├── observability/             # 可观测层
+│   │   ├── tracker.py             # TraceContext：全链路追踪（耗时、Token）
+│   │   ├── structured_logger.py   # 结构化 JSON 日志
+│   │   ├── monitoring.py          # /metrics、/health、/stats 端点
+│   │   └── __init__.py
+│   ├── evaluation/                # 评估层（离线）
+│   │   ├── evaluator.py           # RAGAS 三/四维度打分
+│   │   ├── runner.py              # 批量评测 + Golden Test Set
+│   │   ├── ab_testing.py          # A/B 实验评估
+│   │   └── __init__.py
+│   └── ingestion/                 # （预留）多模态图文注释
+│       ├── vision_caption.py
+│       └── __init__.py
+├── scripts/                       # 运维/评测脚本
+│   ├── backup.py                  # 全量备份/恢复/列表/清理（chroma_db/uploads/memory_db/tenant_data）
+│   ├── reindex_docs.py            # 离线重建索引（含扫描件 OCR，需 .ocr_venv 环境）
+│   ├── run_ragas_eval.py          # 真实 RAGAS 评测（需 key）
+│   ├── run_regression.py          # 回归测试（golden 集）
+│   ├── verify_retrieval.py        # 检索质量抽查
+│   ├── evaluate.py                # 评测辅助
+│   └── _gen_readme_imgs.py        # 生成文档配图
+├── tests/                         # pytest 三层测试（unit / integration / evaluation）
+├── run.py                         # 本地启动入口（uvicorn 封装）
+├── run_tests.py                   # 跑全部测试 + 覆盖率
+├── run_eval.py                    # 评测快捷入口
+├── healthcheck.py                 # Docker 健康检查脚本
+├── Dockerfile / docker-compose.yml # Docker 镜像
+├── requirements.txt / requirements-docker.txt # 依赖
+├── start-rag.bat / start-local.bat / 启动法律文书 RAG 系统.bat
+├── .env / .env.example            # 环境变量（key 等，.env 不入库）
+├── chroma_db/ sparse_db/ uploads/ tenant_data/ data/   # 运行时数据（均 gitignore）
+└── model_cache/                  # 本地 BGE-M3 模型（gitignore，需镜像下载）
+```
+
+### 分层总览
+
+```
+接入层  : app/api/*            HTTP 路由、鉴权、限流、SSE 流式
+安全层  : app/security/*       安全头 / 注入&穿越防护 / 统一错误
+核心层  : app/main.py, core/*  应用装配、配置、限流器
+业务编排: app/tenant/*         用户/租户/分组/对话 数据访问
+检索层  : app/retrieval/*      Embedding / 混合检索 / 改写 / 引用 / 缓存
+处理层  : app/processing/*     PDF 解析 / OCR / 多模态分块
+记忆层  : app/memory/*         短/中/长期记忆 / 画像 / 遗忘
+异步层  : app/tasks/*, worker/* 上传索引任务 / 后台整理 / Webhook 投递
+可观测  : app/observability/*  链路追踪 / 结构化日志 / metrics/health
+评估层  : app/evaluation/*     离线 RAGAS / A-B 实验
+脚本层  : scripts/*, run*.py    备份 / 重索引 / 评测 / 测试入口
+```
+
+
+### 模块调用链
+
+`
+用户请求
+    │
+    ▼
+app/main.py (FastAPI 入口)
+    │  ├── app/api/auth.py          → app/tenant/auth.py (SQLite)
+    │  │                               └── app/core/config.py
+    │  │
+    │  ├── app/api/chat.py          → app/retrieval/embedder_factory.py → app/retrieval/bge_m3_embedder.py (BGE-M3 稠密+稀疏双路)
+    │  │                               → app/retrieval/hybrid_retriever.py → BM25 + Dense + RRF
+    │  │                               → app/retrieval/query_rewriter.py → DeepSeek LLM
+    │  │                               → app/retrieval/citation.py
+    │  │                               → app/retrieval/cache.py → Redis
+    │  │                               → app/memory/memory_manager.py → Chroma + Redis
+    │  │                               → app/worker/shadow_worker.py (异步)
+    │  │                               → app/observability/tracker.py
+    │  │                               → app/observability/structured_logger.py
+    │  │
+    │  ├── app/api/documents.py     → app/retrieval/embedder_factory.py
+    │  │                               → app/retrieval/bge_m3_embedder.py (稠密+稀疏向量)
+    │  │                               → app/retrieval/sparse_store.py (稀疏向量落盘)
+    │  │                               → app/processing/multimodal_pipeline.py
+    │  │                                   → app/processing/pdf_extractor.py
+    │  │                                   → app/processing/ocr_engine.py
+    │  │                               → langchain Chroma (稠密向量持久化)
+    │  │
+    │  └── app/api/feedback.py      → app/memory/conversation_store.py
+    │
+    └── app/frontend/index.html (前端静态文件)
+`
+
+### 请求完整流程 (上传+提问)
+
+`
+1. 用户上传 PDF
+   POST /api/documents/upload
+   ├── app/api/documents.py: 接收文件 → 保存到 ./uploads/{tenant_id}/ → 立即返回 task_id（**异步，不阻塞**）
+   ├── 后台线程池执行: app/processing/multimodal_pipeline.py 解析 PDF (PyMuPDF + OCR) -> embedder_factory 经 bge_m3_embedder.py 生成稠密+稀疏向量 -> 稠密向量 ChromaDB 持久化到 ./chroma_db/{tenant_id}/，稀疏向量经 sparse_store.py 落盘到 ./sparse_db/{tenant_id}/
+   ├── 任务状态持久化到 `data/tasks.json`，服务重启后从磁盘恢复，避免"已上传却提示请先上传文档"
+   ├── 服务启动时自动扫描 `uploads/{tenant_id}/`，对未向量化的 PDF 重新提交后台索引任务
+   ├── 进度查询：GET /api/documents/task/{task_id} 返回 pending/processing(extracting→embedding→building_index)/done/failed 及百分比
+   └── 索引完成后即可提问；索引中提问会返回"文档正在后台索引中"提示而非报错；已上传但索引失败会提示重新上传
+
+2. 用户提问
+   POST /api/chat (SSE 流式)
+   ├── app/api/chat.py: 验证 Token → 加载 ChromaDB 向量库
+   ├── app/retrieval/query_rewriter.py: LLM 改写/扩展查询
+   ├── app/retrieval/hybrid_retriever.py:
+   │   ├── 稠密检索: ChromaDB.similarity_search_with_score() (向量来自 bge_m3_embedder.py)
+   │   ├── 稀疏检索(BM25): BM25Okapi.get_scores()
+   │   ├── BGE-M3 稀疏检索: bge_m3_embedder.py 确定性自计算 SPLADE 词汇权重 + sparse_store.py 落盘 lookup (RRF keying 取 page_content[:200])
+   │   └── RRF 融合(稠密 + BM25 + BGE-M3 稀疏 + 可选 ES) + 可选 BGE 重排
+   ├── app/retrieval/citation.py: 记录来源引用
+   ├── app/memory/memory_manager.py: 加载短期/长期记忆
+   ├── 调用 DeepSeek LLM (stream=True) 生成回答
+   ├── app/observability/tracker.py: 记录耗时和 Token 用量
+   └── 返回 SSE 流给前端
+`
+
+### 数据流向
+
+`
+PDF文件
+  → processing/multimodal_pipeline (解析文本+图片)
+  → embedder_factory (转向量)
+  → ChromaDB (持久化到磁盘)
+
+用户问题
+  → query_rewriter (LLM 改写)
+  → hybrid_retriever (稠密 + 稀疏 + RRF)
+  → memory_manager (加载记忆上下文)
+  → [合并上下文 + 引用] → DeepSeek LLM
+  → 流式返回 → 前端渲染
+"
+
 ## 测试
 
 项目使用 pytest 做自动化测试，分三层：单元测试、集成测试、评测测试。
@@ -73,7 +263,7 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 *图：测试分层——越往下越接近真实、越慢；unit / integration / evaluation 三层均已实现。*
 
-### 目录结构
+### 测试目录结构
 
 ```
 tests/
@@ -824,194 +1014,7 @@ docker compose up -d
 
 ---
 
-## 项目框架 (FastAPI 版)
 
-### 目录结构
-
-```
-legal-doc-rag/
-├── app/
-│   ├── main.py                    # FastAPI 入口：注册路由 + 中间件 + 加载 .env + 启动自举（扫描 uploads 续索引）
-│   ├── api/                       # HTTP API 层（路由 + 请求/响应模型 + 限流）
-│   │   ├── __init__.py            # 聚合挂载所有子路由
-│   │   ├── auth.py                # POST /api/auth/* 注册/登录/改密/重置/me
-│   │   ├── chat.py                # POST /api/chat、/api/chat/stream（SSE 流式问答）
-│   │   ├── documents.py           # POST /api/documents/upload（异步）、GET list、DELETE、/preview、/task
-│   │   ├── feedback.py            # POST /api/feedback（👍/👎 满意度）
-│   │   ├── category.py            # 知识库分组 CRUD + 文档归类/按分类筛选
-│   │   ├── conversation.py        # 多轮对话 创建/列出/获取/删除
-│   │   ├── admin.py               # 管理后台：用户管理/系统统计/配置（仅超管）
-│   │   └── webhook.py             # Webhook 管理：创建/更新/删除/触发/日志
-│   ├── frontend/
-│   │   └── index.html             # 单页前端（原生 JS + CSS：登录/问答/管理后台/修改密码）
-│   ├── core/
-│   │   ├── config.py              # 集中配置：API key、模型名、路径、各种开关
-│   │   └── limiter.py             # 集中管理 slowapi 限流器（登录/问答等）
-│   ├── retrieval/                 # 检索层
-│   │   ├── embedder_factory.py    # Embedding 工厂：本地 BGE-M3（默认）/ 线上 API 二选一
-│   │   ├── bge_m3_embedder.py     # BGEM3Embedder：稠密 1024 维 + 自计算 SPLADE 稀疏权重
-│   │   ├── hybrid_retriever.py    # HybridRetriever：BM25 + 稠密 + BGE-M3 稀疏 + 可选 ES，RRF 融合 + 重排
-│   │   ├── sparse_store.py        # BGE-M3 稀疏向量落盘/加载（./sparse_db/{tenant}）
-│   │   ├── query_rewriter.py      # QueryRewriter：LLM 查询改写/扩展
-│   │   ├── citation.py            # CitationTracker：来源引用追踪
-│   │   ├── cache.py               # QueryCache：Redis 查询缓存（LRU）
-│   │   └── elasticsearch_client.py# Elasticsearch 客户端（全文检索兜底，feature-flag 默认关闭）
-│   ├── processing/                # 文档处理层
-│   │   ├── multimodal_pipeline.py # MultimodalPipeline：PDF 图文解析（PyMuPDF 文字层 + OCR + 分块）
-│   │   ├── pdf_extractor.py       # PyMuPDF 图文/文字层抽取
-│   │   ├── ocr_engine.py          # OCREngine：PaddleOCR 3.7 封装（扫描件识别）
-│   │   └── __init__.py
-│   ├── memory/                    # 记忆层
-│   │   ├── memory_manager.py      # MemorySystem：短期 + 中期 + 长期记忆编排
-│   │   ├── conversation_store.py  # 对话持久化（Redis）
-│   │   ├── redis_client.py        # Redis 连接池 + TTL
-│   │   ├── forgetting.py          # 艾宾浩斯遗忘曲线（ShadowWorker 异步反遗忘）
-│   │   ├── profile_store.py       # 用户画像存储（置信度加权合并）
-│   │   └── __init__.py
-│   ├── tenant/                    # 租户与用户层
-│   │   ├── auth.py                # 注册/登录/密码哈希/改密/重置（SQLite）
-│   │   ├── tenant_manager.py      # 租户创建/隔离
-│   │   ├── category.py            # 知识库分组数据访问
-│   │   ├── conversation.py        # 多轮对话数据访问
-│   │   └── __init__.py
-│   ├── worker/                    # 异步任务层
-│   │   ├── shadow_worker.py       # ShadowWorker：后台线程池，摘要/实体画像/反遗忘
-│   │   ├── webhook.py             # Webhook 异步发送 + 失败重试（60s 轮询）
-│   │   └── __init__.py
-│   ├── security/                  # 安全层
-│   │   ├── middleware.py          # 安全响应头/请求体大小限制/路径穿越与注入防护/CORS 收紧
-│   │   ├── error_handlers.py      # 全局统一错误处理（20+ 错误码，中文提示）
-│   │   └── __init__.py
-│   ├── tasks/                     # 上传索引任务层
-│   │   ├── task_store.py          # 进程内任务状态 + 持久化 data/tasks.json（重启可恢复）
-│   │   └── __init__.py
-│   ├── observability/             # 可观测层
-│   │   ├── tracker.py             # TraceContext：全链路追踪（耗时、Token）
-│   │   ├── structured_logger.py   # 结构化 JSON 日志
-│   │   ├── monitoring.py          # /metrics、/health、/stats 端点
-│   │   └── __init__.py
-│   ├── evaluation/                # 评估层（离线）
-│   │   ├── evaluator.py           # RAGAS 三/四维度打分
-│   │   ├── runner.py              # 批量评测 + Golden Test Set
-│   │   ├── ab_testing.py          # A/B 实验评估
-│   │   └── __init__.py
-│   └── ingestion/                 # （预留）多模态图文注释
-│       ├── vision_caption.py
-│       └── __init__.py
-├── scripts/                       # 运维/评测脚本
-│   ├── backup.py                  # 全量备份/恢复/列表/清理（chroma_db/uploads/memory_db/tenant_data）
-│   ├── reindex_docs.py            # 离线重建索引（含扫描件 OCR，需 .ocr_venv 环境）
-│   ├── run_ragas_eval.py          # 真实 RAGAS 评测（需 key）
-│   ├── run_regression.py          # 回归测试（golden 集）
-│   ├── verify_retrieval.py        # 检索质量抽查
-│   ├── evaluate.py                # 评测辅助
-│   └── _gen_readme_imgs.py        # 生成文档配图
-├── tests/                         # pytest 三层测试（unit / integration / evaluation）
-├── run.py                         # 本地启动入口（uvicorn 封装）
-├── run_tests.py                   # 跑全部测试 + 覆盖率
-├── run_eval.py                    # 评测快捷入口
-├── healthcheck.py                 # Docker 健康检查脚本
-├── Dockerfile / docker-compose.yml
-├── requirements.txt / requirements-docker.txt
-├── start-rag.bat / start-local.bat / 启动法律文书 RAG 系统.bat
-├── .env / .env.example            # 环境变量（key 等，.env 不入库）
-├── chroma_db/ sparse_db/ uploads/ tenant_data/ data/   # 运行时数据（均 gitignore）
-└── model_cache/                  # 本地 BGE-M3 模型（gitignore，需镜像下载）
-```
-
-### 分层总览
-
-```
-接入层  : app/api/*            HTTP 路由、鉴权、限流、SSE 流式
-安全层  : app/security/*       安全头 / 注入&穿越防护 / 统一错误
-核心层  : app/main.py, core/*  应用装配、配置、限流器
-业务编排: app/tenant/*         用户/租户/分组/对话 数据访问
-检索层  : app/retrieval/*      Embedding / 混合检索 / 改写 / 引用 / 缓存
-处理层  : app/processing/*     PDF 解析 / OCR / 多模态分块
-记忆层  : app/memory/*         短/中/长期记忆 / 画像 / 遗忘
-异步层  : app/tasks/*, worker/* 上传索引任务 / 后台整理 / Webhook 投递
-可观测  : app/observability/*  链路追踪 / 结构化日志 / metrics/health
-评估层  : app/evaluation/*     离线 RAGAS / A-B 实验
-脚本层  : scripts/*, run*.py    备份 / 重索引 / 评测 / 测试入口
-```
-
-
-### 模块调用链
-
-`
-用户请求
-    │
-    ▼
-app/main.py (FastAPI 入口)
-    │  ├── app/api/auth.py          → app/tenant/auth.py (SQLite)
-    │  │                               └── app/core/config.py
-    │  │
-    │  ├── app/api/chat.py          → app/retrieval/embedder_factory.py → app/retrieval/bge_m3_embedder.py (BGE-M3 稠密+稀疏双路)
-    │  │                               → app/retrieval/hybrid_retriever.py → BM25 + Dense + RRF
-    │  │                               → app/retrieval/query_rewriter.py → DeepSeek LLM
-    │  │                               → app/retrieval/citation.py
-    │  │                               → app/retrieval/cache.py → Redis
-    │  │                               → app/memory/memory_manager.py → Chroma + Redis
-    │  │                               → app/worker/shadow_worker.py (异步)
-    │  │                               → app/observability/tracker.py
-    │  │                               → app/observability/structured_logger.py
-    │  │
-    │  ├── app/api/documents.py     → app/retrieval/embedder_factory.py
-    │  │                               → app/retrieval/bge_m3_embedder.py (稠密+稀疏向量)
-    │  │                               → app/retrieval/sparse_store.py (稀疏向量落盘)
-    │  │                               → app/processing/multimodal_pipeline.py
-    │  │                                   → app/processing/pdf_extractor.py
-    │  │                                   → app/processing/ocr_engine.py
-    │  │                               → langchain Chroma (稠密向量持久化)
-    │  │
-    │  └── app/api/feedback.py      → app/memory/conversation_store.py
-    │
-    └── app/frontend/index.html (前端静态文件)
-`
-
-### 请求完整流程 (上传+提问)
-
-`
-1. 用户上传 PDF
-   POST /api/documents/upload
-   ├── app/api/documents.py: 接收文件 → 保存到 ./uploads/{tenant_id}/ → 立即返回 task_id（**异步，不阻塞**）
-   ├── 后台线程池执行: app/processing/multimodal_pipeline.py 解析 PDF (PyMuPDF + OCR) -> embedder_factory 经 bge_m3_embedder.py 生成稠密+稀疏向量 -> 稠密向量 ChromaDB 持久化到 ./chroma_db/{tenant_id}/，稀疏向量经 sparse_store.py 落盘到 ./sparse_db/{tenant_id}/
-   ├── 任务状态持久化到 `data/tasks.json`，服务重启后从磁盘恢复，避免"已上传却提示请先上传文档"
-   ├── 服务启动时自动扫描 `uploads/{tenant_id}/`，对未向量化的 PDF 重新提交后台索引任务
-   ├── 进度查询：GET /api/documents/task/{task_id} 返回 pending/processing(extracting→embedding→building_index)/done/failed 及百分比
-   └── 索引完成后即可提问；索引中提问会返回"文档正在后台索引中"提示而非报错；已上传但索引失败会提示重新上传
-
-2. 用户提问
-   POST /api/chat (SSE 流式)
-   ├── app/api/chat.py: 验证 Token → 加载 ChromaDB 向量库
-   ├── app/retrieval/query_rewriter.py: LLM 改写/扩展查询
-   ├── app/retrieval/hybrid_retriever.py:
-   │   ├── 稠密检索: ChromaDB.similarity_search_with_score() (向量来自 bge_m3_embedder.py)
-   │   ├── 稀疏检索(BM25): BM25Okapi.get_scores()
-   │   ├── BGE-M3 稀疏检索: bge_m3_embedder.py 确定性自计算 SPLADE 词汇权重 + sparse_store.py 落盘 lookup (RRF keying 取 page_content[:200])
-   │   └── RRF 融合(稠密 + BM25 + BGE-M3 稀疏 + 可选 ES) + 可选 BGE 重排
-   ├── app/retrieval/citation.py: 记录来源引用
-   ├── app/memory/memory_manager.py: 加载短期/长期记忆
-   ├── 调用 DeepSeek LLM (stream=True) 生成回答
-   ├── app/observability/tracker.py: 记录耗时和 Token 用量
-   └── 返回 SSE 流给前端
-`
-
-### 数据流向
-
-`
-PDF文件
-  → processing/multimodal_pipeline (解析文本+图片)
-  → embedder_factory (转向量)
-  → ChromaDB (持久化到磁盘)
-
-用户问题
-  → query_rewriter (LLM 改写)
-  → hybrid_retriever (稠密 + 稀疏 + RRF)
-  → memory_manager (加载记忆上下文)
-  → [合并上下文 + 引用] → DeepSeek LLM
-  → 流式返回 → 前端渲染
-"
 
 ## 生产上线前检查清单
 
