@@ -1,10 +1,25 @@
 """
-Webhook API for Legal-DOC-RAG.
+webhook.py —— Webhook 事件通知管理 API 模块
 
-提供以下端点：
-- Webhook 管理 (CRUD 创建、读取、更新、删除)
-- 事件触发 (手动触发特定事件通知)
-- 日志查看 (查看 Webhook 调用历史)
+【作用与功能】
+本模块为 legal-doc-rag 提供 Webhook 的 HTTP 管理接口，支持 Webhook 配置的 CRUD、手动
+触发事件、查看调用日志与系统支持的事件类型。通过超级管理员权限依赖隔离，用于把平台内
+事件（如文档上传、对话完成）异步通知到外部系统。
+
+【主要组成】
+- `_require_admin`：超级管理员权限依赖。
+- `create` / `list_all` / `update` / `delete`：Webhook 配置的增、查、改、删。
+- `trigger_event`：手动触发指定事件并通知已订阅 Webhook。
+- `get_logs`：查看某 Webhook 的最近调用日志。
+- `list_event_types`：列出系统支持的预置事件类型。
+- `CreateWebhookRequest` / `UpdateWebhookRequest` / `TriggerEventRequest`：请求数据模型。
+
+【适用场景】
+- 管理员配置事件回调，在文档上传完成/对话结束等节点通知外部系统（如企业微信、自建服务）。
+
+【依赖关系】
+- 上游调用方：管理后台前端。
+- 下游依赖：app.worker.webhook（get_webhook_manager）、app.api.auth。
 """
 import os
 import sys
@@ -29,13 +44,13 @@ def _require_admin(authorization: str = Header(...)) -> dict:
     从请求头提取 Authorization Token，验证用户身份，并检查其角色是否为 super_admin。
     如果不是管理员或 Token 无效，则抛出 HTTP 异常阻断请求。
     
-    Args:
+    参数：
         authorization (str): 请求头中的 Authorization 字段值，预期格式为 "Bearer <token>"。
         
-    Raises:
+    异常：
         HTTPException: 如果缺少 Token 抛出 401 异常；如果用户不是超级管理员抛出 403 异常。
         
-    Returns:
+    返回：
         dict: 验证通过后的当前用户信息字典。
     """
     # 去除 "Bearer " 前缀，提取纯 Token 字符串
@@ -53,7 +68,7 @@ class CreateWebhookRequest(BaseModel):
     """
     创建 Webhook 请求的数据模型。
     
-    Attributes:
+    属性：
         name (str): Webhook 名称，用于标识和管理。
         url (str): Webhook 接收通知的目标 URL。
         events (List[str]): 监听的事件类型列表（如 "document.uploaded"）。
@@ -71,7 +86,7 @@ class UpdateWebhookRequest(BaseModel):
     
     所有字段均为可选，允许部分更新。
     
-    Attributes:
+    属性：
         name (Optional[str]): 新的 Webhook 名称。
         url (Optional[str]): 新的目标 URL。
         events (Optional[List[str]]): 新的事件监听列表。
@@ -87,7 +102,7 @@ class TriggerEventRequest(BaseModel):
     """
     手动触发事件请求的数据模型。
     
-    Attributes:
+    属性：
         event_type (str): 要触发的事件类型。
         payload (Dict): 事件的具体数据负载（JSON 格式）。
     """
@@ -106,14 +121,14 @@ def create(req: CreateWebhookRequest, admin: dict = Depends(_require_admin)):
     
     需要超级管理员权限。为指定租户创建新的 Webhook，用于监听特定事件并异步通知外部系统。
     
-    Args:
+    参数：
         req (CreateWebhookRequest): 包含 Webhook 配置的请求体。
         admin (dict): 依赖注入获取的当前管理员信息，用于提取 tenant_id。
         
-    Raises:
+    异常：
         HTTPException: 如果创建失败（如 URL 无效或事件类型不支持），抛出 400 异常。
         
-    Returns:
+    返回：
         dict: 包含成功标志、消息和新建的 webhook_id。
     """
     tenant_id = admin["tenant_id"]
@@ -133,10 +148,10 @@ def list_all(admin: dict = Depends(_require_admin)):
     
     需要超级管理员权限。返回该租户下所有已配置的 Webhook 信息。
     
-    Args:
+    参数：
         admin (dict): 依赖注入获取的当前管理员信息，用于提取 tenant_id。
         
-    Returns:
+    返回：
         dict: 包含 Webhook 列表 webhooks 和总数 total。
     """
     tenant_id = admin["tenant_id"]
@@ -152,15 +167,15 @@ def update(webhook_id: int, req: UpdateWebhookRequest, admin: dict = Depends(_re
     
     需要超级管理员权限。允许部分更新 Webhook 的各项属性。
     
-    Args:
+    参数：
         webhook_id (int): 路径参数，待更新的 Webhook ID。
         req (UpdateWebhookRequest): 包含更新内容的请求体。
         admin (dict): 依赖注入获取的当前管理员信息，用于提取 tenant_id。
         
-    Raises:
+    异常：
         HTTPException: 如果更新失败（如 Webhook 不存在），抛出 400 异常。
         
-    Returns:
+    返回：
         dict: 包含成功标志和操作消息。
     """
     tenant_id = admin["tenant_id"]
@@ -180,14 +195,14 @@ def delete(webhook_id: int, admin: dict = Depends(_require_admin)):
     
     需要超级管理员权限。删除后该 Webhook 将不再接收事件通知。
     
-    Args:
+    参数：
         webhook_id (int): 路径参数，待删除的 Webhook ID。
         admin (dict): 依赖注入获取的当前管理员信息，用于提取 tenant_id。
         
-    Raises:
+    异常：
         HTTPException: 如果删除失败（如 Webhook 不存在），抛出 400 异常。
         
-    Returns:
+    返回：
         dict: 包含成功标志和操作消息。
     """
     tenant_id = admin["tenant_id"]
@@ -209,11 +224,11 @@ def trigger_event(req: TriggerEventRequest, admin: dict = Depends(_require_admin
     
     需要超级管理员权限。用于测试或主动通知外部系统特定事件的发生。
     
-    Args:
+    参数：
         req (TriggerEventRequest): 包含事件类型和负载的请求体。
         admin (dict): 依赖注入获取的当前管理员信息，用于提取 tenant_id。
         
-    Returns:
+    返回：
         dict: 包含成功标志和成功触发的 Webhook 列表。
     """
     tenant_id = admin["tenant_id"]
@@ -233,12 +248,12 @@ def get_logs(webhook_id: int, limit: int = 50, admin: dict = Depends(_require_ad
     
     需要超级管理员权限。返回该 Webhook 最近的通知历史，便于排查问题。
     
-    Args:
+    参数：
         webhook_id (int): 路径参数，目标 Webhook 的 ID。
         limit (int): 查询参数，返回的最大日志条数，默认为 50。
         admin (dict): 依赖注入获取的当前管理员信息，用于提取 tenant_id。
         
-    Returns:
+    返回：
         dict: 包含日志列表 logs 和总数 total。
     """
     tenant_id = admin["tenant_id"]
@@ -258,7 +273,7 @@ def list_event_types():
     
     无需权限验证。用于前端展示可选事件类型，方便管理员配置 Webhook 监听。
     
-    Returns:
+    返回：
         dict: 包含事件类型列表 event_types，每个类型包含名称和描述。
     """
     from app.worker.webhook import WebhookEvents

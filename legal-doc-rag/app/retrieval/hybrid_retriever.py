@@ -1,21 +1,26 @@
 
 """
-混合检索器 - 稠密向量 + 稀疏BM25 + Elasticsearch + RRF融合 + BGE重排序
+hybrid_retriever.py —— 混合检索器：稠密向量 + BM25 + Elasticsearch + RRF 融合 + BGE 重排序
 
-流程：
-  用户查询
-     ↓
-  ┌─→ ChromaDB 稠密检索 ──┐
-  │                        │
-  ├─→ BM25 稀疏检索 ──────┤
-  │                        │
-  ├─→ Elasticsearch 全文检索 ┤
-  │                        │
-  └──── RRF 加权融合 ──────┘
-            ↓
-     BGE-Reranker 精排
-            ↓
-       Top-K 结果
+【作用与功能】
+该模块是 legal-doc-rag 检索链路的核心，融合多路召回（ChromaDB 稠密、
+BM25 稀疏、可选 Elasticsearch 全文、可选 BGE-M3 稀疏）后通过 RRF 加权融合，
+并可选地用 BGE 交叉编码器精排，输出 Top-K 文档。各通道不可用时自动降级，
+保证检索链路始终可用。
+
+【主要组成】
+- `Reranker`：BGE 交叉编码器重排序（加载失败则降级跳过）
+- `HybridRetriever`：建立多路召回通道并执行 RRF 融合与重排序
+- `HybridRetriever.retrieve` / `invoke`：对外检索入口（invoke 兼容 LangChain 接口）
+
+【适用场景】
+- 场景1：问答链路中根据用户查询召回相关法律条文/文档片段
+- 场景2：作为 LangChain retriever 接入上层链（invoke 接口）
+
+【依赖关系】
+- 上游调用方：问答编排层 / LangChain 检索链
+- 下游依赖：dense_store（Chroma 等）、BM25Okapi、elasticsearch_client、
+  bge_m3_embedder（BGE-M3 稀疏）、sentence_transformers.CrossEncoder（重排序）
 """
 import os
 import numpy as np

@@ -48,7 +48,7 @@ class ForgettingMechanism:
         """
         初始化遗忘机制参数。
         
-        Args:
+        参数：
             threshold (float): 遗忘阈值，默认为 0.15。低于此值的记忆将被遗忘。
             decay_hours (float): 记忆衰减时间常数（小时），默认为 168 小时（1周）。
                                 值越小表示遗忘速度越快。
@@ -63,14 +63,14 @@ class ForgettingMechanism:
         评分公式：
         final = 0.5 * recency + 0.3 * frequency + 0.2 * importance
         
-        Args:
+        参数：
             content (str): 记忆内容文本。
             timestamp (datetime): 记忆的创建或最后访问时间。
             access_count (int): 记忆被访问的次数，默认为 0。
             importance (Optional[float]): 记忆的重要性权重（0-1之间），
                                         如果未提供则根据内容长度自动计算。
                                         
-        Returns:
+        返回：
             float: 记忆的综合评分（0-1之间的浮点数），保留 4 位小数。
         """
         # 1. 计算新近度得分（基于时间衰减）
@@ -96,10 +96,10 @@ class ForgettingMechanism:
         """
         判断记忆是否应该被遗忘。
         
-        Args:
+        参数：
             score (float): 记忆的综合评分。
             
-        Returns:
+        返回：
             bool: 如果评分低于阈值则返回 True（应该遗忘），否则返回 False。
         """
         return score < self.threshold
@@ -108,12 +108,12 @@ class ForgettingMechanism:
         """
         过滤记忆列表，保留重要记忆并移除被遗忘的记忆。
         
-        Args:
+        参数：
             memories (list): 记忆内容列表。
             timestamps (list): 每个记忆对应的时间戳列表。
             access_counts (list, optional): 每个记忆的访问次数列表，默认为全 0。
             
-        Returns:
+        返回：
             list: 保留的记忆列表，每个元素是 (记忆内容, 评分) 的元组，按评分降序排列。
         """
         # 如果未提供访问次数列表，初始化为全 0
@@ -151,10 +151,10 @@ class ForgettingMechanism:
         """
         估计遗忘曲线在不同时间点的保留率。
         
-        Args:
+        参数：
             hours (list): 时间点列表（单位：小时）。
             
-        Returns:
+        返回：
             list: 每个时间点的记忆保留率（0-1 之间的浮点数），保留 4 位小数。
         """
         return [round(math.exp(-h / self.decay_hours), 4) for h in hours]

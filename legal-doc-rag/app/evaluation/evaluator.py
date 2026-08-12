@@ -63,10 +63,10 @@ def build_retriever(data_path):
     使用 HuggingFace 的 text2vec-base-chinese 模型创建向量库，
     并配置为返回 top 3 相关文档的检索器。
     
-    Args:
+    参数：
         data_path (str): 待索引的文本文件路径。
         
-    Returns:
+    返回：
         VectorStoreRetriever: 配置好的检索器实例。
 
     异常:
@@ -108,11 +108,11 @@ def generate_answer(question, contexts):
     
     使用 DeepSeek API 基于检索到的上下文生成回答。
     
-    Args:
+    参数：
         question (str): 用户问题。
         contexts (List[str]): 检索到的相关上下文列表。
         
-    Returns:
+    返回：
         str: 生成的答案，如果出错则返回错误信息。
 
     异常:
@@ -169,10 +169,10 @@ def run_evaluation(data_path=None):
     3. 使用 RAGAS 框架进行评估
     4. 输出评估结果并保存报告
     
-    Args:
+    参数：
         data_path (str, optional): 待评估的文本文件路径。如果未提供，使用默认的法律文本。
         
-    Returns:
+    返回：
         dict: RAGAS 评估结果字典，包含各项指标的分数。
 
     异常:

@@ -34,7 +34,7 @@ class FeedbackRequest(BaseModel):
     """
     用户反馈请求的数据模型。
     
-    Attributes:
+    属性：
         answer (str): AI 生成的回答内容，默认为空字符串。
         rating (int): 用户对回答的评分（如 1-5 分），默认为 0。
         query (str): 用户原始提问内容，默认为空字符串。
@@ -52,11 +52,11 @@ def submit_feedback(req: FeedbackRequest, user: dict = Depends(require_user)):
     接收用户对 AI 回答的评分和评价，将其以 JSON 文件形式按租户分类存储在 data/feedback 目录下。
     文件名使用 Unix 时间戳确保唯一性，便于后续分析。
     
-    Args:
+    参数：
         req (FeedbackRequest): 包含回答内容、评分和原始提问的请求体。
         user (dict): 依赖注入获取的当前登录用户信息，用于提取 tenant_id 和 username。
         
-    Returns:
+    返回：
         dict: 包含成功标志和确认消息。
     """
     tenant_id = user["tenant_id"]

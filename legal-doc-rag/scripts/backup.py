@@ -155,7 +155,7 @@ def create_backup(target_dir: str = None) -> str:
         - 单个目录备份失败不会中断整体流程，失败信息会记入 manifest["sources"]，
           便于事后判断该备份是否可用（"部分成功"也会留下痕迹而非静默丢失）
 
-    Returns:
+    返回：
         Path to the created backup directory.
     """
     # 用秒级时间戳命名备份目录，保证多次备份互不覆盖且天然按时间排序
@@ -232,10 +232,10 @@ def restore_backup(backup_dir: str) -> bool:
         - 返回 True 仅代表流程跑完，个别子目录恢复失败只会记 error 日志，
           需结合控制台输出确认每一项是否都打了 "✓"
 
-    Args:
+    参数：
         backup_dir: Path to the backup directory.
 
-    Returns:
+    返回：
         True if successful.
     """
     backup_path = Path(backup_dir)

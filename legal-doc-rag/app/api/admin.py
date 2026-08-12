@@ -1,10 +1,28 @@
 """
-Admin API for Legal-DOC-RAG.
+admin.py —— 系统管理与运营 API 模块
 
-提供以下端点：
-- 用户管理 (列表展示、删除用户、角色调整)
-- 系统统计 (获取用户数、文档数、向量数及监控指标)
-- 配置管理 (查看当前系统运行配置)
+【作用与功能】
+本模块为 legal-doc-rag 提供超级管理员专属的后台管理接口，包含用户管理、系统统计
+与运行配置查看三大职责。所有接口均通过 `_require_admin` 依赖强制校验 super_admin 角色，
+是平台运营与运维的核心入口。
+
+【主要组成】
+- `_require_admin`：超级管理员权限依赖，校验 Token 与 super_admin 角色。
+- `list_users`：查询全量用户列表。
+- `update_user_role`：调整用户角色（含名额上限与防自杀校验）。
+- `delete_user`：删除指定用户（禁止删除自身）。
+- `get_stats`：聚合用户/文档/向量数与系统指标、链路追踪。
+- `get_config`：读取当前核心运行配置。
+- `DeleteUserRequest` / `SetRoleRequest`：请求数据模型。
+
+【适用场景】
+- 超级管理员在后台管理用户、监控文档/向量规模与系统运行指标。
+- 运维排查问题时查看运行配置与链路追踪摘要。
+
+【依赖关系】
+- 上游调用方：管理后台前端。
+- 下游依赖：app.tenant.auth、app.core.config、app.observability.monitoring、
+  app.observability.tracker、Chroma 向量库。
 """
 import os
 import sys
@@ -30,13 +48,13 @@ def _require_admin(authorization: str = Header(...)) -> dict:
     从请求头提取 Authorization Token，验证用户身份，并检查其角色是否为 super_admin。
     如果不是管理员或 Token 无效，则抛出 HTTP 异常阻断请求。
     
-    Args:
+    参数：
         authorization (str): 请求头中的 Authorization 字段值，预期格式为 "Bearer <token>"。
         
-    Raises:
+    异常：
         HTTPException: 如果缺少 Token 抛出 401 异常；如果用户不是超级管理员抛出 403 异常。
         
-    Returns:
+    返回：
         dict: 验证通过后的当前用户信息字典。
     """
     # 去除 "Bearer " 前缀，提取纯 Token 字符串
@@ -61,10 +79,10 @@ def list_users(admin: dict = Depends(_require_admin)):
     
     需要超级管理员权限。返回所有注册用户的详细信息及总数。
     
-    Args:
+    参数：
         admin (dict): 依赖注入获取的管理员信息（自动完成权限校验）。
         
-    Returns:
+    返回：
         dict: 包含用户列表 users 和总数 total。
     """
     users = list_users_db()
@@ -82,7 +100,7 @@ class SetRoleRequest(BaseModel):
     """
     设置用户角色请求的数据模型。
     
-    Attributes:
+    属性：
         role (str): 目标角色，仅支持 "super_admin" (超级管理员) 或 "user" (普通用户)。
     """
     role: str  # "super_admin" | "user"
@@ -99,15 +117,15 @@ def update_user_role(
     - 不允许修改自己的角色（避免误操作锁死权限）。
     - 提权为超级管理员时受 cfg.MAX_SUPER_ADMINS 名额上限限制。
     
-    Args:
+    参数：
         username (str): 路径参数，待修改角色的用户名。
         req (SetRoleRequest): 包含目标角色的请求数据。
         admin (dict): 依赖注入获取的当前管理员信息。
         
-    Raises:
+    异常：
         HTTPException: 如果修改自己角色抛出 400；角色无效抛出 400；名额已满抛出 403；用户不存在抛出 404。
         
-    Returns:
+    返回：
         dict: 包含成功标志和操作消息。
     """
     # 安全校验：禁止修改自身角色
@@ -141,14 +159,14 @@ def delete_user(username: str, admin: dict = Depends(_require_admin)):
     
     需要超级管理员权限。为了系统安全，不允许管理员删除自己的账号。
     
-    Args:
+    参数：
         username (str): 路径参数，待删除的用户名。
         admin (dict): 依赖注入获取的当前管理员信息。
         
-    Raises:
+    异常：
         HTTPException: 如果尝试删除自己抛出 400；用户不存在抛出 404。
         
-    Returns:
+    返回：
         dict: 包含成功标志和确认消息。
     """
     # 安全校验：禁止删除自身账号
@@ -173,10 +191,10 @@ def get_stats(admin: dict = Depends(_require_admin)):
     
     需要超级管理员权限。聚合返回用户统计、文档统计、向量库统计以及系统监控指标。
     
-    Args:
+    参数：
         admin (dict): 依赖注入获取的当前管理员信息。
         
-    Returns:
+    返回：
         dict: 包含各维度统计数据的字典：
               - users: 用户总数及管理员数。
               - documents: 文档总数。
@@ -248,10 +266,10 @@ def get_config(admin: dict = Depends(_require_admin)):
     
     需要超级管理员权限。用于后台管理界面展示当前生效的模型、存储路径等配置信息。
     
-    Args:
+    参数：
         admin (dict): 依赖注入获取的当前管理员信息。
         
-    Returns:
+    返回：
         dict: 包含各项核心配置项的字典。
     """
     return {

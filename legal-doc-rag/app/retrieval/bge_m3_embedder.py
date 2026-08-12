@@ -1,25 +1,24 @@
 """
-BGE-M3 嵌入器：同时提供稠密(dense, 1024 维) 与稀疏(sparse, SPLADE 词汇权重) 向量。
+bge_m3_embedder.py —— BGE-M3 嵌入器：同时提供稠密向量与 SPLADE 稀疏权重
 
-- 稠密部分兼容 langchain `Embeddings` 接口，供 Chroma 入库 / 查询使用；
-- 稀疏部分输出 {token_id: weight} 字典，用于与 BM25 + 稠密做 RRF 融合，
-  提升法律术语 / 法条编号等精确召回（BGE-M3 同源稀疏质量高于 BM25）。
+【作用与功能】
+该模块在 legal-doc-rag 检索链路中提供向量化能力，封装 BGE-M3 模型，
+同时输出稠密（1024 维）与稀疏（SPLADE 词汇权重）两种向量，供 Chroma 入库
+与 RRF 融合召回使用。其稀疏向量由本模块确定性自计算，规避 FlagEmbedding
+`_sparse_embedding` 在 CPU 下偶发丢值的缺陷，且模型以进程内单例加载以节省显存。
 
-底层复用 FlagEmbedding 的 BGEM3FlagModel 加载权重，但**稀疏向量完全由本模块
-自计算**，不经过 FlagEmbedding 的 `_sparse_embedding`：
+【主要组成】
+- `get_bge_m3_model`：懒加载并返回 BGEM3FlagModel 单例（失败降级为 None）
+- `encode_sparse_direct`：直接基于编码器 + sparse_linear 确定性计算 SPLADE 稀疏字典
+- `BGEM3Embedder`：langchain 兼容的嵌入器，提供稠密接口与稀疏接口
 
-  - FlagEmbedding 1.4.0 的 `_sparse_embedding` 内部用
-    `scatter_reduce(reduce="amax")` 把各位置 token 权重聚合到 vocab 维度，
-    该路径在 CPU 下偶发整条稀疏向量丢失（全 0 → 字典为空），且 token 权重
-    组装与内部张量形状强耦合，难以通过 monkeypatch 稳定修复。
-  - 这里改为：直接取模型自身的 XLM-RoBERTa 编码器 last_hidden_state，
-    经 `sparse_linear`（BGE-M3 的稀疏头是 Linear(H->1) 逐位置标量门控）得到每个
-    位置的门控权重，再按 `input_ids` 把每个 token id 在其序列中的最大门控权重
-    （等价于 FlagEmbedding 的 scatter_reduce(reduce="amax")）聚合为词表维度的
-    {token_id: weight}。结果 100% 可复现、不再丢值，且与 FlagEmbedding 正确行为
-    在数学上等价。
+【适用场景】
+- 场景1：文档入库/查询时生成稠密向量供 Chroma 使用
+- 场景2：混合检索中生成稀疏权重，与 BM25/稠密做 RRF 融合以提升法律术语召回
 
-模型**进程内单例**加载，避免稠密与稀疏各加载一份 2.3GB 权重。
+【依赖关系】
+- 上游调用方：HybridRetriever（稀疏召回）、入库流程（稠密入库）
+- 下游依赖：FlagEmbedding.BGEM3FlagModel、torch、langchain_core.embeddings.Embeddings
 """
 import os
 import threading

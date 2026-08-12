@@ -41,7 +41,7 @@ def _db_path() -> str:
     
     该函数会自动在项目根目录下的 tenant_data 目录中创建数据库文件。
     
-    Returns:
+    返回：
         str: 数据库文件的绝对路径。
     """
     base = Path(__file__).resolve().parent.parent.parent
@@ -149,12 +149,12 @@ class ABTestManager:
         """
         创建新的 A/B 测试实验。
         
-        Args:
+        参数：
             name (str): 实验名称，必须唯一。
             description (str, optional): 实验描述信息。
             traffic_percent (int, optional): 参与实验的用户流量占比（0-100），默认为 100。
             
-        Returns:
+        返回：
             Tuple[bool, str, int]: (是否成功, 消息, 实验ID)。如果名称重复，返回失败和错误信息。
 
         异常:
@@ -189,13 +189,13 @@ class ABTestManager:
         """
         为指定实验添加新的变体。
         
-        Args:
+        参数：
             experiment_id (int): 实验 ID。
             name (str): 变体名称，在实验内必须唯一。
             weight (int, optional): 变体权重，用于流量分配比例，默认为 1。
             config (Dict, optional): 变体的自定义配置参数（JSON 格式存储）。
             
-        Returns:
+        返回：
             Tuple[bool, str, int]: (是否成功, 消息, 变体ID)。如果名称重复，返回失败和错误信息。
 
         异常:
@@ -225,10 +225,10 @@ class ABTestManager:
         """
         启动指定实验，开始分配流量。
         
-        Args:
+        参数：
             experiment_id (int): 要启动的实验 ID。
             
-        Returns:
+        返回：
             Tuple[bool, str]: (是否成功, 消息)。如果操作失败，返回错误信息。
 
         异常:
@@ -254,10 +254,10 @@ class ABTestManager:
         """
         停止指定实验，停止分配流量。
         
-        Args:
+        参数：
             experiment_id (int): 要停止的实验 ID。
             
-        Returns:
+        返回：
             Tuple[bool, str]: (是否成功, 消息)。如果操作失败，返回错误信息。
 
         异常:
@@ -293,11 +293,11 @@ class ABTestManager:
         3. 基于用户 ID 的哈希值进行确定性分配（同一用户始终分配到同一变体）
         4. 根据变体权重按比例分配流量
         
-        Args:
+        参数：
             experiment_id (int): 实验 ID。
             user_id (str): 用户唯一标识。
             
-        Returns:
+        返回：
             Optional[Dict]: 分配的变体信息字典（包含 variant_id, name, config），
                            如果不符合分配条件则返回 None。
 
@@ -397,14 +397,14 @@ class ABTestManager:
         """
         记录用户在实验中的行为事件。
         
-        Args:
+        参数：
             experiment_id (int): 事件所属的实验 ID。
             variant_id (int): 事件发生的变体 ID。
             event_type (str): 事件类型（如 click, purchase 等）。
             user_id (str, optional): 用户 ID，匿名事件可不填。
             event_data (Dict, optional): 事件的附加数据（JSON 格式）。
             
-        Returns:
+        返回：
             bool: 事件记录是否成功。
 
         异常:
@@ -437,10 +437,10 @@ class ABTestManager:
         - 各变体的用户数和事件数统计
         - 按事件类型和变体的交叉统计
         
-        Args:
+        参数：
             experiment_id (int): 要查询的实验 ID。
             
-        Returns:
+        返回：
             Dict: 包含实验详细统计结果的数据字典。
 
         适用场景:
@@ -513,7 +513,7 @@ class ABTestManager:
         
         按创建时间倒序返回实验的基本信息。
         
-        Returns:
+        返回：
             List[Dict]: 实验列表，每个元素是一个包含实验基本信息的字典。
 
         适用场景:
@@ -549,7 +549,7 @@ class ABTestManager:
         3. 然后删除变体
         4. 最后删除实验本身
 
-        Args:
+        参数：
             experiment_id (int): 要删除的实验 ID。
 
         异常:
@@ -583,7 +583,7 @@ def get_ab_manager() -> ABTestManager:
     
     采用延迟初始化策略，仅在首次调用时创建实例。
     
-        Returns:
+        返回：
             ABTestManager: A/B 测试管理器的单例实例。
 
         适用场景:

@@ -50,7 +50,7 @@ class ProfileStore:
         """
         初始化用户画像存储。
         
-        Args:
+        参数：
             path (str): 用户画像 JSON 文件的存储路径，默认为 "./user_profiles.json"。
         """
         self.path = path
@@ -88,10 +88,10 @@ class ProfileStore:
         """
         获取指定租户的完整用户画像。
         
-        Args:
+        参数：
             tenant_id (str): 租户 ID。
             
-        Returns:
+        返回：
             dict: 该租户的用户画像字典。如果不存在则返回空字典。
         """
         with self._lock:
@@ -103,10 +103,10 @@ class ProfileStore:
         
         将用户画像中的实体信息格式化为文本，便于注入到 LLM 的上下文中。
         
-        Args:
+        参数：
             tenant_id (str): 租户 ID。
             
-        Returns:
+        返回：
             str: 格式化后的用户画像文本。如果画像为空则返回空字符串。
         """
         profile = self.get_profile(tenant_id)
@@ -127,7 +127,7 @@ class ProfileStore:
         2. 无论是否更新，都会增加访问计数
         3. 新实体会直接添加到画像中
         
-        Args:
+        参数：
             tenant_id (str): 租户 ID。
             entities (list): 待合并的实体列表，每个元素是包含 key, value, confidence 的字典。
         """
@@ -185,7 +185,7 @@ class ProfileStore:
         """
         清除指定租户的用户画像。
         
-        Args:
+        参数：
             tenant_id (str): 租户 ID。
         """
         with self._lock:

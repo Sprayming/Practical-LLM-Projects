@@ -42,7 +42,7 @@ class ConversationStore:
         """
         初始化对话存储器。
         
-        Args:
+        参数：
             store_dir (str): 对话数据存储目录的路径，默认为 "conversations"。
                            如果目录不存在会自动创建。
         """
@@ -57,11 +57,11 @@ class ConversationStore:
         每次保存都会覆盖同名文件，并记录当前时间戳和消息数量。
         为控制存储大小，只保存最近 20 条消息。
         
-        Args:
+        参数：
             messages (list): 对话消息列表，每个元素是包含角色和内容的字典。
             conv_id (str, optional): 对话的唯一标识符。如果未提供，自动生成。
             
-        Returns:
+        返回：
             str: 对话 ID（可能是自动生成的 UUID 或传入的 conv_id）。
         """
         # 如果未提供对话 ID，生成一个短 UUID
@@ -89,10 +89,10 @@ class ConversationStore:
         """
         加载指定对话的完整历史数据。
         
-        Args:
+        参数：
             conv_id (str): 对话的唯一标识符。
             
-        Returns:
+        返回：
             dict or None: 对话数据字典（包含 id、timestamp、message_count 和 messages），
                         如果对话不存在则返回 None。
         """
@@ -111,7 +111,7 @@ class ConversationStore:
         
         按修改时间倒序返回所有对话的基本信息，不包含具体消息内容。
         
-        Returns:
+        返回：
             list: 对话元信息列表，每个元素是包含 id、timestamp 和 message_count 的字典。
         """
         result = []

@@ -1,13 +1,24 @@
 """
-独立重索引脚本（脱离 web 服务进程，避免后台线程被回收导致索引中断）。
-用途：
-  1. 遍历 chroma_db 下每个租户的 uploads，调用 MultimodalPipeline 处理；
-  2. 有文字层 PDF 直接抽文字 → 分块 → 本地 BGE-M3 向量化；
-  3. 无文字层扫描件通过 OCR（PaddleOCR）识别图片文字 → 分块 → 向量化；
-  4. 识别结果为空 → 删除其历史垃圾 chunk（如旧版 [Image] 占位符），避免污染检索；
-  5. 幂等：已索引的源会先清后写，可重复运行。
-运行：python reindex_docs.py
-注意：要在能 import paddleocr 的 Python 环境执行（如 .ocr_venv/Scripts/python）。
+reindex_docs.py —— 独立文档重索引脚本
+
+【作用与功能】
+本脚本脱离 web 服务进程，对 chroma_db 下各租户的 uploads 全量重做向量索引，避免后台线程
+被回收导致索引中断。支持有文字层 PDF 直抽、扫描件经 OCR（PaddleOCR）识别、识别为空时
+清理历史垃圾 chunk，并以"先清后写"保证幂等，可重复安全运行。
+
+【主要组成】
+- `extract_chunks`：调用多模态管线抽取 PDF 文本块（含 OCR/图片 caption）。
+- `reindex_tenant`：对单个租户执行全量重索引（抽取→向量化→分批写入/清理垃圾）。
+- `__main__`：扫描所有租户目录并逐个调用 `reindex_tenant`。
+
+【适用场景】
+- 向量库损坏或模型/分块策略变更后，离线重建全量索引。
+- 单独排查或重建某个租户索引时直接调用 `reindex_tenant`。
+
+【依赖关系】
+- 上游调用方：命令行 `python reindex_docs.py`。
+- 下游依赖：app.core.config、app.processing.multimodal_pipeline、app.retrieval.embedder_factory、
+  app.retrieval.sparse_store、chromadb、PaddleOCR、本地 BGE-M3 模型。
 """
 import os
 import sys

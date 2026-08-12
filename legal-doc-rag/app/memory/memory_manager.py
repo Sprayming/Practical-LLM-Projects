@@ -68,7 +68,7 @@ class MemorySystem:
         """
         初始化记忆系统。
         
-        Args:
+        参数：
             embedding_model: 文本嵌入模型，用于向量化长期记忆。
             persist_dir (str): ChromaDB 持久化存储目录。
             redis_url (Optional[str]): Redis 连接 URL，如果未提供则使用本地 Redis。
@@ -109,7 +109,7 @@ class MemorySystem:
         """
         同步写入：记录对话到短期记忆。
         
-        Args:
+        参数：
             role (str): 发言角色（user/assistant）。
             content (str): 对话内容。
         """
@@ -123,12 +123,12 @@ class MemorySystem:
         
         使用相似度搜索结合遗忘评分进行过滤，并异步更新访问计数。
         
-        Args:
+        参数：
             query (str): 检索查询文本。
             k (int): 返回的最大结果数，默认为 3。
             min_score (float): 最小相似度阈值，默认为 0.25。
             
-        Returns:
+        返回：
             List[str]: 相关的记忆内容列表。
         """
         try:
@@ -175,7 +175,7 @@ class MemorySystem:
         """
         异步提交访问计数更新到 Worker。
         
-        Args:
+        参数：
             id_pairs (List[tuple]): 待更新的记忆 ID 和新计数的列表。
         """
         task = ShadowTask(
@@ -190,7 +190,7 @@ class MemorySystem:
         """
         在后台线程执行 ChromaDB 元数据更新。
         
-        Args:
+        参数：
             id_pairs (List[tuple]): 记忆 ID 和新计数的列表。
         """
         try:
@@ -219,10 +219,10 @@ class MemorySystem:
         
         整合长期记忆、中期记忆和短期记忆，构建完整的对话上下文。
         
-        Args:
+        参数：
             query (str): 用户查询文本。
             
-        Returns:
+        返回：
             str: 组装好的完整上下文。
         """
         parts = []
@@ -254,7 +254,7 @@ class MemorySystem:
         
         在每次对话结束后调用，执行记忆整理和实体提取等任务。
         
-        Args:
+        参数：
             llm_func (Callable[[str], str]): 调用 LLM 的函数。
         """
         self._async_consolidate(llm_func)
@@ -263,7 +263,7 @@ class MemorySystem:
         """
         异步整理：当短期记忆溢出时，提炼为中期和长期记忆。
         
-        Args:
+        参数：
             llm_func (Callable[[str], str]): 调用 LLM 的函数。
         """
         # 只有当短期记忆超过最大长度时才执行
@@ -282,7 +282,7 @@ class MemorySystem:
         """
         实际整理逻辑：增量合并旧摘要 + 新对话。
         
-        Args:
+        参数：
             llm_func (Callable[[str], str]): 调用 LLM 的函数。
         """
         try:
@@ -336,7 +336,7 @@ class MemorySystem:
         
         从用户输入和回答中提取实体信息，并存入用户画像存储。
         
-        Args:
+        参数：
             user_input (str): 用户输入文本。
             answer (str): AI 回答文本。
             llm_func (Callable): 调用 LLM 的函数。
@@ -355,7 +355,7 @@ class MemorySystem:
         
         将提取的实体存入 ProfileStore（不是 ChromaDB）。
         
-        Args:
+        参数：
             user_input (str): 用户输入文本。
             answer (str): AI 回答文本。
             llm_func (Callable): 调用 LLM 的函数。
@@ -420,7 +420,7 @@ class MemorySystem:
         """
         获取记忆系统状态。
         
-        Returns:
+        返回：
             Dict: 包含各项记忆统计信息的字典。
         """
         return {

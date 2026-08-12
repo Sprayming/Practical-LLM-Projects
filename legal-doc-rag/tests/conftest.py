@@ -117,7 +117,7 @@ def project_root():
     """
     返回项目根目录
     
-    Returns:
+    返回：
         Path: 项目根目录的 Path 对象
     """
     return Path(__file__).parent.parent
@@ -128,7 +128,7 @@ def temp_dir():
     """
     创建临时目录用于测试文件
     
-    Returns:
+    返回：
         str: 临时目录路径
     """
     temp_dir = tempfile.mkdtemp()
@@ -141,7 +141,7 @@ def mock_config():
     """
     模拟配置模块
     
-    Returns:
+    返回：
         Mock: 模拟的配置模块
     """
     with patch("app.core.config") as mock:
@@ -166,7 +166,7 @@ def mock_redis():
     """
     模拟 Redis 客户端
     
-    Returns:
+    返回：
         Mock: 模拟的 Redis 客户端
     """
     with patch("app.memory.redis_client.Redis") as mock:
@@ -183,7 +183,7 @@ def mock_chroma():
     """
     模拟 ChromaDB 客户端
     
-    Returns:
+    返回：
         Mock: 模拟的 ChromaDB 客户端
     """
     with patch("app.retrieval.hybrid_retriever.chromadb") as mock:
@@ -204,7 +204,7 @@ def mock_llm():
     """
     模拟 LLM API 调用
     
-    Returns:
+    返回：
         Mock: 模拟的 LLM 客户端
     """
     with patch("httpx.AsyncClient") as mock:
@@ -225,7 +225,7 @@ def sample_document():
     """
     测试用示例文档
     
-    Returns:
+    返回：
         dict: 示例文档数据
     """
     return {
@@ -243,7 +243,7 @@ def sample_query():
     """
     测试用示例查询
     
-    Returns:
+    返回：
         dict: 示例查询数据
     """
     return {
@@ -258,7 +258,7 @@ def sample_user():
     """
     测试用示例用户
     
-    Returns:
+    返回：
         dict: 示例用户数据
     """
     return {
@@ -273,7 +273,7 @@ def authenticated_headers():
     """
     带认证头的请求头
     
-    Returns:
+    返回：
         dict: 包含 JWT token 的请求头
     """
     return {

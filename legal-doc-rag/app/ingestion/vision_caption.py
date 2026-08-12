@@ -52,7 +52,7 @@ class VisionCaptioner:
 
         从环境变量加载 API 配置，支持手动传入参数覆盖环境变量。
 
-        Args:
+        参数：
             api_key (Optional[str]): Vision API 密钥，如果未提供则从环境变量 LLM_API_KEY 读取。
             base_url (Optional[str]): Vision API 基础 URL，如果未提供则从环境变量 LLM_BASE_URL 读取。
 
@@ -76,11 +76,11 @@ class VisionCaptioner:
 
         将图片转换为 base64 编码，构造 API 请求，调用 Vision LLM 生成描述。
 
-        Args:
+        参数：
             image_bytes (bytes): 图片的二进制数据。
             image_ext (str): 图片扩展名（png/jpg），默认为 png。
 
-        Returns:
+        返回：
             str: 生成的图片描述文字。如果 API 调用失败或未配置，返回空字符串。
                  注意：失败时返回空串而非错误信息，避免无意义的占位文本污染向量库。
 
@@ -143,10 +143,10 @@ class VisionCaptioner:
         """
         批量处理多张图片的标注。
 
-        Args:
+        参数：
             images (list[tuple[bytes, str]]): 图片列表，每个元素是 (图片二进制数据, 图片扩展名) 的元组。
 
-        Returns:
+        返回：
             list[str]: 每张图片对应的描述文字列表，顺序与输入一致。
 
         适用场景:

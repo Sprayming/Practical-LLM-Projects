@@ -59,7 +59,7 @@ class LoginRequest(BaseModel):
     """
     登录请求的数据模型。
     
-    Attributes:
+    属性：
         username (str): 用户名。
         password (str): 密码。
     """
@@ -71,7 +71,7 @@ class RegisterRequest(BaseModel):
     """
     注册请求的数据模型。
     
-    Attributes:
+    属性：
         username (str): 用户名。
         password (str): 密码。
     """
@@ -83,7 +83,7 @@ class ChangePasswordRequest(BaseModel):
     """
     修改密码请求的数据模型。
     
-    Attributes:
+    属性：
         old_password (str): 原密码。
         new_password (str): 新密码。
     """
@@ -95,7 +95,7 @@ class ResetPasswordRequest(BaseModel):
     """
     重置密码请求的数据模型。
     
-    Attributes:
+    属性：
         username (str): 需要重置密码的用户名。
         reset_key (str): 管理员颁发的重置密钥。
     """
@@ -111,14 +111,14 @@ def register(request: Request, req: RegisterRequest):
     
     接收用户名和密码，调用底层服务创建新用户。带有速率限制（20次/分钟）以防恶意批量注册。
     
-    Args:
+    参数：
         request (Request): FastAPI 原生 Request 对象，用于速率限制器获取客户端信息。
         req (RegisterRequest): 包含用户名和密码的请求体。
         
-    Raises:
+    异常：
         HTTPException: 如果注册失败（如用户名已存在），抛出 400 异常。
         
-    Returns:
+    返回：
         dict: 包含成功标志和操作消息。
     """
     ok, msg = _register(req.username, req.password)
@@ -135,14 +135,14 @@ def login(request: Request, req: LoginRequest):
     
     校验用户名和密码，校验通过后签发 JWT Token。带有速率限制（20次/分钟）以防暴力破解。
     
-    Args:
+    参数：
         request (Request): FastAPI 原生 Request 对象，用于速率限制。
         req (LoginRequest): 包含用户名和密码的请求体。
         
-    Raises:
+    异常：
         HTTPException: 如果登录失败（如密码错误、用户不存在），抛出 401 异常。
         
-    Returns:
+    返回：
         dict: 包含成功标志、JWT Token 以及当前用户的基本信息（用户名、租户ID、角色）。
     """
     ok, result = _login(req.username, req.password)
@@ -168,11 +168,11 @@ def _create_token(user_info: dict, expires_days: int = TOKEN_EXPIRE_DAYS) -> str
     
     将用户关键信息（用户名、租户ID、角色）和过期时间打包进 Payload，使用配置的密钥进行签名。
     
-    Args:
+    参数：
         user_info (dict): 包含用户信息的字典，需包含 username, tenant_id, role。
         expires_days (int, optional): Token 有效期天数，默认为 30 天。
         
-    Returns:
+    返回：
         str: 编码后的 JWT 字符串。
     """
     payload = {
@@ -190,13 +190,13 @@ def get_user_from_token(token: str) -> dict:
     
     使用密钥验证 Token 的签名和有效期。如果验证失败，抛出 401 异常。
     
-    Args:
+    参数：
         token (str): JWT Token 字符串。
         
-    Raises:
+    异常：
         HTTPException: 如果 Token 无效、被篡改或已过期，抛出 401 异常。
         
-    Returns:
+    返回：
         dict: 从 Token 中解析出的用户信息字典，包含 username, tenant_id, role。
     """
     try:
@@ -216,13 +216,13 @@ def require_user(authorization: str = Header(...)) -> dict:
     
     用于保护需要登录才能访问的路由。自动提取 Header 中的 Token，验证通过后将用户信息注入到路由函数中。
     
-    Args:
+    参数：
         authorization (str): 请求头中的 Authorization 字段值，预期格式为 "Bearer <token>"。
         
-    Raises:
+    异常：
         HTTPException: 如果缺少 Token 抛出 401；如果 Token 无效抛出 401。
         
-    Returns:
+    返回：
         dict: 当前登录用户的详细信息字典。
     """
     token = authorization.replace("Bearer ", "").strip()
@@ -238,13 +238,13 @@ def get_current_user(authorization: str = Header(...)):
     
     前端在刷新页面或初始化时调用此接口，通过携带 Token 获取当前用户的登录态和基本信息。
     
-    Args:
+    参数：
         authorization (str): 请求头中的 Authorization 字段值。
         
-    Raises:
+    异常：
         HTTPException: 如果缺少 Token 或 Token 无效抛出 401。
         
-    Returns:
+    返回：
         dict: 当前用户信息，包含 username, tenant_id, role。
     """
     token = authorization.replace("Bearer ", "").strip()
@@ -271,15 +271,15 @@ def change_password(
     需要用户已登录（依赖 require_user）。需校验原密码是否正确，正确后方可修改为新密码。
     带有速率限制（10次/分钟）。
     
-    Args:
+    参数：
         request (Request): FastAPI 原生 Request 对象，用于速率限制。
         req (ChangePasswordRequest): 包含原密码和新密码的请求体。
         user (dict): 依赖注入获取的当前登录用户信息。
         
-    Raises:
+    异常：
         HTTPException: 如果原密码错误或修改失败，抛出 400 异常。
         
-    Returns:
+    返回：
         dict: 包含成功标志和操作消息。
     """
     ok, msg = _change_password(user["username"], req.old_password, req.new_password)
@@ -297,14 +297,14 @@ def reset_password(request: Request, req: ResetPasswordRequest):
     无需登录即可访问。用户需提供用户名及管理员事先分发重置密钥，验证通过后系统将密码重置为默认密码或随机密码。
     带有严格的速率限制（5次/分钟）以防密钥爆破。
     
-    Args:
+    参数：
         request (Request): FastAPI 原生 Request 对象，用于速率限制。
         req (ResetPasswordRequest): 包含用户名和重置密钥的请求体。
         
-    Raises:
+    异常：
         HTTPException: 如果重置密钥错误或用户不存在，抛出 400 异常。
         
-    Returns:
+    返回：
         dict: 包含成功标志和操作消息（可能包含新密码或提示检查邮件）。
     """
     ok, msg = _reset_password_with_key(req.username, req.reset_key)

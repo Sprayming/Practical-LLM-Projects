@@ -1,18 +1,21 @@
 """
-集中管理的请求限流器，供各 API 路由共享（配合 slowapi）。
+limiter.py —— 集中管理的全局请求限流器，供各 API 路由共享（配合 slowapi）
 
-该模块创建了一个全局的 Limiter 实例，使用客户端的 IP 地址作为限流键值（key_func），
-对来自同一 IP 的请求进行统一的速率限制。主要用于防止恶意请求、暴力破解和 DoS 攻击。
+【作用与功能】
+该模块在 legal-doc-rag 系统中充当统一的速率控制层：创建全局 Limiter 实例，
+基于客户端 IP 地址作为限流键值（key_func）对请求计数，防止恶意请求、
+暴力破解与 DoS 攻击。它依赖于 slowapi，并在超出额度时返回 429 响应。
 
-使用方法：
-1. 在 FastAPI 应用中注册此 limiter 实例（见 main.py）
-2. 在 API 路由装饰器中使用 @limiter.limit("N/时间单位") 指定具体的限流规则
-   例如：@limiter.limit("100/minute") 表示每分钟最多允许 100 次请求
+【主要组成】
+- `limiter`：基于远程 IP 的全局 Limiter 单例，供各路由装饰器引用
 
-限流策略：
-- 基于 IP 地址进行识别和计数
-- 支持灵活的时间窗口（如 "100/minute"、"10/second"、"5/hour"）
-- 超出限制时自动返回 429 Too Many Requests 响应
+【适用场景】
+- 场景1：在 main.py 中注册该 limiter 实例到 FastAPI 应用
+- 场景2：API 路由通过 @limiter.limit("N/时间单位") 施加具体限流规则（如 "100/minute"）
+
+【依赖关系】
+- 上游调用方：FastAPI 应用入口（main.py）及各 API 路由装饰器
+- 下游依赖：slowapi.Limiter、slowapi.util.get_remote_address
 """
 
 from slowapi import Limiter

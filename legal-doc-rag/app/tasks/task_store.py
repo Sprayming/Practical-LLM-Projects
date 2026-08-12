@@ -1,10 +1,27 @@
 """
-文档索引异步任务状态存储。
+task_store.py —— 文档索引异步任务状态存储模块
 
-任务状态持久化到 JSON 文件（data/tasks.json），服务重启后自动恢复，
-避免用户上传文档后因重启/崩溃导致"请先上传文档"的误判。
-后台仍使用 ThreadPoolExecutor 单 worker 执行 CPU 密集的
-「PDF 抽取 + BGE-M3 嵌入 + Chroma 建索引」，上传接口秒回且主服务不被阻塞。
+【作用与功能】
+本模块负责文档索引任务的创建、状态跟踪与持久化，以及将 CPU 密集的「PDF 抽取 + BGE-M3
+嵌入 + Chroma 建索引」提交到单 worker 后台线程池。任务状态写入 data/tasks.json 并在
+模块导入时自动恢复，避免服务重启后误判"请先上传文档"，使上传接口秒回且不阻塞主 API。
+
+【主要组成】
+- `_load_tasks` / `_save_tasks`：从磁盘恢复/快照持久化任务状态。
+- `create_task`：创建一条 pending 任务并返回 task_id。
+- `update_task`：更新任务任意状态字段并刷新时间戳。
+- `get_task` / `list_tasks_for_tenant`：读取单任务/某租户全部任务快照。
+- `get_active_task_for_tenant` / `has_failed_task_for_tenant`：查询活跃/失败任务。
+- `submit_indexing_job`：将索引函数提交到单 worker 线程池异步执行。
+
+【适用场景】
+- 文档上传接口受理后创建任务并异步执行索引；前端轮询读取进度与结果。
+- 聊天接口在缺乏文档时，据此提示"索引进行中"或"此前提索引失败"。
+
+【依赖关系】
+- 上游调用方：上传接口、聊天接口、管理后台。
+- 下游依赖：concurrent.futures.ThreadPoolExecutor、JSON 文件（data/tasks.json）、
+  BGE-M3 嵌入器、Chroma 向量库。
 """
 import threading
 import time

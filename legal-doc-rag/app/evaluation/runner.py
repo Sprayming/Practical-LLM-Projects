@@ -38,10 +38,10 @@ def load_test_set(path=None):
     默认从项目 tests 目录下的 golden_test_set.json 文件加载测试问题集。
     该 JSON 文件应包含一个 questions 列表，每个元素是包含 question 和 ground_truth 的字典。
     
-    Args:
+    参数：
         path (str, optional): 测试集文件的路径。如果未提供，使用默认路径。
         
-    Returns:
+    返回：
         list: 包含测试问题的列表，每个元素是包含问题和标准答案的字典。
 
     异常:
@@ -69,12 +69,12 @@ def run_regression(retriever_func, llm_func, sample_size=None):
     3. 使用 RAGAS 框架进行评估
     4. 保存结果并计算与上一次测试的指标变化
     
-    Args:
+    参数：
         retriever_func (callable): 接收问题字符串，返回相关文档列表的检索函数。
         llm_func (callable): 接收问题和上下文，返回答案的生成函数。
         sample_size (int, optional): 限制测试的问题数量，用于快速测试。
         
-    Returns:
+    返回：
         dict: 包含当前评估结果和历史变化（delta）的字典。
 
     异常:
@@ -147,7 +147,7 @@ def _save_history(metrics, count):
     - 测试样本数量
     - 各项评估指标
     
-    Args:
+    参数：
         metrics (dict): 本次评估的各项指标。
         count (int): 本次测试使用的样本数量。
 
@@ -174,7 +174,7 @@ def _get_previous():
     
     从 regression_history.json 中读取倒数第二条记录（最新的是当前测试）。
     
-    Returns:
+    返回：
         dict or None: 上一次测试的指标字典，如果没有历史记录则返回 None。
 
     适用场景:

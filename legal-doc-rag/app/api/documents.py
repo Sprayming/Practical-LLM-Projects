@@ -67,14 +67,14 @@ async def upload_document(
     接收前端上传的 PDF 文件，进行安全与大小校验后保存到租户目录，
     并立即创建后台索引任务返回 task_id，避免大文档索引阻塞主服务。
     
-    Args:
+    参数：
         file (UploadFile): FastAPI 注入的上传文件对象。
         user (dict): 依赖注入获取的当前登录用户信息，用于提取 tenant_id。
         
-    Raises:
+    异常：
         HTTPException: 缺少文件名抛出 400；文件类型不允许抛出 400；文件过大抛出 413。
         
-    Returns:
+    返回：
         dict: 包含成功标志、任务ID、文件名、初始状态和提示消息。
     """
     tenant_id = user["tenant_id"]
@@ -122,7 +122,7 @@ def _run_indexing(task_id: str, tenant_id: str, file_path: str, filename: str):
     4. completed (完成)：更新任务状态为 done。
     任何环节出现致命错误，将任务状态标记为 failed。
     
-    Args:
+    参数：
         task_id (str): 当前索引任务的唯一标识。
         tenant_id (str): 租户ID，用于数据隔离存储。
         file_path (str): 已上传文件的绝对路径。
@@ -194,14 +194,14 @@ def get_upload_task(task_id: str, user: dict = Depends(require_user)):
     
     前端轮询此接口以获取大文档后台解析的实时进度。
     
-    Args:
+    参数：
         task_id (str): 路径参数，上传时返回的任务 ID。
         user (dict): 依赖注入获取的当前登录用户信息。
         
-    Raises:
+    异常：
         HTTPException: 任务不存在抛出 404；无权查看其他租户任务抛出 403。
         
-    Returns:
+    返回：
         dict: 包含任务状态、进度、当前阶段及错误信息的任务详情。
     """
     task = get_task(task_id)
@@ -220,10 +220,10 @@ def list_documents(user: dict = Depends(require_user)):
     
     仅列出上传目录中的 PDF 文件名，不包含索引状态等详细信息。
     
-    Args:
+    参数：
         user (dict): 依赖注入获取的当前登录用户信息，用于提取 tenant_id。
         
-    Returns:
+    返回：
         dict: 包含文档文件名列表 documents。
     """
     tenant_id = user["tenant_id"]
@@ -241,14 +241,14 @@ async def preview_document(filename: str, user: dict = Depends(require_user)):
     
     对文件名进行安全清洗和路径校验后，以 FileResponse 流式返回 PDF 文件供前端渲染。
     
-    Args:
+    参数：
         filename (str): 路径参数，待预览的文件名。
         user (dict): 依赖注入获取的当前登录用户信息，用于提取 tenant_id。
         
-    Raises:
+    异常：
         HTTPException: 文件名非法抛出 400；文件不存在抛出 404。
         
-    Returns:
+    返回：
         FileResponse: FastAPI 的文件响应对象，Content-Type 为 application/pdf。
     """
     tenant_id = user["tenant_id"]
@@ -286,14 +286,14 @@ def delete_document(filename: str, user: dict = Depends(require_user)):
     2. 删除 ChromaDB 中的稠密向量数据。
     3. 删除 BGE-M3 稀疏向量数据文件。
     
-    Args:
+    参数：
         filename (str): 路径参数，待删除的文件名。
         user (dict): 依赖注入获取的当前登录用户信息，用于提取 tenant_id 和 role。
         
-    Raises:
+    异常：
         HTTPException: 非管理员抛出 403；文件名非法抛出 400；文件不存在抛出 404。
         
-    Returns:
+    返回：
         dict: 包含成功标志和确认消息。
     """
     tenant_id = user["tenant_id"]
