@@ -18,3 +18,10 @@ API 路由与安全中间件统一引用，避免配置与实例在多处重复�
 - 上游调用方:app.main 及 app.api 下的各业务路由。
 - 下游依赖:标准库与第三方库(os、slowapi 等)，不反向依赖业务模块。
 """
+
+# 集中暴露 core 子包的核心配置与限流器实例
+# （注：task_store 位于 app.tasks、document_processor 不在 core，故不在此导出）
+from .config import *
+from .limiter import limiter
+
+__all__ = ["limiter"]

@@ -19,3 +19,40 @@ app/api/__init__.py —— legal-doc-rag API 路由包初始化模块
 - 下游依赖:app.api 下的各业务路由模块(auth、chat、documents、admin、category、
   conversation、feedback、ab_testing、webhook)。
 """
+"""
+app.api —— API 路由模块
+
+【作用与功能】
+该模块包含所有 API 路由的定义：
+- 认证路由
+- 聊天路由
+- 文档路由
+- 反馈路由
+- 管理员路由
+- 分类路由
+- 对话路由
+- A/B 测试路由
+- Webhook 路由
+"""
+
+from .auth import router as auth_router
+from .chat import router as chat_router
+from .documents import router as documents_router
+from .feedback import router as feedback_router
+from .admin import router as admin_router
+from .category import router as category_router
+from .conversation import router as conversation_router
+from .ab_testing import router as ab_testing_router
+from .webhook import router as webhook_router
+
+__all__ = [
+    "auth_router",
+    "chat_router",
+    "documents_router",
+    "feedback_router",
+    "admin_router",
+    "category_router",
+    "conversation_router",
+    "ab_testing_router",
+    "webhook_router",
+]

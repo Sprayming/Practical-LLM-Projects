@@ -1,20 +1,40 @@
 """
-app —— legal-doc-rag 应用包的初始化模块(包标识文件)
+app —— legal-doc-rag 法律文档 RAG 系统的顶层 Python 包（包标识文件）
 
 【作用与功能】
-该文件作为 legal-doc-rag RAG 系统的顶层 Python 包标识文件，使 `app` 目录成为
-一个可被 `import app...` 正常导入的包。它本身不包含运行逻辑，主要作用是声明
-包的边界，并作为应用各子模块(api、core、security、retrieval 等)的统一
-命名空间入口。
+作为整个 legal-doc-rag 系统的代码根包，使 `app` 目录成为可被 `import app...` 正常导入的包。
+它本身不承载运行逻辑，而是声明包的边界，并作为各子模块（api、core、security、retrieval、
+memory、worker、tenant 等）的统一命名空间入口。
 
-【主要组成】
-- 本文件为包标记文件，无导出内容；实际业务逻辑分散在 app 下的各个子模块中。
+【实现方式】
+- 仅作为包标识文件存在，无运行时逻辑；真正的应用实例由 `app.main` 下的 `create_app()` 创建。
+- 本文件统一导出核心构造入口：create_app、setup_config、setup_middleware、setup_routes、
+  setup_static_files、setup_events，供应用启动装配使用。
+- 注意：因导出会触发 `app.main` 的导入，任何 `import app` 都会连带创建并装配完整的 FastAPI
+  实例；若只需某子模块（如配置），建议直接 `from app.core.config import X`，避免重初始化。
 
-【适用场景】
-- 场景1:Python 解释器在导入 `app` 或 `app.core` 等子包时自动识别此文件作为包根。
-- 场景2:作为应用代码统一导入路径(如 `from app.main import app`)的基础。
-
-【依赖关系】
-- 上游调用方:FastAPI 应用启动、各业务模块的相对导入。
-- 下游依赖:app.core、app.api、app.security、app.retrieval 等子包。
+【整体作用】
+legal-doc-rag 是一套完整的法律文档检索增强生成（RAG）系统，提供文档上传与处理、向量化
+存储、智能检索、多轮对话、多租户隔离、异步任务、Webhook 通知与 A/B 测试等能力，
+是 FastAPI 应用启动与所有业务模块相对导入的基础。
 """
+
+__version__ = "1.0.0"
+__author__ = "Legal Doc RAG Team"
+__email__ = "team@legal-doc-rag.com"
+
+# 导出主要接口
+from .main.app import create_app
+from .main.config import setup_config
+from .main.middleware import setup_middleware
+from .main.routes import setup_routes, setup_static_files
+from .main.events import setup_events
+
+__all__ = [
+    "create_app",
+    "setup_config",
+    "setup_middleware",
+    "setup_routes",
+    "setup_static_files",
+    "setup_events",
+]

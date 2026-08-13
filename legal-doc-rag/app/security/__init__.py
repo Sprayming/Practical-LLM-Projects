@@ -20,3 +20,13 @@ security/__init__.py —— Legal-DOC-RAG 安全模块包入口
 - 上游调用方:app 主应用启动装配流程
 - 下游依赖:app.security.middleware、app.security.error_handlers
 """
+
+# 聚合导出本包的安全中间件与全局异常处理器，供主应用统一装配
+from .middleware import *
+from .error_handlers import *
+
+__all__ = [
+    "SecurityHeadersMiddleware",
+    "RequestSizeLimitMiddleware",
+    "setup_error_handlers",
+]
