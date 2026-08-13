@@ -33,7 +33,7 @@
 ### 第 1 层｜架构层（能白板画出）
 
 - 分层：用户层（前端 / Streamlit / SSE）→ 安全层（JWT 校验 + 限流 + TLS + 错误统一处理）→ 应用层（FastAPI：`auth`/`documents`/`chat`/…）→ 核心层（检索 / 记忆 / 处理 / 评测）→ 基础设施（ChromaDB 向量库 / Redis 记忆 / 模型服务 DeepSeek + BGE-M3）
-- 关键文件：`app/main.py`（装配 + 限流器注册）、`docker-compose.yml`（拓扑：app + redis）、`app/retrieval/hybrid_retriever.py`（检索核心）
+- 关键文件：`app/main/app.py`（create_app 装配 + 限流器注册）、`docker-compose.yml`（拓扑：app + redis）、`app/retrieval/hybrid_retriever.py`（检索核心）
 
 ### 第 2 层｜数据流层（一条请求的生命周期）
 
@@ -303,7 +303,7 @@ class Reranker:
 | 7 | 向量化 | `create_embedder()` → `BGEM3Embedder`（默认本地；`EMBEDDER_TYPE=openai` 时才走 `DirectEmbed`） | `retrieval/embedder_factory.py:83` / `bge_m3_embedder.py:180` |
 | 8 | 持久化 | `Chroma.from_texts(...).persist()` | langchain（落盘 `chroma_db/{tenant}`，后台线程） |
 | 9 | 后台索引（抽取+嵌入+建库） | `_run_indexing()`（线程池） | `documents.py:66` |
-| 10 | 启动恢复 | `_recover_incomplete_indexing()` | `app/main.py:91` |
+| 10 | 启动恢复 | `_recover_incomplete_indexing()` | `app/main/events.py` |
 
 ### 9.2 查询 / 问答链路（读）
 
@@ -319,10 +319,10 @@ class Reranker:
 
 ### 9.3 文件间调用关系（谁调谁）
 
-`app/main.py` 用 `include_router` 装配 9 个路由，API 层是入口；`require_user` 统一鉴权；业务函数散落在 `retrieval / processing / memory / security / tenant`，最终落到 `Chroma / SQLite / 磁盘`。
+`app/main/app.py` 的 `create_app()` 用 `include_router` 装配 9 个路由，API 层是入口；`require_user` 统一鉴权；业务函数散落在 `retrieval / processing / memory / security / tenant`，最终落到 `Chroma / SQLite / 磁盘`。
 
 ```
-app/main.py                         FastAPI 装配入口（include_router ×9）
+app/main/app.py                      FastAPI 装配入口（create_app, include_router ×9）
 ├─ auth_router        app/api/auth.py
 │   ├─ register()         → tenant/auth.py:104  写 SQLite 用户
 │   ├─ login()            → tenant/auth.py:137  校验密码
@@ -341,7 +341,7 @@ app/main.py                         FastAPI 装配入口（include_router ×9）
 │   ├─ create_task() / update_task() → 写内存 + 持久化到 data/tasks.json
 │   ├─ get_active_task_for_tenant()  → chat 返回"正在索引中"提示
 │   └─ _load_tasks() / _save_tasks() → 服务重启自动恢复任务状态
-├─ startup_recovery   app/main.py startup_event()
+├─ startup_recovery   app/main/events.py startup_event()
 │   └─ _recover_incomplete_indexing() → 扫描 uploads/{tenant}/，缺失向量库自动重索引
 ├─ chat_router        app/api/chat.py
 │   └─ chat()   ← 查询链路入口

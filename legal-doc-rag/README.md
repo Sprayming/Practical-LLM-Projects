@@ -166,7 +166,7 @@ legal-doc-rag/
 ```
 接入层  : app/api/*            HTTP 路由、鉴权、限流、SSE 流式
 安全层  : app/security/*       安全头 / 注入&穿越防护 / 统一错误
-核心层  : app/main.py, core/*  应用装配、配置、限流器
+核心层  : app/main/app.py (create_app), core/*  应用装配、配置、限流器
 业务编排: app/tenant/*         用户/租户/分组/对话 数据访问
 检索层  : app/retrieval/*      Embedding / 混合检索 / 改写 / 引用 / 缓存
 处理层  : app/processing/*     PDF 解析 / OCR / 多模态分块
@@ -184,7 +184,7 @@ legal-doc-rag/
 用户请求
     │
     ▼
-app/main.py (FastAPI 入口)
+app/main/app.py (FastAPI 入口, create_app)
     │  ├── app/api/auth.py          → app/tenant/auth.py (SQLite)
     │  │                               └── app/core/config.py
     │  │
@@ -370,7 +370,7 @@ python -m pytest --cov=app --cov-report=term-missing
   - BGE-M3 输出 **1024 维**，首次需联网下载模型；国内直连 `huggingface.co` 不通，**必须走镜像**
     `HF_ENDPOINT=https://hf-mirror.com`；
   - Windows 无符号链接权限时下载会报 `WinError 14007`，需 `HF_HUB_DISABLE_SYMLINKS=1`；
-  - `app/main.py` 顶部硬编码 `TRANSFORMERS_OFFLINE=1`（运行时不联网），因此 `HF_MODEL_NAME` 应填
+  - `app/main/config.py` 硬编码 `TRANSFORMERS_OFFLINE=1`（运行时不联网），因此 `HF_MODEL_NAME` 应填
     **本地模型目录绝对路径**（如 `D:\git\legal-doc-rag\model_cache\bge-m3`），而非仓库名 `BAAI/bge-m3`；
   - 切换 embedding 模型后，已存的 Chroma 向量库维度 / 语义不再匹配，必须**清空 `chroma_db` 并重新索引**
     所有文档（豆包 2560 维 → BGE-M3 1024 维，混用会直接报维度错误）；
@@ -714,7 +714,7 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 - **根因**：后台索引任务状态原先只存在 `app/tasks/task_store.py` 的**内存字典** `task_store._tasks` 里。一旦 uvicorn 进程重启（或崩溃），任务表被清空，但 `uploads/{tenant}/` 里的 PDF 文件还在、`chroma_db/{tenant}` 尚未建好，于是 `chat.py` 判空库直接返回"请先上传文档"——文档其实早上传了，只是索引被中断且状态丢失。
 - **修复**：
   1. `app/tasks/task_store.py`：任务状态改为持久化到 `data/tasks.json`，进程重启后从磁盘自动恢复。
-  2. `app/main.py`：启动时扫描 `uploads/{tenant}/`，对已上传但未完成向量化的 PDF 自动重新提交后台索引（避免手动重传）。
+  2. `app/main/events.py` 的 `startup_event()`：启动时扫描 `uploads/{tenant}/`，对已上传但未完成向量化的 PDF 自动重新提交后台索引（避免手动重传）。
   3. `app/api/chat.py`：向量库不可用时按状态返回不同提示——索引中/"文档正在后台索引中（进度 X%）"、索引失败/"请重新上传"、已上传未索引/"文档正在恢复索引"、未上传/"请先上传文档"。
   4. `app/frontend/index.html`：修复上传成功后显示 `(undefined 段已索引)`（异步接口不再返回 chunks，改为显示 task_id + "正在后台索引"）。
 
@@ -773,7 +773,7 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 - 新增 `app/core/limiter.py` 集中管理限流器
 
 #### 2. 限流真正生效
-- `app/main.py` 接上 `app.state.limiter` 并注册 `RateLimitExceeded` 异常处理器
+- `app/main/app.py` 的 `create_app()` 接上 `app.state.limiter` 并注册 `RateLimitExceeded` 异常处理器
 - `app/api/chat.py` 修复"两个 `async def chat`"导致的覆盖 bug（之前带 `@limiter.limit` 的装饰器被无限流的同名函数吞掉）
 - 限流策略：`/api/chat` 100/min、`/api/auth` 注册/登录 20/min，防爆破
 
