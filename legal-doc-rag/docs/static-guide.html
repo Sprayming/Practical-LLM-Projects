@@ -120,12 +120,13 @@ def is_safe_path(base_dir, target_path) -&gt; bool:
 <div class="scene">
   <span class="tag">POST /api/chat</span>
   <div class="step"><span class="n">1</span><b>入口</b> <code>chat.py:179 chat()</code> 由 <code>require_user</code> 拿 <code>tenant_id</code>；按向量库状态返回不同提示：未上传→"请先上传文档"、索引中→"正在后台索引中"、失败→"请重新上传"、正常→进入改写查询。</div>
-  <div class="step"><span class="n">2</span><b>建管道</b> <code>chat.py:162 _build_pipeline()</code> 按 tenant 载入 Chroma，实例化 <code>QueryRewriter / QueryCache / CitationTracker</code>。</div>
+  <div class="step"><span class="n">2</span><b>建管道</b> <code>chat.py _build_pipeline()</code> 按 tenant 载入 Chroma，实例化 <code>QueryRewriter / QueryCache(精确) / SemanticCache(语义) / CitationTracker</code>。</div>
   <div class="step"><span class="n">3</span><b>查询改写</b> <code>query_rewriter.py:29 QueryRewriter.rewrite()</code> 调 LLM 改写，失败回退原查询。</div>
-  <div class="step"><span class="n">4</span><b>混合检索</b> <code>hybrid_retriever.py:290 HybridRetriever.retrieve()</code> 跑 稠密(Chroma)+BM25 稀疏+BGE-M3 稀疏(SPLADE)+RRF 融合。</div>
-  <div class="step orange"><span class="n">5</span><b>精排</b> <code>hybrid_retriever.py:42 Reranker.rerank()</code> 用 BGE Cross-Encoder 精排，失败优雅降级。</div>
-  <div class="step"><span class="n">6</span><b>拼上下文</b> <code>chat.py:85 call_llm()(httpx 调 DeepSeek)</code> + <code>citation.py:55 CitationTracker.format_context()</code> 打 [N] 引用。</div>
-  <div class="step"><span class="n">7</span><b>返回</b> <code>return {answer, citations:[...]}</code>，每条答案可溯源。</div>
+  <div class="step"><span class="n">4</span><b>语义缓存检查</b> <code>chat.py _check_cache()</code> 用 query 向量余弦相似度匹配 Redis 语义缓存；近似问题命中则直接复用检索结果+答案，跳过下面重算（降延迟 + 省 DeepSeek 调用费）。</div>
+  <div class="step"><span class="n">5</span><b>混合检索</b> <code>hybrid_retriever.py:290 HybridRetriever.retrieve()</code> 跑 稠密(Chroma)+BM25 稀疏+BGE-M3 稀疏(SPLADE)+RRF 融合。</div>
+  <div class="step orange"><span class="n">6</span><b>精排</b> <code>hybrid_retriever.py:42 Reranker.rerank()</code> 用 BGE Cross-Encoder 精排，失败优雅降级。</div>
+  <div class="step"><span class="n">7</span><b>拼上下文 + LLM</b> <code>citation.py:55 CitationTracker.format_context()</code> 打 [N] 引用 → <code>app/llm/client.py chat_completion()/stream_chat_completion()</code> 统一调 LLM，主供应商限流时按 <code>LLM_FALLBACK_PROVIDERS</code> 自动切备用。</div>
+  <div class="step"><span class="n">8</span><b>返回</b> <code>return {answer, citations:[...]}</code>，每条答案可溯源。</div>
 </div>
 
 <h3>关键代码 · 混合检索 + RRF 融合（步骤 4）</h3>
@@ -201,6 +202,7 @@ def _rrf_fuse(self, dense_results, sparse_results, es_results=None, bge_sparse_r
 │   └─ chat()                    → 问答总入口
 │       ├─ _build_pipeline()         → 按 tenant 重建 Chroma
 │       ├─ QueryRewriter.rewrite()   [retrieval/query_rewriter]
+│       ├─ _check_cache()            [语义缓存：Redis 向量近似匹配，命中跳过重算]
 │       ├─ HybridRetriever.retrieve()[retrieval/hybrid_retriever]
 │       │   ├─ _dense_search()  (Chroma 向量)
 │       │   ├─ _sparse_search() (BM25)
@@ -208,7 +210,7 @@ def _rrf_fuse(self, dense_results, sparse_results, es_results=None, bge_sparse_r
 │       │   ├─ _rrf_fuse()      (RRF 融合：稠密+BM25+BGE-M3)
 │       │   └─ Reranker.rerank() (BGE 交叉编码器精排)
 │       ├─ CitationTracker.format_context() [retrieval/citation]
-│       └─ call_llm()  (httpx 调 DeepSeek，流式/非流式)
+│       └─ LLMClient                [app/llm/client.py 统一调 LLM，限流自动切备用供应商]
 └─ monitoring_router  observability/monitoring.py  (/health /metrics /stats)</div>
 
 <h2>4 · 两个最常考点</h2>

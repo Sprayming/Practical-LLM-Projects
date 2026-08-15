@@ -33,7 +33,7 @@
 ### 第 1 层｜架构层（能白板画出）
 
 - 分层：用户层（前端 / Streamlit / SSE）→ 安全层（JWT 校验 + 限流 + TLS + 错误统一处理）→ 应用层（FastAPI：`auth`/`documents`/`chat`/…）→ 核心层（检索 / 记忆 / 处理 / 评测）→ 基础设施（ChromaDB 向量库 / Redis 记忆 / 模型服务 DeepSeek + BGE-M3）
-- 关键文件：`app/main/app.py`（create_app 装配 + 限流器注册）、`docker-compose.yml`（拓扑：app + redis）、`app/retrieval/hybrid_retriever.py`（检索核心）
+- 关键文件：`app/main/app.py`（create_app 装配 + 限流器注册）、`docker-compose.yml`（拓扑：app + redis）、`app/retrieval/hybrid_retriever.py`（检索核心）、`app/llm/client.py`（集中式 LLM 客户端 + 多供应商 fallback）、`app/retrieval/semantic_cache.py`（Redis 语义缓存）
 
 ### 第 2 层｜数据流层（一条请求的生命周期）
 
@@ -56,10 +56,11 @@
 
 ```
 POST /api/chat（Bearer）→ [安全] JWT 校验 + 限流
-  → 取短期记忆（Redis）→ query_rewrite（查询改写）
+  → 取短期记忆（Redis）→ **语义缓存命中？**（query 向量近似匹配 → 直接复用答案，跳过下面重算）
+  → query_rewrite（查询改写）
   → hybrid_retrieve：BM25（关键词）+ Dense（向量）+ **BGE-M3 稀疏(SPLADE)** → RRF 融合召回 50
   → Cross-Encoder（BGE-Reranker）精排 Top-5 → 引用拼接（citation）
-  → 拼 prompt → LLM（DeepSeek，原始 HTTP /chat/completions）流式 SSE
+  → 拼 prompt → **统一 LLM 客户端（app/llm/client.py）** 流式 SSE，主供应商限流时按 `LLM_FALLBACK_PROVIDERS` 自动切备用
   → 落三层记忆（短期原文 / 中期摘要 / 长期向量 + 遗忘曲线）→ 返回
   （异步）Shadow Worker 更新摘要 / 画像
 ```
@@ -124,6 +125,8 @@ POST /api/chat（Bearer）→ [安全] JWT 校验 + 限流
 4. Embedding 为什么选本地 BGE-M3？你做过哪些安全加固？本地零成本 / 零泄露；安全上曾硬编码 Volces key（= 泄露），已移除改环境变量且部署前需轮换，同时补了真 JWT / 限流 / TLS。
 5. 怎么量化 RAG 效果、防"编造法条"？RAGAS 四指标（faithfulness / answer_relevancy / context_precision / context_recall）+ 31 条 golden 回归集；真实评分有 key 才跑，默认离线 harness 防回归。
 6. （加分）多租户隔离怎么做？高并发 / 水平扩展你怎么讲？
+   - **多租户**：按租户目录落盘 + ChromaDB 每租户独立 collection + JWT 携带 `tenant_id` 全程透传，检索/记忆/文件都按租户隔离；任务状态持久化到 `data/tasks.json` 而非内存，重启不丢。
+   - **高并发（三板斧，讲"为解决什么问题"）**：① **解阻塞**——`uvicorn --workers N` 多进程 + embedding/rerank 用 `asyncio.to_thread` 丢线程池，避免 CPU 密集调用占死事件循环导致吞吐塌缩；② **语义缓存**——`app/retrieval/semantic_cache.py` 用 query 向量余弦相似度复用近似问题的检索结果+答案，既降首字延迟又省 DeepSeek 调用费（峰谷定价下关键）；③ **兜底链**——`app/llm/client.py` 主供应商被限流(429)时按 `LLM_FALLBACK_PROVIDERS`（openai,qwen…）自动切换，per-IP 限流 + 超时熔断防雪崩。再加 Nginx 多副本负载均衡即可水平扩展。
 
 ---
 
@@ -135,6 +138,7 @@ POST /api/chat（Bearer）→ [安全] JWT 校验 + 限流
 | 安全加固 | 2026-08-04 | 真 JWT + 限流 + TLS + 去硬编码 key + integration/evaluation 测试补齐 |
 | 测试修复 | 2026-08-05 | 单元测试 32/32 绿；删临时脚本；清理 debug 输出 |
 | 整洁度 | 2026-08-05（续） | Webhook 重试真正生效；整体测试 44 passed / 1 skipped |
+| 高并发升级 | 2026-08-15 | 多 worker + to_thread 解阻塞；Redis 语义缓存；LLM 多供应商 fallback；多模型切换 `.env`；Docker 定稿 |
 
 > 详见 `README.md` 的「面试常见问题」「踩过的坑」「更新日志」三节，里面 Q1–Q8 与 17 个实战坑是高频素材。
 

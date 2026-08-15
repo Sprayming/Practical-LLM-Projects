@@ -42,9 +42,12 @@ docker compose up -d --build
 
 # 或双击桌面快捷方式"法律文书 RAG 系统"
 
-# 或手动 Python
+# 或手动 Python（开发调试，带热重载）
 pip install -r requirements-docker.txt
 python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# 生产环境推荐：多 worker 提升并发（CPU 核数，受内存约束；8G 建议 2、16G 可上 4）
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
 ```
 
 访问 http://localhost:8000
@@ -353,6 +356,15 @@ python -m pytest --cov=app --cov-report=term-missing
   - **小米 MiMo**：推理专精模型（数学 / 代码 / 逻辑链），而 RAG 生成端要的是「忠实复述 + 指令遵循」，MiMo 更慢更贵且角色不匹配；
   - **MiniMax / 豆包 / 智谱**：可用，但综合中文质量与性价比不及 DeepSeek。
 
+### 多模型切换（升级：支持供应商热切换 + 高并发兜底）
+
+**解决什么问题**：上线后单一 LLM 供应商（如 DeepSeek）在高峰时段常被限流（HTTP 429），主链路直接报错或卡死（雪崩）。为此把 LLM 配置抽象为「供应商开关 + 兜底链」，让代码能自动切换备用供应商。
+
+- **切换方式**：`.env` 设 `LLM_PROVIDER=deepseek|openai|qwen|moonshot|custom`，并填对应供应商的 `*_API_KEY` / `*_BASE_URL` / `*_MODEL` 即可，**下游业务代码零改动**（统一经 `app/llm/client.py` 解析 `LLM_*` 接口）。
+- **向后兼容**：老 `.env` 仅配 `LLM_API_KEY` 时，自动回退到原有 `LLM_*` 直连，不受影响。
+- **高并发兜底链**：`LLM_FALLBACK_PROVIDERS=openai,qwen`，主供应商调用失败时按列表顺序自动重试备用供应商，避免限流雪崩。
+- **集中客户端**：`app/llm/client.py` 封装 `chat_completion()` / `stream_chat_completion()`，统一处理鉴权、超时、SSE 解析与供应商 fallback；`chat.py` 三处 LLM 调用（记忆总结 / 非流式 / 流式）已全部收敛到此客户端。
+
 ### Embedding 选型：本地 BGE-M3（默认）
 - **演进历史**：
   1. **最初（本地）**：`shibing624/text2vec-base-chinese`（sentence-transformers 本地加载，零成本）→ 因国内下载模型超时 / 依赖冲突 / CPU 推理慢，**跑不通**；
@@ -451,9 +463,13 @@ echo "C:\Users\11195\miniconda3\Lib\site-packages" > .ocr_venv/Lib/site-packages
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| LLM_API_KEY | - | DeepSeek Key |
-| LLM_BASE_URL | https://api.deepseek.com/v1 | LLM 地址 |
-| LLM_MODEL | deepseek-v4-pro | 模型名 |
+| LLM_PROVIDER | deepseek | 激活的 LLM 供应商：`deepseek` / `openai` / `qwen` / `moonshot` / `custom`（详见下方「多模型切换」） |
+| DEEPSEEK_API_KEY / _BASE_URL / _MODEL | sk-… / api.deepseek.com/v1 / deepseek-chat | DeepSeek 专属配置 |
+| OPENAI_API_KEY / _BASE_URL / _MODEL | - / api.openai.com/v1 / gpt-4o-mini | OpenAI 专属配置 |
+| QWEN_API_KEY / _BASE_URL / _MODEL | - / dashscope…/v1 / qwen-plus | 通义千问专属配置 |
+| MOONSHOT_API_KEY / _BASE_URL / _MODEL | - / api.moonshot.cn/v1 / moonshot-v1-8k | Kimi 专属配置 |
+| LLM_FALLBACK_PROVIDERS | openai,qwen | 高并发兜底链：主供应商被限流/报错时按序自动切换备用供应商，逗号分隔（升级 3） |
+| LLM_API_KEY / _BASE_URL / _MODEL | - | `custom` 模式或覆盖任意供应商默认值的通用兜底（老 `.env` 兼容回退） |
 | EMBEDDER_TYPE | huggingface | 嵌入类型：`huggingface`=本地 BGE-M3（默认、推荐）／`openai`=线上 API |
 | HF_MODEL_NAME | BAAI/bge-m3 | 本地嵌入模型；因 `TRANSFORMERS_OFFLINE=1`，实际应填**本地目录绝对路径** |
 | HF_CACHE_DIR | ./model_cache | 本地模型缓存目录（已 gitignore） |
@@ -476,6 +492,32 @@ Docker 数据通过符号链接指向 D:\DockerData\Docker，不占 C 盘空间�
 - **Docker 方式**：`start-rag.bat` 自动检测 Docker Desktop 运行状态并拉起服务（Redis + App）。
 - **本地方式（推荐，含 OCR）**：双击 `启动法律文书 RAG 系统.bat`，它用 `.ocr_venv/Scripts/python.exe` 启动 uvicorn（port 8000）。**OCR 依赖 PaddleOCR，必须走这个脚本**——若用 miniconda 直接 `uvicorn` 启动，进程没有 paddleocr，扫描件 PDF 无法入库。
 - 重索引 / 重建向量库：`reindex_docs.py`（需 `.ocr_venv` 环境，详见「OCR 引擎」章节）。
+
+## 高并发优化（上线防延迟塌缩）
+
+RAG 系统上线后延迟降不下来，90% 不是"模型慢"，而是**请求在系统里被串行卡住 + 每次都重算 + 没有弹性**三件事叠加。本项目在 `app/main/` 重构定稿后，针对此做了三次升级，每一级都对应一个具体瓶颈：
+
+### 升级 1：解阻塞事件循环 + 多 worker（并发吞吐）
+- **解决什么问题**：单 worker 下 `QueryRewriter.rewrite()` 用同步 `requests` 调 LLM（最长阻塞 10s）、`_get_context()` 里的 BGE-M3 embedding + CrossEncoder rerank 是 CPU 密集同步调用——这些都在 async 事件循环里直接跑，高并发时**事件循环被占死，所有请求排队、流式响应卡顿、吞吐塌缩**。
+- **改了什么**：
+  - `docker-compose.yml` 启动命令加 `--workers`（8G 默认 2、16G 可上 4），受内存约束；配合 Nginx 多副本负载均衡可继续横向扩展。
+  - `app/api/chat.py` 用 `asyncio.to_thread` 把 CPU 密集的 embedding / rerank / paddleocr 调用丢线程池，释放事件循环只管 IO，并发请求不再互相阻塞。
+  - `app/main/events.py` 启动时**预热** BGE-M3 embedder 与 reranker，避免首请求在事件循环里阻塞加载（加载需数秒）。
+
+### 升级 2：Redis 语义缓存中间件（降延迟 + 降 LLM 成本）
+- **解决什么问题**：原有 `QueryCache`（`app/retrieval/cache.py`）只做 **MD5 精确匹配**，近似问题（"劳动合同怎么解除" vs "如何解除劳动合同"）漏缓存，每次都重跑 embedding + rerank + LLM——既拖慢首字延迟，又**白烧 DeepSeek 调用费**（峰谷定价下尤其贵）。
+- **改了什么**：新增 `app/retrieval/semantic_cache.py`，用查询向量余弦相似度做**语义匹配**，近似问题直接复用检索结果与 LLM 答案。复用现有 Redis 客户端（命中阈值 `SEMANTIC_CACHE_THRESHOLD`，默认 0.92）。与精确缓存互补：语义缓存兜底"问法不同、意思相近"，精确缓存兜底"完全一样"。
+
+### 升级 3：限流 + LLM 多供应商 fallback（抗限流 / 保命）
+- **解决什么问题**：突发流量打满 DeepSeek 的 RPM/TPM → 429 雪崩，主链路直接报错/卡死；且单一供应商无退路。
+- **改了什么**：
+  - per-IP 限流（slowapi，`/api/chat` 100/min、`/api/auth` 20/min）此前已接线生效，本轮未动。
+  - 新增 `app/llm/client.py` 集中式 LLM 客户端，主供应商调用失败时按 `LLM_FALLBACK_PROVIDERS` 列表**自动切换备用供应商**（deepseek → openai → qwen…），配合 `LLM_PROVIDER` 多模型切换（见上文「多模型切换」）。
+  - `chat.py` 三处 LLM 调用（记忆总结 / 非流式 / 流式 SSE）全部收敛到该客户端，错误处理提示也指向当前供应商的密钥名。
+
+### 部署成本提示
+- 纯云端（无 GPU）：4 核 8G 云服务器 ~¥150–230/月 + DeepSeek API 按量（峰谷定价，高峰 flash 输出 9 元/百万 token）。embedding 本地 BGE-M3 零 API 费。
+- 省钱：开启语义缓存（砍重复调用）、错峰重任务、用 prompt 缓存；可换更便宜的 OpenAI 兼容模型（仅改 `.env`，不改代码）。
 
 ## 面试常见问题
 
