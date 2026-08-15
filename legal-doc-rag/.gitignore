@@ -28,3 +28,7 @@ tenant_data/
 cache/
 logs/
 visuals/*.py
+
+# 本地 Redis 二进制与临时启动日志（不入库）
+_redis/
+_boot_*.log
