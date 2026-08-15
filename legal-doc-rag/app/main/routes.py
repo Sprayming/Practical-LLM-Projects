@@ -48,7 +48,9 @@ def setup_static_files(app: FastAPI):
     Args:
         app (FastAPI): FastAPI 应用实例
     """
-    frontend_dir = Path(__file__).resolve().parent / "frontend"
+    # 本文件位于 app/main/ 包内，__file__.parent 是 app/main；
+    # 而前端目录实际在 app/frontend，需向上一级再拼接。
+    frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
     frontend_dir.mkdir(exist_ok=True)
 
     @app.get("/", response_class=HTMLResponse)
