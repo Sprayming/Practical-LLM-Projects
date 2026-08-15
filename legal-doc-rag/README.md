@@ -506,6 +506,16 @@ Docker 数据通过符号链接指向 D:\DockerData\Docker，不占 C 盘空间�
 - **本地方式（推荐，含 OCR）**：双击 `启动法律文书 RAG 系统.bat`，它用 `.ocr_venv/Scripts/python.exe` 启动 uvicorn（port 8000）。**OCR 依赖 PaddleOCR，必须走这个脚本**——若用 miniconda 直接 `uvicorn` 启动，进程没有 paddleocr，扫描件 PDF 无法入库。
 - 重索引 / 重建向量库：`reindex_docs.py`（需 `.ocr_venv` 环境，详见「OCR 引擎」章节）。
 
+### 生产上线部署（Nginx + HTTPS + systemd 守护 + 多副本负载）
+本地跑通后若要正式对外提供服务，需解决 HTTPS、进程守护、水平扩展与证书续期。
+已提供一套可直接落地的配置与脚本，详见 **[`deploy/README.md`](deploy/README.md)**：
+- `deploy/systemd/legal-doc-rag.service` —— systemd 守护 unit（`--workers 4` 多进程副本，崩溃自动拉起）。
+- `deploy/nginx/legal-doc-rag.conf` —— Nginx 反向代理 + HTTPS，针对 SSE 流式关闭缓冲、拉长超时。
+- `deploy/setup-ssl.sh` —— 一键申请 Let's Encrypt 证书并自动改写 Nginx 启用 443。
+- 多副本负载：Nginx `upstream` 追加多实例即可水平扩展。
+
+> 高并发优化（解阻塞 + 语义缓存 + 多供应商 fallback）见下一节，二者配合方能真正把延迟降下来。
+
 ## 高并发优化（上线防延迟塌缩）
 
 RAG 系统上线后延迟降不下来，90% 不是"模型慢"，而是**请求在系统里被串行卡住 + 每次都重算 + 没有弹性**三件事叠加。本项目在 `app/main/` 重构定稿后，针对此做了三次升级，每一级都对应一个具体瓶颈：

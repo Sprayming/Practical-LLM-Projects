@@ -1,0 +1,3 @@
+# 开发 / 测试 / 压测依赖（非生产运行时依赖，请勿并入 requirements-docker.txt）
+locust>=2.20
+pytest>=8.0

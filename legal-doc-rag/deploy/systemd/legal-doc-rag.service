@@ -1,0 +1,33 @@
+[Unit]
+Description=Legal-Doc-RAG FastAPI 服务（生产守护）
+After=network.target redis.service
+Wants=redis.service
+
+[Service]
+Type=simple
+# 运行用户：提前创建 `sudo useradd -r -m -s /bin/bash appuser` 并把项目属主改为它
+User=appuser
+Group=appuser
+WorkingDirectory=/opt/legal-doc-rag
+
+# 通过 EnvironmentFile 注入所有 LLM / Redis / Embedding 配置（与 .env 同格式）
+EnvironmentFile=/opt/legal-doc-rag/.env
+
+# 多 worker（=多进程副本）：每个 worker 独立加载一份 BGE-M3 + reranker，内存约 2.4GB/进程。
+# 8G 机器设 2，16G 可设 4；真正并发收益来自 chat.py 把阻塞调用丢进线程池，多 worker 是并行推理的锦上添花。
+# 监听 127.0.0.1，由前置 Nginx 做 HTTPS 终止与对外暴露。
+ExecStart=/opt/legal-doc-rag/.ocr_venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 4
+
+# 崩溃自动拉起
+Restart=on-failure
+RestartSec=5
+StartLimitInterval=60
+StartLimitBurst=5
+
+# 日志进 journald，便于 `journalctl -u legal-doc-rag -f` 实时查看
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=legal-doc-rag
+
+[Install]
+WantedBy=multi-user.target
