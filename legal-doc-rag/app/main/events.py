@@ -7,13 +7,15 @@ app/main/events.py —— 事件钩子模块
 
 from fastapi import FastAPI
 import os
+import asyncio
+from loguru import logger
 from app.core import config as cfg
 from app.worker.webhook import get_webhook_manager
 
 def setup_events(app: FastAPI):
     """
     设置应用事件钩子
-    
+
     Args:
         app (FastAPI): FastAPI 应用实例
     """
@@ -25,6 +27,9 @@ def setup_events(app: FastAPI):
         webhook_manager = get_webhook_manager()
         webhook_manager.start()
         _recover_incomplete_indexing()
+        # 预热嵌入/重排序模型:避免首个用户请求在事件循环里阻塞加载(加载耗时数秒),
+        # 高并发下首个请求若触发模型加载会卡住事件循环,预热可消除这一抖动。
+        await asyncio.to_thread(_warmup_models)
 
     @app.on_event("shutdown")
     async def shutdown_event():
@@ -33,6 +38,23 @@ def setup_events(app: FastAPI):
         """
         webhook_manager = get_webhook_manager()
         webhook_manager.stop()
+
+
+def _warmup_models():
+    """启动预热:提前加载嵌入模型与重排序器(失败不影响主流程,仅告警)。"""
+    try:
+        from app.retrieval.embedder_factory import create_embedder
+        create_embedder()
+        logger.info("模型预热完成: embedder")
+    except Exception as e:  # noqa: BLE001
+        logger.warning("模型预热失败(embedder),首个请求将按需加载: {}", e)
+    try:
+        from app.retrieval.hybrid_retriever import Reranker
+        Reranker()
+        logger.info("模型预热完成: reranker")
+    except Exception as e:  # noqa: BLE001
+        logger.warning("模型预热失败(reranker),首个请求将按需加载: {}", e)
+
 
 def _recover_incomplete_indexing():
     """

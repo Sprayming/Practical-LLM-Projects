@@ -9,8 +9,10 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# 设置环境变量
-os.environ['TRANSFORMERS_OFFLINE'] = '1'
+# 设置环境变量：默认开启 transformers 离线模式（本地已下载模型，不联网）。
+# 使用 setdefault 而非强制赋值，以便 Docker 等环境通过 TRANSFORMERS_OFFLINE=0
+# 在首次启动时联网拉取本地 BGE-M3 模型。
+os.environ.setdefault('TRANSFORMERS_OFFLINE', '1')
 os.environ['HF_HUB_DISABLE_SYMLINKS_WARNING'] = '1'
 
 # 加载环境变量

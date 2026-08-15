@@ -39,6 +39,7 @@ from app.retrieval.hybrid_retriever import HybridRetriever, Reranker
 from app.retrieval.query_rewriter import QueryRewriter
 from app.retrieval.citation import CitationTracker
 from app.retrieval.cache import QueryCache
+from app.retrieval.semantic_cache import SemanticCache
 from app.memory.memory_manager import MemorySystem
 from app.worker.shadow_worker import get_worker
 from app.observability.tracker import TraceContext
@@ -47,13 +48,13 @@ from app.observability.monitoring import record_query
 from langchain_community.vectorstores import Chroma
 import app.core.config as cfg  # 从.evn中加载配置，便于后期维护
 from app.api.auth import get_user_from_token, require_user
-import httpx
 import asyncio
 import threading
 from typing import Dict, Any, AsyncGenerator
 from types import SimpleNamespace
 from fastapi import Request
 from app.core.limiter import limiter
+from app.llm.client import complete_chat, stream_chat, LLMHardError, LLMAllFailed
 from app.tasks.task_store import get_active_task_for_tenant, has_failed_task_for_tenant
 
 # 初始化结构化日志记录器，标识为 "chat" 模块
@@ -126,42 +127,22 @@ _cache_lock = threading.Lock()
 
 async def call_llm(prompt: str) -> str:
     """
-    异步调用大语言模型 API。
-    
-    向配置好的大模型服务发送单次提示词，并返回生成的文本结果。该函数主要用于后台任务(如记忆总结)的非流式调用。
-    
+    异步调用大语言模型 API(用于记忆总结等非流式后台任务),带供应商故障转移。
+
     参数:
         prompt (str): 发送给大模型的提示词。
-        
+
     返回:
-        str: 大模型生成的文本响应；如果调用失败(网络错误、API鉴权失败等)，则返回空字符串 ""。
+        str: 大模型生成的文本响应；调用失败(网络/鉴权/全部供应商不可用)则返回空字符串 ""。
     """
     try:
-        # 创建异步 HTTP 客户端，设置超时时间为 30 秒，并开启 SSL 证书验证
-        async with httpx.AsyncClient(timeout=30, verify=True) as client:
-            r = await client.post(
-                f"{cfg.LLM_BASE_URL}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {cfg.LLM_API_KEY}", 
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": cfg.LLM_MODEL, 
-                    "messages": [{"role": "user", "content": prompt}], 
-                    "temperature": 0.1, # 设置较低的温度以获得更确定性的输出
-                    "max_tokens": 512
-                }
-            )
-            r.raise_for_status() # 检查HTTP状态码，如果请求失败(非2xx)，将抛出 HTTPStatusError 异常
-            return r.json()["choices"][0]["message"]["content"]
-    except httpx.HTTPStatusError as e:
-        _log.error(f"LLM API 返回错误状态码: {e.response.status_code}")
-        return ""
-    except httpx.RequestError as e:
-        _log.error(f"LLM API 请求失败: {str(e)}")
-        return ""
+        return await complete_chat(
+            [{"role": "user", "content": prompt}],
+            temperature=0.1,
+            max_tokens=512,
+        )
     except Exception as e:
-        _log.error(f"LLM 调用未知错误: {str(e)}")
+        _log.error(f"LLM 调用失败(记忆总结): {str(e)}")
         return ""
 
 
@@ -231,6 +212,24 @@ def _get_reranker():
             _reranker = Reranker()
         return _reranker
 
+
+# 进程内推理锁:序列化 BGE-M3 嵌入与 CrossEncoder 重排序等 CPU 密集的模型推理。
+# 背景:下面把 _get_context 丢进 asyncio.to_thread 的线程池并发执行,其内部会调用
+# 进程内单例的 BGE-M3 / CrossEncoder 模型做 forward。多线程并发推理共享同一份模型
+# 权重存在线程安全隐患,故用本锁把「真正的模型推理」串行化,既保证安全,又释放了
+# 事件循环去处理连接/流式 IO(事件循环不再被阻塞)。
+_infer_lock = threading.Lock()
+
+
+def _retrieve_context(query, pipeline, message, history, tenant_id=None):
+    """
+    在进程内推理锁保护下执行检索 + 重排序,供 asyncio.to_thread 调用。
+
+    仅把模型推理(嵌入/重排)锁住;检索前后的内存/IO 操作仍可在锁外并发。
+    """
+    with _infer_lock:
+        return _get_context(query, pipeline, message, history, tenant_id)
+
 def _build_pipeline(tenant_id: str):
     """
     构建当前请求的 RAG (检索增强生成) 处理管道。
@@ -257,6 +256,8 @@ def _build_pipeline(tenant_id: str):
         vector_store = Chroma(embedding_function=embedder, persist_directory=persist_dir)
         query_rewriter = QueryRewriter(api_key=cfg.LLM_API_KEY, base_url=cfg.LLM_BASE_URL)
         cache = QueryCache(cache_dir=os.path.join("cache", tenant_id))
+        # 语义缓存:基于 Redis,用查询向量近似匹配复用答案(近似问题也能命中)
+        semantic_cache = SemanticCache(cfg.REDIS_URL, tenant_id)
         citation_tracker = CitationTracker()
         
         # 5. 将组件打包为 SimpleNamespace 返回，方便通过属性访问
@@ -265,6 +266,7 @@ def _build_pipeline(tenant_id: str):
             vector_store=vector_store,
             qr=query_rewriter,
             cache=cache,
+            semantic_cache=semantic_cache,
             ct=citation_tracker,
             mem=mem,
         )
@@ -307,16 +309,21 @@ async def chat(request: Request, req: ChatRequest, user: dict = Depends(require_
     if docs_count == 0:
         return _handle_vector_store_error(user["tenant_id"])
 
-    # 处理查询重写
-    query = _process_query(req.message, pipeline.qr)
-    
-    # 检查缓存中是否已有结果
-    cached_result = _check_cache(query, pipeline.cache, req.stream)
+    # 处理查询重写(内部用同步 requests 调 LLM,最长阻塞 10s,丢线程池释放事件循环)
+    query = await asyncio.to_thread(_process_query, req.message, pipeline.qr)
+
+    # 检查缓存中是否已有结果(同步文件 IO + 语义缓存,丢线程池)
+    cached_result = await asyncio.to_thread(
+        _check_cache, query, pipeline.cache, req.stream,
+        pipeline.semantic_cache, pipeline.embedder, req.message,
+    )
     if cached_result:
         return cached_result
 
-    # 获取 RAG 上下文(检索 + 重排 + 构建Prompt)
-    context = _get_context(query, pipeline, req.message, req.history, user["tenant_id"])
+    # 获取 RAG 上下文(检索 + 重排 + 构建Prompt,CPU 密集,丢线程池并在推理锁内串行)
+    context = await asyncio.to_thread(
+        _retrieve_context, query, pipeline, req.message, req.history, user["tenant_id"]
+    )
     
     # 根据前端请求选择流式或非流式响应处理
     if req.stream:
@@ -416,29 +423,47 @@ def _process_query(message, qr):
     queries = qr.rewrite(message, num_variants=1) if qr else [message]
     return queries[0] if queries else message
 
-def _check_cache(query, cache, is_stream):
+def _check_cache(query, cache, is_stream, semantic_cache=None, embedder=None, original=None):
     """
-    检查缓存中是否已存在当前查询的结果。
-    
-    如果命中缓存，根据请求是否需要流式输出，返回对应格式的响应。
-    
+    检查缓存中是否已存在当前查询的结果(精确匹配 + 语义匹配)。
+
+    先走原有的精确缓存(QueryCache,按问题 MD5 命中完全相同的提问);
+    再走新增的语义缓存(用原始问题向量近似匹配,近似提问也能复用答案)。
+
     参数:
-        query (str): 重写后的查询语句。
-        cache (QueryCache): 缓存实例。
+        query (str): 重写后的查询语句(用于精确缓存键)。
+        cache (QueryCache): 精确缓存实例。
         is_stream (bool): 是否为流式请求。
-        
+        semantic_cache (SemanticCache|None): 语义缓存实例(Redis 支撑)。
+        embedder: 嵌入模型,用于计算原始问题的向量。
+        original (str|None): 用户原始提问,语义缓存以它做匹配键。
+
     返回:
-        StreamingResponse | JSONResponse | None: 如果命中缓存则返回响应对象，否则返回 None。
+        StreamingResponse | JSONResponse | None: 命中则返回响应对象,否则返回 None。
     """
-    if not cache:
-        return None
-        
-    cached = cache.get(query)
-    if not cached:
-        return None
-        
-    # 兼容缓存中存储的不同数据格式
-    content = cached if isinstance(cached, str) else cached.get("answer", str(cached))
+    # 1) 精确缓存:完全相同的问题直接命中
+    if cache:
+        cached = cache.get(query)
+        if cached:
+            content = cached if isinstance(cached, str) else cached.get("answer", str(cached))
+            return _fmt_cached(content, is_stream)
+
+    # 2) 语义缓存:向量近似匹配,解决「近似问题漏缓存」问题
+    if semantic_cache and embedder:
+        try:
+            orig = original or query
+            emb = embedder.embed_query(orig)
+            ans = semantic_cache.get(orig, emb)
+            if ans:
+                return _fmt_cached(ans, is_stream)
+        except Exception as e:
+            _log.warning("语义缓存查询失败,跳过: {}", e)
+
+    return None
+
+
+def _fmt_cached(content, is_stream):
+    """把缓存到的完整答案包装为流式或非流式响应。"""
     if is_stream:
         return _create_streaming_response(content)
     return JSONResponse(content={"answer": content, "citations": [], "token_usage": 0})
@@ -594,55 +619,51 @@ async def _handle_streaming_response(context, req, pipeline, trace):
         last_yield_time = time.time()
         
         try:
-            # 建立异步流式连接
-            async with httpx.AsyncClient(timeout=60, verify=True) as client:
-                async with client.stream("POST",
-                    f"{cfg.LLM_BASE_URL}/chat/completions",
-                    headers={"Authorization": f"Bearer {cfg.LLM_API_KEY}", "Content-Type": "application/json"},
-                    json={"model": cfg.LLM_MODEL, "messages": [{"role": "user", "content": context}], "stream": True, "temperature": 0.1, "max_tokens": 1024}
-                ) as resp:
-                    # 必须先检查状态码:出错时响应体是普通 JSON 而非 SSE，
-                    # 下面的 `data: ` 循环会一个 token 都取不到，导致前端「提问后毫无反应」
-                    # 的静默失败(日志里也看不到任何报错)。
-                    if resp.status_code != 200:
-                        raw = (await resp.aread()).decode("utf-8", "replace")
-                        _log.error(f"LLM 流式调用失败 status={resp.status_code} body={raw[:500]}")
-                        # 根据不同的错误状态码返回友好的提示
-                        if resp.status_code in (401, 403):
-                            hint = "LLM API Key 无效或已过期，请更新 .env 中的 LLM_API_KEY 后重启服务。"
-                        elif resp.status_code == 429:
-                            hint = "LLM 服务限流或额度不足，请稍后重试或检查账户余额。"
-                        elif not cfg.LLM_API_KEY:
-                            hint = "未配置 LLM_API_KEY，请在 .env 中填写后重启服务。"
-                        else:
-                            hint = f"LLM 服务返回错误(HTTP {resp.status_code}):{raw[:200]}"
-                        # 发送错误事件给前端
-                        yield f"data: {json.dumps({'type': 'token', 'content': '[系统] ' + hint})}\n\n"
-                        yield f"data: {json.dumps({'type': 'error', 'content': hint})}\n\n"
-                        return
+            # 通过统一 LLM 客户端打开流式连接(主供应商限流/5xx 时自动故障转移)
+            try:
+                client, resp, provider = await stream_chat(
+                    [{"role": "user", "content": context}],
+                    temperature=0.1, max_tokens=1024,
+                )
+            except LLMHardError as e:
+                # 鉴权等硬错误:给出指向对应供应商密钥的友好提示
+                if e.status in (401, 403):
+                    hint = (f"LLM 鉴权失败（供应商: {e.provider}）。请检查 .env 中 "
+                            f"{e.provider.upper()}_API_KEY 或 LLM_API_KEY 是否有效,更新后重启服务。")
+                else:
+                    hint = f"LLM 服务返回错误(供应商 {e.provider}, HTTP {e.status}):{e.body[:200]}"
+                yield f"data: {json.dumps({'type': 'token', 'content': '[系统] ' + hint})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'content': hint})}\n\n"
+                return
+            except LLMAllFailed:
+                hint = "所有 LLM 供应商均不可用,请稍后重试或检查 .env 中配置的供应商 API Key。"
+                yield f"data: {json.dumps({'type': 'token', 'content': '[系统] ' + hint})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'content': hint})}\n\n"
+                return
 
-                    # 逐行读取 SSE 响应流
-                    async for line in resp.aiter_lines():
-                        if line and line.startswith("data: "):
-                            data_str = line[6:]
-                            if data_str == "[DONE]": break
-                            
-                            try:
-                                chunk = json.loads(data_str)
-                                # 提取增量 token
-                                token = chunk["choices"][0].get("delta", {}).get("content", "")
-                                if token:
-                                    full_answer += token
-                                    # 将 token 实时推送到前端
-                                    yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
-                                    last_yield_time = time.time()
-                            except json.JSONDecodeError:
-                                continue
-                            
-                            # 心跳检测:如果超过 30 秒没有新内容产生，发送空心跳保持连接
-                            if time.time() - last_yield_time > 30:
-                                yield f"data: {json.dumps({'type': 'token', 'content': ''})}\n\n"
-                                last_yield_time = time.time()
+            # 逐行读取 SSE 响应流(首个成功供应商)
+            async for line in resp.aiter_lines():
+                if line and line.startswith("data: "):
+                    data_str = line[6:]
+                    if data_str == "[DONE]": break
+
+                    try:
+                        chunk = json.loads(data_str)
+                        # 提取增量 token
+                        token = chunk["choices"][0].get("delta", {}).get("content", "")
+                        if token:
+                            full_answer += token
+                            # 将 token 实时推送到前端
+                            yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+                            last_yield_time = time.time()
+                    except json.JSONDecodeError:
+                        continue
+
+                    # 心跳检测:如果超过 30 秒没有新内容产生，发送空心跳保持连接
+                    if time.time() - last_yield_time > 30:
+                        yield f"data: {json.dumps({'type': 'token', 'content': ''})}\n\n"
+                        last_yield_time = time.time()
+            await client.aclose()
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
             return
@@ -681,18 +702,25 @@ async def _handle_non_streaming_response(context, req, pipeline, trace):
     """
     trace.begin_span("llm")
     token_usage = 0
-    
+
     try:
-        async with httpx.AsyncClient(timeout=60, verify=True) as client:
-            r = await client.post(
-                f"{cfg.LLM_BASE_URL}/chat/completions",
-                headers={"Authorization": f"Bearer {cfg.LLM_API_KEY}", "Content-Type": "application/json"},
-                json={"model": cfg.LLM_MODEL, "messages": [{"role": "user", "content": context}], "temperature": 0.1, "max_tokens": 1024}
-            )
-            r.raise_for_status()
-            data = r.json()
-            answer = data["choices"][0]["message"]["content"]
-            token_usage = data.get("usage", {}).get("total_tokens", 0)
+        # 统一 LLM 客户端:主供应商失败(限流/5xx)自动切换到备用供应商
+        answer = await complete_chat(
+            [{"role": "user", "content": context}],
+            temperature=0.1, max_tokens=1024,
+        )
+    except LLMHardError as e:
+        # 鉴权等硬错误:给出指向对应供应商密钥的友好提示
+        if e.status in (401, 403):
+            hint = (f"LLM 鉴权失败（供应商: {e.provider}）。请检查 .env 中 "
+                    f"{e.provider.upper()}_API_KEY 或 LLM_API_KEY 是否有效,更新后重启服务。")
+        else:
+            hint = f"LLM 服务返回错误(供应商 {e.provider}, HTTP {e.status}):{e.body[:200]}"
+        return JSONResponse(content={"answer": f"[系统] {hint}", "citations": [], "token_usage": 0})
+    except LLMAllFailed:
+        return JSONResponse(content={
+            "answer": "[系统] 所有 LLM 供应商均不可用,请稍后重试或检查 .env 中配置的供应商 API Key。",
+            "citations": [], "token_usage": 0})
     except Exception as e:
         return JSONResponse(content={"answer": f"LLM调用异常: {str(e)}", "citations": [], "token_usage": 0})
     
@@ -725,12 +753,20 @@ async def _handle_post_processing(message, answer, pipeline):
         answer (str): 大模型生成的回答。
         pipeline (SimpleNamespace): 管道组件集合。
     """
-    # 1. 将问答对写入缓存
+    # 1. 将问答对写入精确缓存(修复:原代码误用未定义的 _get_query,导致写入一直失败)
     if pipeline.cache:
         try:
-            pipeline.cache.set(_get_query(message), answer)
+            pipeline.cache.set(message, answer)
         except Exception as e:
             _log.error(f"缓存写入失败: {str(e)}")
+
+    # 2. 将问答对写入语义缓存(以原始问题向量为键,近似问题可复用答案)
+    if pipeline.semantic_cache and pipeline.embedder:
+        try:
+            emb = pipeline.embedder.embed_query(message)
+            pipeline.semantic_cache.set(message, emb, answer)
+        except Exception as e:
+            _log.error(f"语义缓存写入失败: {str(e)}")
     
     # 2. 将问答对写入记忆系统，并触发后台任务(如记忆总结)
     if pipeline.mem:

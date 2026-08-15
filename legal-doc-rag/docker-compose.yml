@@ -7,19 +7,43 @@ services:
 
   app:
     build: .
-    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+    # 多 worker:提升并发吞吐。每个 worker 是独立进程、各自加载一份 BGE-M3+reranker
+    # 模型,内存占用 ~2.4GB/进程。8G 机器建议 2,16G 可上 4;受内存约束,不要盲目拉满。
+    # 注意:真正的并发收益来自 chat.py 把阻塞调用丢进线程池(事件循环不再被卡),
+    # 多 worker 是「锦上添花」的并行推理能力。
+    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS:-2}
     ports:
       - "127.0.0.1:8000:8000"
     environment:
       - REDIS_URL=redis://redis:6379/0
+      # —— web 服务进程数(高并发关键参数)——
+      - UVICORN_WORKERS=${UVICORN_WORKERS:-2}
+      # —— LLM 故障转移:主供应商限流/5xx 时按序切换(例: qwen,openai)——
+      - LLM_FALLBACK_PROVIDERS=${LLM_FALLBACK_PROVIDERS:-}
+      # —— LLM 多模型切换 ——
+      - LLM_PROVIDER=${LLM_PROVIDER:-deepseek}
       - LLM_API_KEY=${LLM_API_KEY:-}
-      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.deepseek.com/v1}
-      - APP_PASSWORD=${APP_PASSWORD:-}
+      - LLM_BASE_URL=${LLM_BASE_URL:-}
+      - LLM_MODEL=${LLM_MODEL:-deepseek-chat}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - QWEN_API_KEY=${QWEN_API_KEY:-}
+      - QWEN_BASE_URL=${QWEN_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      - QWEN_MODEL=${QWEN_MODEL:-qwen-plus}
+      - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
+      - MOONSHOT_BASE_URL=${MOONSHOT_BASE_URL:-https://api.moonshot.cn/v1}
+      - MOONSHOT_MODEL=${MOONSHOT_MODEL:-moonshot-v1-8k}
+      # —— Embedding：默认本地 BGE-M3（零成本）；可选 openai 在线 ——
+      - EMBEDDER_TYPE=${EMBEDDER_TYPE:-huggingface}
+      - HF_MODEL_NAME=${HF_MODEL_NAME:-BAAI/bge-m3}
+      - HF_CACHE_DIR=${HF_CACHE_DIR:-./model_cache}
       - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
       - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-https://ark.cn-beijing.volces.com/api/v3}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-ep-m-20251117205847-trwgz}
-      - EMBEDDER_TYPE=${EMBEDDER_TYPE:-openai}
-      - LLM_MODEL=${LLM_MODEL:-deepseek-v4-pro}
+      # Docker 内首次拉取本地模型需联网，关闭 transformers 离线模式（本地不设这个变量仍为 1）
+      - TRANSFORMERS_OFFLINE=${TRANSFORMERS_OFFLINE:-0}
       - HF_ENDPOINT=${HF_ENDPOINT:-https://hf-mirror.com}
       - TZ=Asia/Shanghai
       - PYTHONPATH=/app
@@ -37,7 +61,7 @@ services:
       - redis
     restart: unless-stopped
     healthcheck:
-      test: python -c "import urllib.request; r=urllib.request.urlopen('http://localhost:8000/api/health'); exit(0 if r.status==200 else 1)"
+      test: python -c "import urllib.request; r=urllib.request.urlopen('http://localhost:8000/health'); exit(0 if r.status==200 else 1)"
       start_period: 30s
       interval: 120s
       timeout: 5s
