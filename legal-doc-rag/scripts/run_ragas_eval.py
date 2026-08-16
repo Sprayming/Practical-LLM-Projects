@@ -212,55 +212,48 @@ def run_eval():
   ragas_llm = LangchainLLMWrapper(ChatOpenAI(model=ARK_LLM_MODEL, openai_api_key=ARK_API_KEY, openai_api_base=ARK_BASE_URL, temperature=0.1))
   # 原生 OpenAI 客户端，指向 ARK，专门用于调用 embedding 接口
   _oc = OpenAI(api_key=ARK_API_KEY, base_url=ARK_BASE_URL)
+  # 因火山方舟 doubao-embedding 端点被限额暂停(SetLimitExceeded，账号 2113587726
+  # 的"Safe Experience Mode")，RAGAS 的 AnswerRelevancy 所需的语义向量改由本地
+  # BGE-M3 产出(与检索链路同源，口径自洽)。豆包 LLM 裁判(doubao-1-5-pro)仍正常使用。
+  os.environ.setdefault(
+      "HF_MODEL_NAME",
+      str(Path(__file__).resolve().parent.parent / "model_cache" / "bge-m3"),
+  )
+  from app.retrieval.bge_m3_embedder import BGEM3Embedder as _LocalBGE
   class _DirectEmbed:
-    """直连 ARK embedding 接口的极简适配器(RAGAS embedding 协议实现)。
+    """本地 BGE-M3 向量适配器(RAGAS embedding 协议实现)。
 
-    之所以自己写而不用 langchain 的 OpenAIEmbeddings:
-    ARK 的 embedding 需要传"推理接入点 ID"而非常规模型名，
-    且不同版本的 RAGAS / langchain 会调用四种不同的方法名，
-    这里一次性把四个方法都实现，屏蔽版本差异。
-
-    适用场景:
-        - 作为 `evaluate(..., embeddings=...)` 的实参，供 AnswerRelevancy 等
-          需要向量相似度的指标使用
+    因火山方舟 doubao-embedding 端点被限额暂停(SetLimitExceeded)，
+    把 RAGAS 所需的语义向量改由项目本地 BGE-M3 产出(1024 维稠密)，
+    与检索链路同源，口径自洽。实现 langchain Embeddings 协议
+    (embed_documents / embed_query)，并保留 RAGAS 多版本兼容的别名方法。
     """
+    def __init__(self):
+      # 懒加载本地 BGE-M3 单例(进程内仅一份权重，约 13s)
+      self._e = _LocalBGE()
     def embed_documents(self, texts):
       """批量把文本编码为向量(langchain 风格接口)。
 
       参数:
           texts (list[str]): 待编码的文本列表
       返回:
-          list[list[float]]: 与输入顺序一致的向量列表
+          list[list[float]]: 与输入顺序一致的 1024 维稠密向量列表
       """
-      resp = _oc.embeddings.create(input=texts, model=ARK_EMBEDDING_ENDPOINT)
-      return [d.embedding for d in resp.data]
+      return self._e.embed_documents(texts)
     def embed_query(self, text):
       """把单条查询文本编码为向量。
 
       参数:
           text (str): 待编码文本
       返回:
-          list[float]: 该文本对应的向量
+          list[float]: 该文本对应的 1024 维稠密向量
       """
-      resp = _oc.embeddings.create(input=text, model=ARK_EMBEDDING_ENDPOINT)
-      return resp.data[0].embedding
+      return self._e.embed_query(text)
     def embed_text(self, text):
-      """`embed_query` 的别名，兼容部分 RAGAS 版本使用的方法名。
-
-      参数:
-          text (str): 待编码文本
-      返回:
-          list[float]: 该文本对应的向量
-      """
+      """`embed_query` 的别名，兼容部分 RAGAS 版本使用的方法名。"""
       return self.embed_query(text)
     def embed_texts(self, texts):
-      """`embed_documents` 的别名，兼容部分 RAGAS 版本使用的方法名。
-
-      参数:
-          texts (list[str]): 待编码的文本列表
-      返回:
-          list[list[float]]: 与输入顺序一致的向量列表
-      """
+      """`embed_documents` 的别名，兼容部分 RAGAS 版本使用的方法名。"""
       return self.embed_documents(texts)
   ragas_emb = _DirectEmbed()
   # ---- 第三阶段:执行评测 ----
@@ -275,25 +268,23 @@ def run_eval():
   print("DEB: mro=" + str([c.__name__ for c in type(r).__mro__]))
   d = r.data if hasattr(r, 'data') else {}
   print("DEB: data=" + str(d))
-  # ---- 第四阶段:打印可读报告 ----
-  print(chr(10) + '=== Report ===')
+  # ---- 第四/五阶段:汇总指标、打印可读报告并落盘 JSON ----
+  # ragas 0.4.x 的 EvaluationResult 指标名与属性取值方式随版本变化，
+  # 统一从逐条明细 r.scores 求算术平均，保证控制台报告与 JSON 完全一致
+  if hasattr(r, 'scores') and r.scores:
+    # r.scores 是"每条样本一个 dict"的逐条明细，这里手工按指标求算术平均
+    avg = {}
+    for key in ['faithfulness', 'answer_relevancy', 'context_precision', 'context_recall']:
+      vals = [sc.get(key, 0) for sc in r.scores if isinstance(sc, dict)]
+      avg[key] = sum(vals) / len(vals) if vals else 0.0  # 无有效样本时记 0，避免除零
+  else:
+    # 拿不到逐条明细(版本不兼容或评测异常)时，写入全 0 占位，保证报告结构稳定
+    avg = {k: 0.0 for k in ['faithfulness', 'answer_relevancy', 'context_precision', 'context_recall']}
   # 键为 RAGAS 内部指标名，值为报告中展示的简短标签
+  print(chr(10) + '=== Report ===')
   for k, l in {'faithfulness': 'Faithfulness', 'answer_relevancy': 'Relevancy', 'context_precision': 'Precision', 'context_recall': 'Recall'}.items():
-    # 兼容两种返回形态:dict(按键取)与结果对象(按属性取，缺失则为 0)
-    v = r[k] if isinstance(r, dict) else getattr(r, k, 0)
-    # 数值统一格式化为 4 位小数；非数值(如 nan、字符串)则原样打印
-    print(f'  {l}: {float(v):.4f}' if isinstance(v, (int, float)) else f'  {l}: {v}')
-  # ---- 第五阶段:把平均分落盘为 JSON 报告，便于 CI 比对或趋势跟踪 ----
+    print(f'  {l}: {avg[k]:.4f}')  # 数值统一格式化为 4 位小数
   with open(Path(__file__).resolve().parent.parent / 'evaluation_report.json', 'w', encoding='utf-8') as fo:
-    if hasattr(r, 'scores') and r.scores:
-      # r.scores 是"每条样本一个 dict"的逐条明细，这里手工按指标求算术平均
-      avg = {}
-      for key in ['faithfulness', 'answer_relevancy', 'context_precision', 'context_recall']:
-        vals = [sc.get(key, 0) for sc in r.scores if isinstance(sc, dict)]
-        avg[key] = sum(vals) / len(vals) if vals else 0.0  # 无有效样本时记 0，避免除零
-    else:
-      # 拿不到逐条明细(版本不兼容或评测异常)时，写入全 0 占位，保证报告结构稳定
-      avg = {k: 0.0 for k in ['faithfulness', 'answer_relevancy', 'context_precision', 'context_recall']}
     # total 记录本轮评测的样本总数，便于判断报告的统计可信度
     json.dump({'metrics': avg, 'total': len(s)}, fo, ensure_ascii=False, indent=2)
   print('Saved: evaluation_report.json')

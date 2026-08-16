@@ -698,6 +698,32 @@ SQLite role 字段 + 前端 JS 校验 + 后端 API 二次校验防止越权。
 
 ## 更新日志
 
+### 2026-08-16: RAGAS 真实评测跑通（四项指标硬指标）
+
+- **背景**：作品集需要可量化的回答质量指标。脚本 `scripts/run_ragas_eval.py` 此前因火山方舟 `doubao-embedding` 端点被限额暂停（`SetLimitExceeded`，账号 `2113587726` 的 Safe Experience Mode）而无法产出完整分数——`AnswerRelevancy` 因缺 embedding 报 `NaN`。
+- **本轮改动（仅评测配置，未动核心业务代码）**：
+  1. `scripts/run_ragas_eval.py` 的 `_DirectEmbed` 适配器：因豆包 embedding 端点限额，将 RAGAS 所需语义向量改由**本地 BGE-M3**（`model_cache/bge-m3`，1024 维稠密）产出，与检索链路同源、口径自洽；豆包 LLM 裁判 `doubao-1-5-pro` 仍正常使用。
+  2. 修复控制台报告打印逻辑：ragas 0.4.3 的 `EvaluationResult` 指标取值方式变化，原 `getattr(r, k, 0)` 取到 0；改为统一从逐条明细 `r.scores` 求均值，保证控制台与 `evaluation_report.json` 一致。
+- **真实测评结果**（基于 6 条《劳动合同法》黄金问答，隔离检索环节、直接给定标准法条上下文；被测生成模型 DeepSeek、裁判 LLM 豆包）：
+
+  | 指标 | 分数 | 说明 |
+  |------|------|------|
+  | Faithfulness 忠实度 | **0.36** | 偏低，主要短板：约 64% 样本被判"答案不完全基于给定上下文"（过度发挥/编造风险） |
+  | Answer Relevancy 相关性 | **0.93** | 高，答案切题、回应了问题 |
+  | Context Precision 上下文精度 | **1.00** | 满分（上下文为人工给定标准法条，非端到端检索） |
+  | Context Recall 上下文召回 | **1.00** | 满分（同上，隔离检索环节） |
+
+  > 注：本评测**隔离了检索环节**（直接给定 `contexts`），故 Precision/Recall=1.0 反映"给定正确上下文时的生成质量"，**不代表端到端检索质量**；端到端检索质量需用 `tests/golden_test_set.json`（31 条）另测。
+- **后续改进（待落地）**：
+  1. **提升 Faithfulness（0.36 → 目标 ≥0.8）**：生成 prompt 强化"严格基于所给上下文、不得引入上下文外信息"约束；加入 few-shot 示例；后处理加引用校验（答案引用的法条编号必须出现在 `contexts` 中，否则标记低置信）。
+  2. 扩充黄金集：当前仅 6 条《劳动合同法》单轮问答，统计置信度有限；补充多法条交叉、长文档、否定/边界类问题，对齐 `tests/golden_test_set.json` 的 31 条以提升指标代表性。
+  3. embedding 归属：若解除火山方舟 `doubao-embedding` 限额（控制台关闭 Safe Experience Mode），可切回豆包 embedding 做横向对比。
+- **复现命令**：
+  ```bash
+  # 需 .env 配置 LLM_API_KEY(DeepSeek, 生成答案) 与 ARK_API_KEY(豆包, 裁判 LLM+embedding 兜底)
+  python scripts/run_ragas_eval.py   # 产出 evaluation_report.json
+  ```
+
 ### 2026-08-09: 接入 PaddleOCR 3.7，扫描件 PDF 可被检索（OCR 链路打通）
 
 - **背景**：用户上传的《中华人民共和国劳动合同法》是扫描件（无文字层，整页为图片）。PyMuPDF 抽不到文字，BGE-M3 又只吃文本，导致该文档在检索时完全搜不到；且此前 RAG 只会参考第一个 PDF（RRF 去重 + 扫描件 `[Image]` 占位符双 bug）。
