@@ -12,7 +12,7 @@
 | **业务贴合度** | 强（优势） | 上传法规/合同/文书 → 带引用问答，直接对应法务「法规检索 + 合同审查 + 出具带出处意见」 |
 | **检索真实性** | 强 | BM25 + Dense + **BGE-M3 稀疏(SPLADE)** + RRF 召回 + `BGE-Reranker` 真 Cross-Encoder 精排（懒加载 + 优雅降级），不是嘴上 hybrid |
 | **多模态真实性** | 强（已打通） | PyMuPDF 抽文字层 + OCR（PaddleOCR 3.7）识别扫描件/图片 + 视觉描述管线；**必须用语境独立的 `.ocr_venv` 启动**（bat 已指向），否则进程无 paddleocr、扫描件退化为纯文字、检索不到 |
-| **评测真实性** | ⚠️ 框架有、跑得少 | 31 条 golden 集 + RAGAS 框架已落地，但真实 RAGAS 评分默认 skip（需 key），别声称"评测充分" |
+| **评测真实性** | 强（已跑通真评测） | 31 条 golden 集 + RAGAS 框架已落地，并**真实跑出四项指标**（Faithfulness 0.36 / AnswerRelevancy 0.93 / ContextPrecision 1.00 / ContextRecall 1.00，6 条《劳动合同法》黄金问答；裁判豆包 doubao-1-5-pro + embedding 本地 BGE-M3）；另有 22 条 gold SQL 端到端 eval。这是"会真评测、不是写 demo"的铁证 |
 | **安全** | ⚠️ 有历史债 | 真 JWT / 限流 / TLS 已补；但 Volces embedding key 曾硬编码进源码 = 已泄露，部署前必须轮换 |
 | **多租户 / 角色** | 中 | SQLite role 字段 + 每租户独立目录 / 向量库；简单可用，但没讲并发 / 水平扩展 |
 | **数据真实性** | 强（优势） | 用真实上传的 PDF 跑，不是 mock 数据，这点比造数据项目更可信 |
@@ -20,7 +20,7 @@
 ### 最大的面试雷区
 
 1. **Embedding key 硬编码泄露史** —— 被问"你做过安全加固吗"要诚实：曾把 Volces key 写进源码（= 已泄露），本轮已移除并改读环境变量，但"部署前必须去平台轮换"。别假装没发生过。
-2. **"评测"别吹满** —— 框架在、golden 集只有 31 条、真实 RAGAS 默认 skip。正确说法："我搭了 RAGAS 评测管线 + 31 条回归集，真实评分在有 key 时跑，默认离线校验 harness，确保不回归。"
+2. **"评测"如实讲** —— 框架在、golden 集 31 条、且**已真实跑出 RAGAS 四项指标**（Faithfulness 0.36 偏低是核心短板）。正确说法："我搭了 RAGAS 评测管线 + 31 条回归集，并真实跑出四项分数；Faithfulness 0.36 说明答案偶有不完全基于上下文，我正用 trace 闭环 + golden 回归兜底，后续用更严的 citation 约束提升。"（注：本评测隔离检索环节、Context 两项=1.0 是人工给定上下文所致，不代表端到端检索质量）
 3. **多模态别当标配（但已真实打通）** —— OCR（PaddleOCR 3.7）是真接上的，扫描件能识别文字并入库检索；但它重（paddlepaddle / paddlex / opencv 依赖链），且**必须跑在独立的 `.ocr_venv` 里**（启动 bat 的 `PY` 已指向），否则进程加载不到 paddleocr、扫描件退化成纯文字、检索搜不到。讲清"为什么需要 OCR（BGE-M3 是纯文本模型，扫描件没文字层就向量化不了）"。
 4. **"混合检索"被追问 Cross-Encoder 是否真加载** —— 答：`BGE-Reranker` 懒加载，不可用时优雅跳过（RRF 结果直接当 Top-K），所以即使 reranker 没起来，系统仍可用。
 
@@ -102,7 +102,7 @@ POST /api/chat（Bearer）→ [安全] JWT 校验 + 限流
 - 上传法规 / 合同 = 建立可检索的法规库 / 合同库
 - 带引用问答 = 出具"有出处"的法律意见（避免编造法条 → 法律风险）
 - 反馈 👍/👎 = 回答质量闭环
-- RAGAS 评测 = 防止"幻觉法条"的量化手段
+- RAGAS 评测 = 防止"幻觉法条"的量化手段（真实跑出 Faithfulness 0.36 / AnswerRelevancy 0.93 / ContextPrecision 1.00 / ContextRecall 1.00）
 - 多租户 = 不同律所 / 客户数据隔离
 
 **用"如果这是律所 / 公司法务部的辅助工具，我会怎么改"的视角去读代码**，记忆会非常牢固，面试也能讲出业务 insight 而非纯技术八股。
@@ -123,7 +123,7 @@ POST /api/chat（Bearer）→ [安全] JWT 校验 + 限流
 2. Cross-Encoder 重排怎么接？为什么先召回 50 再精排 Top-5？Bi-Encoder 离线向量化适合召回，Cross-Encoder 交互式适合精排；先召回再精排是延迟 / 成本权衡；且 reranker 不可用时优雅降级。
 3. 三层记忆怎么设计？各解决什么问题？遗忘曲线干嘛？短期（Redis 原文，TTL 2h）保连贯；中期（LLM 摘要，TTL 24h）压缩；长期（ChromaDB 向量 + 遗忘曲线）跨会话沉淀。遗忘曲线淘汰低价值记忆省成本。
 4. Embedding 为什么选本地 BGE-M3？你做过哪些安全加固？本地零成本 / 零泄露；安全上曾硬编码 Volces key（= 泄露），已移除改环境变量且部署前需轮换，同时补了真 JWT / 限流 / TLS。
-5. 怎么量化 RAG 效果、防"编造法条"？RAGAS 四指标（faithfulness / answer_relevancy / context_precision / context_recall）+ 31 条 golden 回归集；真实评分有 key 才跑，默认离线 harness 防回归。
+5. 怎么量化 RAG 效果、防"编造法条"？RAGAS 四指标已**真实跑出分数**：Faithfulness 0.36（核心短板，答案偶有不完全基于给定上下文）/ AnswerRelevancy 0.93 / ContextPrecision 1.00 / ContextRecall 1.00（后两项是人工给定标准法条上下文、隔离检索环节，反映"给定正确上下文时的生成质量"，非端到端检索质量）；+ 31 条 golden 回归集防回归。
 6. （加分）多租户隔离怎么做？高并发 / 水平扩展你怎么讲？
    - **多租户**：按租户目录落盘 + ChromaDB 每租户独立 collection + JWT 携带 `tenant_id` 全程透传，检索/记忆/文件都按租户隔离；任务状态持久化到 `data/tasks.json` 而非内存，重启不丢。
    - **高并发（三板斧，讲"为解决什么问题"）**：① **解阻塞**——`uvicorn --workers N` 多进程 + embedding/rerank 用 `asyncio.to_thread` 丢线程池，避免 CPU 密集调用占死事件循环导致吞吐塌缩；② **语义缓存**——`app/retrieval/semantic_cache.py` 用 query 向量余弦相似度复用近似问题的检索结果+答案，既降首字延迟又省 DeepSeek 调用费（峰谷定价下关键）；③ **兜底链**——`app/llm/client.py` 主供应商被限流(429)时按 `LLM_FALLBACK_PROVIDERS`（openai,qwen…）自动切换，per-IP 限流 + 超时熔断防雪崩。再加 Nginx 多副本负载均衡即可水平扩展。
@@ -140,6 +140,7 @@ POST /api/chat（Bearer）→ [安全] JWT 校验 + 限流
 | 整洁度 | 2026-08-05（续） | Webhook 重试真正生效；整体测试 44 passed / 1 skipped |
 | 高并发升级 | 2026-08-15 | 多 worker + to_thread 解阻塞；Redis 语义缓存；LLM 多供应商 fallback；多模型切换 `.env`；Docker 定稿 |
 | 轻量自进化闭环 | 2026-08-16 | `app/core/trace_store.py` 落库每次问答 trace（query/答案/引用/耗时/供应商/缓存命中）+ feedback 回流满意度；`tests/eval/run_eval.py` 闸门式评测回归（golden set 通过率/延迟）；`app/api/eval.py` + `app/frontend/eval_dashboard.html` 提供回答质量看板（低分样本/最近问答可视化归因，仅管理员）；`tests/eval/build_golden_from_docs.py` 从租户文档自动生成 golden set。法律场景人工把关、不自动改 prompt |
+| RAGAS 真实评测跑通 | 2026-08-16 | 跑通 RAGAS 四项指标（Faith 0.36 / Relev 0.93 / Prec 1.00 / Recall 1.00，6 条《劳动合同法》黄金问答，隔离检索环节）；评测脚本 embedding 适配器改本地 BGE-M3 绕开豆包 doubao-embedding 限额；控制台打印对齐 ragas 0.4.3；结果 + 归因 + 改进入 README 迭代章节 |
 
 > 详见 `README.md` 的「面试常见问题」「踩过的坑」「更新日志」三节，里面 Q1–Q8 与 17 个实战坑是高频素材。
 
