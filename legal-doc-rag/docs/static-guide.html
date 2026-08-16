@@ -126,7 +126,8 @@ def is_safe_path(base_dir, target_path) -&gt; bool:
   <div class="step"><span class="n">5</span><b>混合检索</b> <code>hybrid_retriever.py:290 HybridRetriever.retrieve()</code> 跑 稠密(Chroma)+BM25 稀疏+BGE-M3 稀疏(SPLADE)+RRF 融合。</div>
   <div class="step orange"><span class="n">6</span><b>精排</b> <code>hybrid_retriever.py:42 Reranker.rerank()</code> 用 BGE Cross-Encoder 精排，失败优雅降级。</div>
   <div class="step"><span class="n">7</span><b>拼上下文 + LLM</b> <code>citation.py:55 CitationTracker.format_context()</code> 打 [N] 引用 → <code>app/llm/client.py chat_completion()/stream_chat_completion()</code> 统一调 LLM，主供应商限流时按 <code>LLM_FALLBACK_PROVIDERS</code> 自动切备用。</div>
-  <div class="step"><span class="n">8</span><b>返回</b> <code>return {answer, citations:[...]}</code>，每条答案可溯源。</div>
+  <div class="step"><span class="n">8</span><b>落库 trace（经验捕获）</b> <code>chat.py _handle_post_processing()</code> 调 <code>app/core/trace_store.py save_query_trace()</code> 把 query/答案/引用/耗时/供应商落 SQLite；用户点踩时 <code>feedback.py mark_feedback()</code> 回流满意度，供失败归因与评测回归（轻量自进化闭环）。</div>
+  <div class="step"><span class="n">9</span><b>返回</b> <code>return {answer, citations:[...]}</code>，每条答案可溯源。</div>
 </div>
 
 <h3>关键代码 · 混合检索 + RRF 融合（步骤 4）</h3>

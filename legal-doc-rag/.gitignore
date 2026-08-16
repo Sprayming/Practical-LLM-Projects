@@ -32,3 +32,7 @@ visuals/*.py
 # 本地 Redis 二进制与临时启动日志（不入库）
 _redis/
 _boot_*.log
+
+# 评测运行产物（不入库）
+tests/eval/eval_report.json
+memory_db/query_traces_export.json

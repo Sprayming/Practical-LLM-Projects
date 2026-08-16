@@ -25,6 +25,7 @@ sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent.par
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from app.api.auth import get_user_from_token, require_user
+from app.core.trace_store import mark_feedback  # 满意度评分回流到问答 trace(失败归因原料)
 
 # 创建 API 路由器实例，统一添加 /api/feedback 前缀，并打上 "feedback" 标签用于文档分类
 router = APIRouter(prefix="/api/feedback", tags=["feedback"])
@@ -75,4 +76,8 @@ def submit_feedback(req: FeedbackRequest, user: dict = Depends(require_user)):
             "timestamp": time.time(), # 反馈提交时间戳
             "username": user.get("username", ""), # 提交反馈的用户名
         }, f, ensure_ascii=False)  # 确保中文正常写入
-    return {"success": True, "message": "反馈已记录"}
+
+    # 回流满意度到问答 trace:按租户 + 提问匹配最近一条未反馈记录打标,
+    # 形成"失败归因"原料(后续可用 get_low_rated 定位答得差的样本)。
+    hit = mark_feedback(tenant_id, req.query, req.rating)
+    return {"success": True, "message": "反馈已记录", "trace_linked": hit}

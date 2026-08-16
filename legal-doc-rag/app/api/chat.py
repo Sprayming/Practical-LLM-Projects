@@ -47,6 +47,7 @@ from app.observability.structured_logger import StructuredLogger
 from app.observability.monitoring import record_query
 from langchain_community.vectorstores import Chroma
 import app.core.config as cfg  # 从.evn中加载配置，便于后期维护
+from app.core.trace_store import save_query_trace  # 问答 trace 持久化(轻量自进化闭环-经验捕获)
 from app.api.auth import get_user_from_token, require_user
 import asyncio
 import threading
@@ -615,6 +616,7 @@ async def _handle_streaming_response(context, req, pipeline, trace):
     """
     async def generate():
         full_answer = ""
+        provider = ""  # 实际命中的 LLM 供应商(供 trace 落库做 fallback 归因)
         start_time = time.time()
         last_yield_time = time.time()
         
@@ -668,8 +670,13 @@ async def _handle_streaming_response(context, req, pipeline, trace):
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
             return
         
-        # 流结束后的后处理:更新缓存和记忆系统
-        await _handle_post_processing(req.message, full_answer, pipeline)
+        # 流结束后的后处理:更新缓存和记忆系统,并落库 trace(含耗时与供应商)
+        await _handle_post_processing(
+            req.message, full_answer, pipeline,
+            tenant_id=user["tenant_id"],
+            duration_ms=round((time.time() - start_time) * 1000, 1),
+            provider=provider,
+        )
         
         # 获取引用列表并发送结束信号
         citations = _get_citations(pipeline.ct)
@@ -724,8 +731,13 @@ async def _handle_non_streaming_response(context, req, pipeline, trace):
     except Exception as e:
         return JSONResponse(content={"answer": f"LLM调用异常: {str(e)}", "citations": [], "token_usage": 0})
     
-    # 后处理:更新缓存和记忆
-    await _handle_post_processing(req.message, answer, pipeline)
+    # 后处理:更新缓存和记忆,并落库 trace(含耗时)
+    await _handle_post_processing(
+        req.message, answer, pipeline,
+        tenant_id=user["tenant_id"],
+        duration_ms=trace.total_duration_ms(),
+        provider="",
+    )
     
     # 记录追踪和日志信息
     trace.end_span()
@@ -744,14 +756,19 @@ async def _handle_non_streaming_response(context, req, pipeline, trace):
     
     return JSONResponse(content={"answer": answer, "citations": _get_citations(pipeline.ct), "token_usage": token_usage})
 
-async def _handle_post_processing(message, answer, pipeline):
+async def _handle_post_processing(message, answer, pipeline, tenant_id="", duration_ms=0.0, provider="", cached=False, success=True):
     """
-    请求结束后的统一后处理逻辑:更新缓存和记忆系统。
-    
+    请求结束后的统一后处理逻辑:更新缓存、记忆系统,并落库问答 trace。
+
     参数:
         message (str): 用户原始提问。
         answer (str): 大模型生成的回答。
         pipeline (SimpleNamespace): 管道组件集合。
+        tenant_id (str): 租户 id,用于 trace 隔离与回流。
+        duration_ms (float): 端到端耗时(毫秒),供延迟分析。
+        provider (str): 实际命中的 LLM 供应商名,供 fallback 归因。
+        cached (bool): 是否命中缓存(命中缓存的问答不进入此后处理,通常 False)。
+        success (bool): 是否成功生成(异常路径不调用本函数,通常 True)。
     """
     # 1. 将问答对写入精确缓存(修复:原代码误用未定义的 _get_query,导致写入一直失败)
     if pipeline.cache:
@@ -768,7 +785,7 @@ async def _handle_post_processing(message, answer, pipeline):
         except Exception as e:
             _log.error(f"语义缓存写入失败: {str(e)}")
     
-    # 2. 将问答对写入记忆系统，并触发后台任务(如记忆总结)
+    # 3. 将问答对写入记忆系统，并触发后台任务(如记忆总结)
     if pipeline.mem:
         try:
             pipeline.mem.add("user", message)
@@ -776,6 +793,18 @@ async def _handle_post_processing(message, answer, pipeline):
             pipeline.mem.trigger_background_jobs(call_llm)
         except Exception as e:
             _log.error(f"记忆更新失败: {str(e)}")
+
+    # 4. 落库问答 trace(轻量自进化闭环-经验捕获层):沉淀 query/answer/引用/耗时/供应商,
+    #    供后续失败归因与评测回归使用。SQLite 写是同步 IO,丢线程池避免阻塞事件循环。
+    try:
+        citations = _get_citations(pipeline.ct)
+    except Exception:
+        citations = []
+    await asyncio.to_thread(
+        save_query_trace,
+        tenant_id, message, answer, citations,
+        duration_ms, 0, provider, cached, success,
+    )
 
 def _get_citations(context_tracker):
     """

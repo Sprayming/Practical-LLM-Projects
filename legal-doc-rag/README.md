@@ -542,6 +542,15 @@ RAG 系统上线后延迟降不下来，90% 不是"模型慢"，而是**请求�
 - 纯云端（无 GPU）：4 核 8G 云服务器 ~¥150–230/月 + DeepSeek API 按量（峰谷定价，高峰 flash 输出 9 元/百万 token）。embedding 本地 BGE-M3 零 API 费。
 - 省钱：开启语义缓存（砍重复调用）、错峰重任务、用 prompt 缓存；可换更便宜的 OpenAI 兼容模型（仅改 `.env`，不改代码）。
 
+## 轻量自进化闭环（经验捕获 + 评测回归）
+
+为解决「模型 / prompt / 检索参数一升级，无法判断是否退化；线上答得差也无处归因」的问题，项目落地了**自进化闭环的前两环**（轻量版，人工把关、不自动改 prompt）：
+
+- **经验捕获层** `app/core/trace_store.py`：每次问答结束后把 `query / 答案 / 引用来源 / 耗时 / Token / 实际供应商 / 是否命中缓存 / 是否成功` 落库到本地 SQLite（`memory_db/query_traces.db`）；用户点赞/点踩时 `app/api/feedback.py` 按租户 + 提问回流满意度评分到对应记录。取代原内存版 `TraceStore`（重启即丢、不可离线分析）。
+- **闸门式验证** `tests/eval/run_eval.py`：跑一批标准问答对（golden set），统计通过率 / 平均引用数 / 平均延迟。模型升级或 prompt 改动前后各跑一次，通过率不降才允许发布。
+
+> 法律场景答错有合规风险，**不做全自动改 prompt**，只做「trace 沉淀 → 人工 + 评测闸门把关」。`trace_store.get_low_rated()` 可挖出线上答得差的样本，作为 golden set 的补充来源。详见 `tests/eval/README.md`。
+
 ## 面试常见问题
 
 ### Q1: BM25 + Dense + RRF 为什么不用纯语义？

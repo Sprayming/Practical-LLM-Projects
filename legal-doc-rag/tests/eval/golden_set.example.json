@@ -1,0 +1,22 @@
+[
+  {
+    "query": "这份劳动合同里试用期最长可以约定几个月？",
+    "expect_keywords": ["试用期", "劳动合同"],
+    "min_citations": 1
+  },
+  {
+    "query": "根据合同，乙方逾期付款需要承担多少违约金？",
+    "expect_keywords": ["违约金", "逾期"],
+    "min_citations": 1
+  },
+  {
+    "query": "解除劳动合同需要提前多少天通知对方？",
+    "expect_keywords": ["解除", "通知"],
+    "min_citations": 1
+  },
+  {
+    "query": "合同中约定的争议解决方式是什么？",
+    "expect_keywords": ["仲裁", "诉讼", "争议"],
+    "min_citations": 1
+  }
+]
