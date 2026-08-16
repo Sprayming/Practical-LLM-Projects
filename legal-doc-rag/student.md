@@ -139,7 +139,7 @@ POST /api/chat（Bearer）→ [安全] JWT 校验 + 限流
 | 测试修复 | 2026-08-05 | 单元测试 32/32 绿；删临时脚本；清理 debug 输出 |
 | 整洁度 | 2026-08-05（续） | Webhook 重试真正生效；整体测试 44 passed / 1 skipped |
 | 高并发升级 | 2026-08-15 | 多 worker + to_thread 解阻塞；Redis 语义缓存；LLM 多供应商 fallback；多模型切换 `.env`；Docker 定稿 |
-| 轻量自进化闭环 | 2026-08-16 | `app/core/trace_store.py` 落库每次问答 trace（query/答案/引用/耗时/供应商/缓存命中）+ feedback 回流满意度；`tests/eval/run_eval.py` 闸门式评测回归（golden set 通过率/延迟），法律场景人工把关、不自动改 prompt |
+| 轻量自进化闭环 | 2026-08-16 | `app/core/trace_store.py` 落库每次问答 trace（query/答案/引用/耗时/供应商/缓存命中）+ feedback 回流满意度；`tests/eval/run_eval.py` 闸门式评测回归（golden set 通过率/延迟）；`app/api/eval.py` + `app/frontend/eval_dashboard.html` 提供回答质量看板（低分样本/最近问答可视化归因，仅管理员）；`tests/eval/build_golden_from_docs.py` 从租户文档自动生成 golden set。法律场景人工把关、不自动改 prompt |
 
 > 详见 `README.md` 的「面试常见问题」「踩过的坑」「更新日志」三节，里面 Q1–Q8 与 17 个实战坑是高频素材。
 

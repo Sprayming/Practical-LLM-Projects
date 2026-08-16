@@ -20,6 +20,7 @@ from app.api.category import router as category_router
 from app.api.conversation import router as conversation_router
 from app.api.ab_testing import router as ab_testing_router
 from app.api.webhook import router as webhook_router
+from app.api.eval import router as eval_router
 from app.observability.monitoring import router as monitoring_router
 
 def setup_routes(app: FastAPI):
@@ -39,6 +40,7 @@ def setup_routes(app: FastAPI):
     app.include_router(conversation_router)
     app.include_router(ab_testing_router)
     app.include_router(webhook_router)
+    app.include_router(eval_router)
     app.include_router(monitoring_router)
 
 def setup_static_files(app: FastAPI):
@@ -62,6 +64,17 @@ def setup_static_files(app: FastAPI):
         if html.exists():
             return HTMLResponse(content=html.read_bytes(), media_type="text/html; charset=utf-8")
         return Response(content="<h1>Frontend not found</h1>", media_type="text/html")
+
+    @app.get("/eval", response_class=HTMLResponse)
+    async def eval_dashboard():
+        """
+        回答质量看板页面(轻量自进化闭环的可视化归因入口)。
+        必须在 StaticFiles 挂载前注册,避免被静态文件路由拦截。
+        """
+        html = frontend_dir / "eval_dashboard.html"
+        if html.exists():
+            return HTMLResponse(content=html.read_bytes(), media_type="text/html; charset=utf-8")
+        return Response(content="<h1>Dashboard not found</h1>", media_type="text/html")
 
     # 挂载静态文件
     app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")

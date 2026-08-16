@@ -44,6 +44,7 @@ from .category import router as category_router
 from .conversation import router as conversation_router
 from .ab_testing import router as ab_testing_router
 from .webhook import router as webhook_router
+from .eval import router as eval_router
 
 __all__ = [
     "auth_router",
@@ -55,4 +56,5 @@ __all__ = [
     "conversation_router",
     "ab_testing_router",
     "webhook_router",
+    "eval_router",
 ]

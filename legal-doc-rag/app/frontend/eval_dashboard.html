@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>回答质量看板</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:#f5f6fa; color:#222; }
+.topbar { background:linear-gradient(180deg,#1a237e 0%,#0d1b4a 100%); color:#fff; padding:1rem 1.5rem; display:flex; justify-content:space-between; align-items:center; }
+.topbar h1 { font-size:1.25rem; font-weight:700; }
+.topbar .meta { font-size:0.8rem; opacity:0.85; }
+.btn { padding:0.5rem 1rem; border:none; border-radius:6px; cursor:pointer; font-size:0.85rem; }
+.btn-light { background:rgba(255,255,255,0.15); color:#fff; }
+.btn-light:hover { background:rgba(255,255,255,0.25); }
+.btn-primary { background:#1a237e; color:#fff; }
+.btn-primary:hover { background:#283593; }
+.container { max-width:1200px; margin:1.5rem auto; padding:0 1.5rem; }
+.stat-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:1.5rem; }
+.stat-card { background:#fff; border-radius:8px; padding:1.2rem; box-shadow:0 1px 3px rgba(0,0,0,0.08); }
+.stat-card .label { font-size:0.8rem; color:#666; margin-bottom:0.5rem; }
+.stat-card .value { font-size:1.8rem; font-weight:700; color:#1a237e; }
+.stat-card .sub { font-size:0.72rem; color:#999; margin-top:0.3rem; }
+.tabs { display:flex; gap:0.5rem; margin-bottom:1rem; align-items:center; }
+.tab { padding:0.5rem 1.2rem; border-radius:6px 6px 0 0; background:#fff; border:1px solid #e8eaed; cursor:pointer; font-size:0.9rem; color:#666; }
+.tab.active { background:#1a237e; color:#fff; border-color:#1a237e; }
+.panel { background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.08); overflow:hidden; }
+.list-item { border-bottom:1px solid #f0f0f0; padding:0.9rem 1.2rem; cursor:pointer; }
+.list-item:hover { background:#fafbff; }
+.li-head { display:flex; justify-content:space-between; align-items:center; gap:1rem; }
+.li-query { font-weight:600; font-size:0.92rem; color:#1a237e; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.badge { font-size:0.7rem; padding:2px 8px; border-radius:10px; white-space:nowrap; }
+.badge-low { background:#fce8e6; color:#c5221f; }
+.badge-ok { background:#e6f4ea; color:#137333; }
+.badge-na { background:#f1f3f4; color:#666; }
+.li-meta { font-size:0.75rem; color:#999; margin-top:0.3rem; display:flex; gap:1rem; flex-wrap:wrap; }
+.detail { display:none; padding:0.8rem 1.2rem 1.2rem; background:#fafbff; border-top:1px solid #eee; }
+.detail.open { display:block; }
+.detail h4 { font-size:0.8rem; color:#444; margin:0.6rem 0 0.3rem; }
+.detail .ans { background:#fff; border:1px solid #e8eaed; border-radius:6px; padding:0.6rem 0.8rem; font-size:0.85rem; line-height:1.6; white-space:pre-wrap; max-height:320px; overflow:auto; }
+.cite { background:#fff; border-left:3px solid #1a237e; border-radius:4px; padding:0.4rem 0.7rem; margin:0.3rem 0; font-size:0.8rem; }
+.cite .src { color:#1a237e; font-weight:600; font-size:0.75rem; }
+.empty { padding:2rem; text-align:center; color:#999; }
+.err { padding:3rem 1rem; text-align:center; color:#c5221f; font-size:0.95rem; }
+@media (max-width:768px) { .stat-grid { grid-template-columns:repeat(2,1fr); } }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <h1>回答质量看板</h1>
+  <div style="display:flex; gap:1rem; align-items:center;">
+    <span class="meta" id="user-meta"></span>
+    <button class="btn btn-light" onclick="location.href='/'">返回聊天</button>
+  </div>
+</div>
+<div class="container">
+  <div class="stat-grid" id="stat-grid">
+    <div class="stat-card"><div class="label">问答总量</div><div class="value" id="s-total">-</div><div class="sub" id="s-recent24"></div></div>
+    <div class="stat-card"><div class="label">低分样本</div><div class="value" id="s-low" style="color:#c5221f;">-</div><div class="sub">点踩 / 生成失败</div></div>
+    <div class="stat-card"><div class="label">成功率</div><div class="value" id="s-rate">-</div><div class="sub" id="s-succ"></div></div>
+    <div class="stat-card"><div class="label">反馈覆盖率</div><div class="value" id="s-fb">-</div><div class="sub" id="s-avg"></div></div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" id="tab-low" onclick="switchTab('low')">低分样本 <span id="tab-low-n"></span></div>
+    <div class="tab" id="tab-recent" onclick="switchTab('recent')">最近问答 <span id="tab-recent-n"></span></div>
+    <button class="btn btn-primary" style="margin-left:auto;" onclick="exportJSON()">导出 JSON</button>
+  </div>
+  <div class="panel" id="panel-low"></div>
+  <div class="panel" id="panel-recent" style="display:none;"></div>
+</div>
+
+<script>
+let API = window.location.origin;
+let token = localStorage.getItem("token");
+let lowData = [], recentData = [];
+
+if (!token) {
+  document.body.innerHTML = '<div class="err" style="padding-top:5rem;">未登录，请先 <a href="/">返回聊天页登录</a> 后再访问看板。</div>';
+} else {
+  init();
+}
+
+async function init() {
+  try {
+    const meR = await fetch(API + "/api/auth/me", {headers:{"Authorization":"Bearer "+token}});
+    if (meR.ok) {
+      const me = await meR.json();
+      document.getElementById("user-meta").textContent =
+        (me.username||"") + " · " + (me.role==="super_admin"?"超级管理员":"管理员");
+    }
+  } catch(e){}
+  loadAll();
+}
+
+async function loadAll() {
+  await Promise.all([loadStats(), loadLow(), loadRecent()]);
+}
+
+async function loadStats() {
+  try {
+    const r = await fetch(API + "/api/eval/stats", {headers:{"Authorization":"Bearer "+token}});
+    if (r.status === 403) { showErr("无权限：仅管理员（super_admin / admin）可访问回答质量看板。"); return; }
+    if (!r.ok) { showErr("加载统计失败：HTTP " + r.status); return; }
+    const s = await r.json();
+    document.getElementById("s-total").textContent = s.total;
+    document.getElementById("s-recent24").textContent = "近 24h：" + s.recent_24h;
+    document.getElementById("s-low").textContent = s.low_rated;
+    document.getElementById("s-rate").textContent = s.success_rate + "%";
+    document.getElementById("s-succ").textContent = "成功 " + s.success + " / " + s.total;
+    document.getElementById("s-fb").textContent = s.feedback_coverage + "%";
+    document.getElementById("s-avg").textContent = "均延迟 " + s.avg_duration_ms + " ms";
+  } catch(e){ showErr("网络错误：" + e.message); }
+}
+
+async function loadLow() {
+  try {
+    const r = await fetch(API + "/api/eval/low-rated?limit=100", {headers:{"Authorization":"Bearer "+token}});
+    if (!r.ok) return;
+    lowData = await r.json();
+    document.getElementById("tab-low-n").textContent = "(" + lowData.length + ")";
+    renderList("panel-low", lowData);
+  } catch(e){}
+}
+
+async function loadRecent() {
+  try {
+    const r = await fetch(API + "/api/eval/recent?n=100", {headers:{"Authorization":"Bearer "+token}});
+    if (!r.ok) return;
+    recentData = await r.json();
+    document.getElementById("tab-recent-n").textContent = "(" + recentData.length + ")";
+    renderList("panel-recent", recentData);
+  } catch(e){}
+}
+
+function fbBadge(fb) {
+  if (fb === null || fb === undefined) return '<span class="badge badge-na">未评分</span>';
+  if (fb >= 4) return '<span class="badge badge-ok">👍 ' + fb + '</span>';
+  if (fb <= 2) return '<span class="badge badge-low">👎 ' + fb + '</span>';
+  return '<span class="badge badge-na">' + fb + '</span>';
+}
+
+function renderList(panelId, data) {
+  const panel = document.getElementById(panelId);
+  if (!data || !data.length) { panel.innerHTML = '<div class="empty">暂无数据</div>'; return; }
+  panel.innerHTML = "";
+  data.forEach((d, i) => {
+    const succ = d.success === 1 || d.success === true;
+    const succBadge = succ ? '<span class="badge badge-ok">成功</span>' : '<span class="badge badge-low">失败</span>';
+    const citN = (d.citations && d.citations.length) ? d.citations.length : 0;
+    const div = document.createElement("div");
+    div.className = "list-item";
+    div.innerHTML =
+      '<div class="li-head">' +
+        '<div class="li-query">' + escapeHtml(d.query || "(空提问)") + '</div>' +
+        fbBadge(d.feedback) + succBadge +
+      '</div>' +
+      '<div class="li-meta">' +
+        '<span>租户：' + escapeHtml(d.tenant_id||"-") + '</span>' +
+        '<span>供应商：' + escapeHtml(d.provider||"-") + '</span>' +
+        '<span>延迟：' + (d.duration_ms!=null ? Math.round(d.duration_ms)+" ms" : "-") + '</span>' +
+        '<span>引用：' + citN + '</span>' +
+        '<span>时间：' + escapeHtml(d.created_at||"-") + '</span>' +
+      '</div>' +
+      '<div class="detail" id="' + panelId + '-d-' + i + '">' +
+        '<h4>用户提问</h4><div class="ans">' + escapeHtml(d.query||"") + '</div>' +
+        '<h4>回答</h4><div class="ans">' + escapeHtml(d.answer||"(无)") + '</div>' +
+        '<h4>引用来源 (' + citN + ')</h4>' + renderCites(d.citations) +
+      '</div>';
+    div.onclick = function() {
+      const det = document.getElementById(panelId + "-d-" + i);
+      det.classList.toggle("open");
+    };
+    panel.appendChild(div);
+  });
+}
+
+function renderCites(cites) {
+  if (!cites || !cites.length) return '<div class="ans">无引用</div>';
+  return cites.map(function(c) {
+    return '<div class="cite"><div class="src">' + escapeHtml(c.source||"来源") + '</div>' +
+           escapeHtml((c.content||"").slice(0, 400)) + '</div>';
+  }).join("");
+}
+
+function switchTab(which) {
+  if (which === "low") {
+    document.getElementById("tab-low").classList.add("active");
+    document.getElementById("tab-recent").classList.remove("active");
+    document.getElementById("panel-low").style.display = "block";
+    document.getElementById("panel-recent").style.display = "none";
+  } else {
+    document.getElementById("tab-recent").classList.add("active");
+    document.getElementById("tab-low").classList.remove("active");
+    document.getElementById("panel-recent").style.display = "block";
+    document.getElementById("panel-low").style.display = "none";
+  }
+}
+
+function exportJSON() {
+  const payload = { exported_at: new Date().toISOString(), low_rated: lowData, recent: recentData };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "quality_dashboard_export.json";
+  a.click();
+}
+
+function escapeHtml(s) {
+  if (s == null) return "";
+  return String(s).replace(/[&<>"']/g, function(c) {
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+
+function showErr(msg) {
+  document.querySelector(".container").innerHTML = '<div class="err">' + msg + '</div>';
+}
+</script>
+</body>
+</html>

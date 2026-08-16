@@ -35,7 +35,7 @@ def create_app() -> FastAPI:
     setup_error_handlers(app)
     # 2) 中间件：限流、CORS、安全响应头、请求体大小限制
     setup_middleware(app)
-    # 3) 业务路由：鉴权/对话/文档/反馈/管理/分类/会话/A-B/Webhook/监控
+    # 3) 业务路由：鉴权/对话/文档/反馈/管理/分类/会话/A-B/Webhook/监控/评测看板
     setup_routes(app)
     # 4) 前端静态资源与根路径处理器
     setup_static_files(app)

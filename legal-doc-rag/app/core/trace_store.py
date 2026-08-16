@@ -259,5 +259,73 @@ def _row_to_dict(row):
     return d
 
 
+def get_stats(tenant_id: str = None):
+    """
+    看板所需的聚合统计指标。
+
+    参数:
+        tenant_id (str): 可选租户过滤(传 None 表示全量)。
+
+    返回:
+        dict: 总量 / 低分样本数 / 成功数 / 成功率 / 平均延迟 / 反馈数 /
+              好评数 / 反馈覆盖率 / 近24h 量 / 供应商分布。
+    """
+    conds = []
+    params = []
+    if tenant_id:
+        conds.append("tenant_id=?")
+        params.append(tenant_id)
+    # WHERE 子句(无过滤时为空);where_and 用于在其后追加 AND 条件
+    where_clause = (" WHERE " + " AND ".join(conds)) if conds else ""
+    where_and = (where_clause + " AND ") if conds else " WHERE "
+    with _lock:
+        conn = _conn()
+        try:
+            row = conn.execute(
+                f"""
+                SELECT COUNT(*),
+                       SUM(CASE WHEN (feedback IS NOT NULL AND feedback <= 2) OR success=0 THEN 1 ELSE 0 END),
+                       SUM(CASE WHEN success=1 THEN 1 ELSE 0 END),
+                       AVG(duration_ms),
+                       SUM(CASE WHEN feedback IS NOT NULL THEN 1 ELSE 0 END),
+                       SUM(CASE WHEN feedback >= 4 THEN 1 ELSE 0 END)
+                FROM query_traces{where_clause}
+                """,
+                params,
+            ).fetchone()
+            total, low, succ, avg_dur, fb_cnt, fb_pos = row
+            total = total or 0
+            low = low or 0
+            succ = succ or 0
+            fb_cnt = fb_cnt or 0
+            fb_pos = fb_pos or 0
+            # 近 24h 计数
+            since = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(time.time() - 86400))
+            r24 = conn.execute(
+                f"SELECT COUNT(*) FROM query_traces{where_and}created_at >= ?",
+                params + [since],
+            ).fetchone()[0] or 0
+            # 供应商分布
+            prov_rows = conn.execute(
+                f"SELECT provider, COUNT(*) FROM query_traces{where_clause} GROUP BY provider",
+                params,
+            ).fetchall()
+            provider_dist = {p: c for p, c in prov_rows}
+            return {
+                "total": total,
+                "low_rated": low,
+                "success": succ,
+                "success_rate": round(succ / total * 100, 1) if total else 0.0,
+                "avg_duration_ms": round(avg_dur, 1) if avg_dur else 0.0,
+                "feedback_count": fb_cnt,
+                "feedback_positive": fb_pos,
+                "feedback_coverage": round(fb_cnt / total * 100, 1) if total else 0.0,
+                "recent_24h": r24,
+                "provider_distribution": provider_dist,
+            }
+        finally:
+            conn.close()
+
+
 # 模块导入时确保表已存在
 init_db()

@@ -209,6 +209,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif
     </div>
     <button class="sidebar-btn" onclick="clearHistory()">清除历史</button>
     <button class="sidebar-btn" id="admin-btn" style="display:none" onclick="showAdminPanel()">管理后台</button>
+    <button class="sidebar-btn" id="eval-btn" style="display:none" onclick="showEvalDashboard()">回答质量看板</button>
     <button class="sidebar-btn" onclick="showChangePassword()">修改密码</button>
     <button class="sidebar-btn" onclick="doLogout()">退出登录</button>
   </aside>
@@ -592,9 +593,16 @@ async function setUserRole(username, role) {
 function updateAdminButton() {
   if (user && user.role === "super_admin") {
     document.getElementById("admin-btn").style.display = "block";
+    document.getElementById("eval-btn").style.display = "block";
   } else {
     document.getElementById("admin-btn").style.display = "none";
+    document.getElementById("eval-btn").style.display = "none";
   }
+}
+
+// 跳转回答质量看板(轻量自进化闭环的可视化归因入口)
+function showEvalDashboard() {
+  window.location.href = "/eval";
 }
 
 // ============================================================

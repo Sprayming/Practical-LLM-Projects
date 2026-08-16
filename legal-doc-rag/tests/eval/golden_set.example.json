@@ -18,5 +18,45 @@
     "query": "合同中约定的争议解决方式是什么？",
     "expect_keywords": ["仲裁", "诉讼", "争议"],
     "min_citations": 1
+  },
+  {
+    "query": "用人单位在哪些情形下可以解除劳动合同且无需支付经济补偿？",
+    "expect_keywords": ["解除", "经济补偿", "过失性"],
+    "min_citations": 1
+  },
+  {
+    "query": "女职工在孕期、产期、哺乳期，单位能否单方解除劳动合同？",
+    "expect_keywords": ["三期", "孕期", "不得解除", "哺乳期"],
+    "min_citations": 1
+  },
+  {
+    "query": "劳动合同期满终止，单位是否应当支付经济补偿？",
+    "expect_keywords": ["终止", "经济补偿", "劳动合同期满"],
+    "min_citations": 1
+  },
+  {
+    "query": "加班工资的计算基数和支付标准是怎么规定的？",
+    "expect_keywords": ["加班", "工资", "150%", "200%", "300%"],
+    "min_citations": 1
+  },
+  {
+    "query": "年休假未休完，单位应当如何补偿？",
+    "expect_keywords": ["年休假", "300%", "工资报酬"],
+    "min_citations": 1
+  },
+  {
+    "query": "竞业限制期限最长不得超过几年？补偿如何约定？",
+    "expect_keywords": ["竞业限制", "两年", "补偿"],
+    "min_citations": 1
+  },
+  {
+    "query": "未签订书面劳动合同，单位要承担什么后果？",
+    "expect_keywords": ["书面劳动合同", "二倍工资", "用工之日"],
+    "min_citations": 1
+  },
+  {
+    "query": "劳动者提前三十日书面通知可以解除劳动合同吗？",
+    "expect_keywords": ["提前三十日", "书面通知", "解除"],
+    "min_citations": 1
   }
 ]

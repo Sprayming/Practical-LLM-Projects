@@ -551,6 +551,15 @@ RAG 系统上线后延迟降不下来，90% 不是"模型慢"，而是**请求�
 
 > 法律场景答错有合规风险，**不做全自动改 prompt**，只做「trace 沉淀 → 人工 + 评测闸门把关」。`trace_store.get_low_rated()` 可挖出线上答得差的样本，作为 golden set 的补充来源。详见 `tests/eval/README.md`。
 
+### 回答质量看板（可视化归因）
+为让沉淀的 trace 真正"看得见、可归因"，项目提供**回答质量看板**：
+- **后端** `app/api/eval.py`：暴露 `GET /api/eval/stats`（统计卡片）、`/low-rated`（低分样本）、`/recent`（最近问答），均仅 `super_admin`/`admin` 可访问（含跨租户运营数据）。
+- **前端** `app/frontend/eval_dashboard.html`：侧边栏「回答质量看板」入口（仅管理员可见）。展示问答总量 / 低分样本 / 成功率 / 反馈覆盖率等统计卡片，并列出"低分样本"与"最近问答"，每条可展开查看 query / 答案 / 引用来源 / 供应商 / 延迟 / 用户评分，支持一键导出 JSON。
+- 这是闭环第一环（trace 捕获）的可视化出口：管理员日常看板 → 发现答得差的样本 → 针对性优化 → 用评测闸门验证是否退化。
+
+### 从租户文档自动生成 golden set
+手工编写标准问答对费时且难覆盖真实业务。提供 `tests/eval/build_golden_from_docs.py`：扫描你**真实上传的文档**（`uploads/<tenant>/`，支持 `.txt`/`.md`/`.pdf`/`.docx`），抽取文本后调用 LLM 批量生成贴合业务的 `{query, expect_keywords, min_citations}`，直接写出 `tests/eval/golden_set.json`。`golden_set.json` 是各租户定制的工作文件，已加入 `.gitignore` 不入库；仓库只跟踪 `golden_set.example.json`。用法见 `tests/eval/README.md`。
+
 ## 面试常见问题
 
 ### Q1: BM25 + Dense + RRF 为什么不用纯语义？

@@ -35,4 +35,5 @@ _boot_*.log
 
 # 评测运行产物（不入库）
 tests/eval/eval_report.json
+tests/eval/golden_set.json
 memory_db/query_traces_export.json
